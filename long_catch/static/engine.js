@@ -358,18 +358,19 @@ window.LongCatch = window.LongCatch || (() => {
     g.putImageData(img, 0, 0);
   }
 
-  // Replace NiceGUI's flat default lights (strong ambient + one overhead light) with a simple pool rig:
-  // a sky/pool hemisphere fill, a warm key light from above, and a cool rim light from behind
-  // that separates the swimmer from the dark background. No shadows, so rendering cost is unchanged.
+  // Replace NiceGUI's flat default lights (strong ambient + one overhead light) with a higher-contrast rig.
+  // White light keeps the palette colours strong; less ambient and a stronger key light from above-front
+  // add shading, and a faint cool rim light from behind separates the swimmer from the dark water.
+  // No shadows, so rendering cost is unchanged.
   function setupLighting(group) {
     for (const light of S.el.scene.children.filter(o => o.isAmbientLight || o.isDirectionalLight)) {
       S.el.scene.remove(light);
     }
-    const key = new THREE.DirectionalLight(0xfff1dc, 1.7);
+    const key = new THREE.DirectionalLight(0xffffff, 1.9);
     key.position.set(3, -2.5, 6);
-    const rim = new THREE.DirectionalLight(0x86dcff, 0.6);
+    const rim = new THREE.DirectionalLight(0x9fe4ff, 0.5);
     rim.position.set(-4, 3, -1.5);
-    group.add(new THREE.HemisphereLight(0xfff6ea, 0x5a8f96, 1.7), key, rim);
+    group.add(new THREE.AmbientLight(0xffffff, 1.5), key, rim);
   }
 
   // Build the surface waves, pool floor, and lights once per scene; returns false until THREE has loaded.
