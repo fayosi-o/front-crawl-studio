@@ -42,10 +42,13 @@ window.LongCatch = window.LongCatch || (() => {
     const exit = P.exit;
     const midRec = exit + (1 - exit) * 0.4, lateRec = exit + (1 - exit) * 0.72;
     const over = F.overreach ? 1 : 0, cross = F.crossover ? 1 : 0;
+    // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
+    const tilt = deg => [0.56 * Math.cos(deg * D), -0.56 * Math.sin(deg * D)];
+    const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
     const x = keyed(p, [
-      [0, 0.56 + 0.08 * over], [0.12, 0.55 + 0.08 * over], [0.30, lerp(0.10, 0.30, c) - 0.12 * s + 0.10 * over],
+      [0, enterX + 0.08 * over], [0.12, glideX - 0.01 + 0.08 * over], [0.30, lerp(0.10, 0.30, c) - 0.12 * s + 0.10 * over],
       [0.48, -0.04 - 0.08 * s], [0.62, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
-      [midRec, -0.10], [lateRec, 0.22], [1, 0.56 + 0.08 * over],
+      [midRec, -0.10], [lateRec, 0.22], [1, enterX + 0.08 * over],
     ]);
     // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
     const out = keyed(p, [
@@ -54,8 +57,8 @@ window.LongCatch = window.LongCatch || (() => {
     ]) - cross * keyed(p, [[0, 0.33], [0.12, 0.31], [0.30, 0.15], [0.48, 0.02], [exit, 0], [lateRec, 0.08], [1, 0.33]]);
     // Mid-pull hand sits about a forearm below the shoulder, so the elbow stays bent near 90-110 deg.
     const height = keyed(p, [
-      [0, -0.045 + 0.03 * over], [0.12, -0.07 + 0.05 * over], [0.30, lerp(-0.26, -0.32, c)], [0.48, -0.37],
-      [0.62, -0.26], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12], [1, -0.045 + 0.03 * over],
+      [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.30, lerp(-0.26, -0.32, c)], [0.48, -0.37],
+      [0.62, -0.26], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12], [1, enterH + 0.03 * over],
     ]);
     // Recovery is elbow-led: the elbow arcs highest while the relaxed hand swings below and outside it.
     const elbow = [

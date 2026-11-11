@@ -13,7 +13,7 @@ It demonstrates:
 - body roll;
 - hand slip;
 - arm-driven versus hip-connected timing;
-- adjustable flutter-kick amplitude;
+- adjustable flutter-kick amplitude and arm entry angle;
 - switchable stroke faults (crossover, over-rotation, over-extension, snaking,
   knee kick, spinning arms) with coaching cues;
 - simple estimated back, triceps, and hip/core contribution;
@@ -97,6 +97,9 @@ python main.py
   connected, Short slipping.
 - **Sliders** adjust stroke rate, catch quality, body roll, slip, and drive
   balance. The estimates panel updates live.
+- **Entry angle** (0–40°) sets how steeply the arm extends after the hand
+  enters: 0° glides flat just under the surface, and higher values point the
+  arm toward the pool floor. This changes the animation only.
 - **Kick amplitude** runs from still legs (0%) to a stronger six-beat flutter
   kick (100%), including hip, knee, and ankle movement. This changes the
   animation only; the arm-stroke pace estimates do not include kicking.

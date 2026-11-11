@@ -157,6 +157,15 @@ def test_kick_control_is_visual_only_and_normalized():
     assert ViewState(settings=strong).render_params()['kick'] == 1
 
 
+def test_entry_angle_is_visual_only_and_passed_in_degrees():
+    flat = StrokeSettings(entry=0)
+    steep = flat.with_values(entry=40)
+    assert flat.metrics() == steep.metrics()
+    assert ViewState(settings=steep).render_params()['entry'] == 40
+    with pytest.raises(ValueError):
+        StrokeSettings(entry=41)
+
+
 def test_every_fault_costs_distance_and_unknown_faults_are_rejected():
     clean = ViewState().metrics().distance_per_stroke
     for key in FAULTS:

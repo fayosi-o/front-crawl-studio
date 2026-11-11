@@ -208,6 +208,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'catch': (0, 100),
     'roll': (20, 62),
     'slip': (0, 100),
+    'entry': (0, 40),
     'drive': (0, 100),
     'kick': (0, 100),
 }
@@ -215,12 +216,13 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
 
 @dataclass(frozen=True, slots=True)
 class StrokeSettings:
-    """User-facing settings: percentages 0–100, rate in spm, roll in degrees."""
+    """User-facing settings: percentages 0–100, rate in spm, roll and entry in degrees."""
 
     rate: int = 38
     catch: int = 92
     roll: int = 46
     slip: int = 8
+    entry: int = 5
     drive: int = 85
     kick: int = 45
 
@@ -282,6 +284,7 @@ class ViewState:
             'slip': slip,
             'drive': s.drive / 100,
             'kick': s.kick / 100,
+            'entry': s.entry,
             'roll': s.roll,
             'emphasis': self.emphasis,
             'playing': self.playing,
