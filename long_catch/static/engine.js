@@ -18,6 +18,14 @@ window.LongCatch = window.LongCatch || (() => {
   const reachAt = bend => Math.sqrt(UPPER ** 2 + FOREARM ** 2 + 2 * UPPER * FOREARM * Math.cos(bend * D));
   const MIN_REACH = reachAt(145);
   const MAX_REACH = reachAt(8);
+  const ROLL_PEAK = 0.18;
+  // Ease into the reach limits so the elbow straightens or folds gradually instead of snapping.
+  const SOFT = 0.045;
+  function softReach(d) {
+    if (d > MAX_REACH - SOFT) return MAX_REACH - SOFT * Math.exp(-(d - MAX_REACH + SOFT) / SOFT);
+    if (d < MIN_REACH + SOFT) return MIN_REACH + SOFT * Math.exp(-(MIN_REACH + SOFT - d) / SOFT);
+    return d;
+  }
 
   function keyed(p, keys) {
     for (let i = 0; i < keys.length - 1; i++) {
@@ -31,25 +39,33 @@ window.LongCatch = window.LongCatch || (() => {
   function arm(p, P) {
     const c = P.catch, s = P.slip, L = P.length;
     const exit = P.exit;
-    const midRec = exit + (1 - exit) * 0.45, lateRec = exit + (1 - exit) * 0.82;
+    const midRec = exit + (1 - exit) * 0.4, lateRec = exit + (1 - exit) * 0.72;
     const x = keyed(p, [
-      [0, 0.51], [0.12, 0.50], [0.30, lerp(0.10, 0.30, c) - 0.12 * s],
+      [0, 0.56], [0.12, 0.55], [0.30, lerp(0.10, 0.30, c) - 0.12 * s],
       [0.48, -0.04 - 0.08 * s], [0.62, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
-      [midRec, -0.04], [lateRec, 0.34], [1, 0.51],
+      [midRec, -0.10], [lateRec, 0.22], [1, 0.56],
     ]);
     const out = keyed(p, [
       [0, 0.025], [0.12, 0.035], [0.30, 0.07 + 0.08 * (1 - c)], [0.48, 0.10],
-      [0.62, 0.06], [exit, 0.08], [midRec, 0.27], [lateRec, 0.13], [1, 0.025],
+      [0.62, 0.08], [exit, 0.10], [midRec, 0.30], [lateRec, 0.22], [1, 0.025],
     ]);
+    // Mid-pull hand sits about a forearm below the shoulder, so the elbow stays bent near 90-110 deg.
     const height = keyed(p, [
-      [0, -0.045], [0.12, -0.07], [0.30, lerp(-0.27, -0.34, c)], [0.48, -0.43],
-      [0.62, -0.28], [exit, 0.015], [midRec, 0.08], [lateRec, 0.06], [1, -0.045],
+      [0, -0.045], [0.12, -0.07], [0.30, lerp(-0.26, -0.32, c)], [0.48, -0.37],
+      [0.62, -0.26], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12], [1, -0.045],
     ]);
+    // Recovery is elbow-led: the elbow arcs highest while the relaxed hand swings below and outside it.
+    const elbow = [
+      keyed(p, [[exit, -0.22], [midRec, -0.04], [lateRec, 0.14], [1, 0.26]]),
+      keyed(p, [[exit, 0.18], [midRec, 0.26], [lateRec, 0.22], [1, 0.08]]),
+      keyed(p, [[exit, 0.20], [midRec, 0.40], [lateRec, 0.32], [1, 0.05]]),
+    ];
+    const recovery = p < exit ? 0 : smooth(clamp((p - exit) / 0.05, 0, 1)) * smooth(clamp((1 - p) / 0.07, 0, 1));
     const under = p < exit;
     const wrist = under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15;
     const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < 0.62 ? 2 : p < exit ? 3 : 4;
     return {
-      x, out, height, pole: lerp(lerp(-0.35, 1, c), 1.5, bump(p, exit, 1)),
+      x, out, height, elbow, recovery, pole: lerp(-0.35, 1, c),
       wrist: wrist * D, under, stage,
       back: bump(p, 0.10, 0.64), triceps: bump(p, 0.50, exit + 0.04),
     };
@@ -80,7 +96,7 @@ window.LongCatch = window.LongCatch || (() => {
     for (const side of ['R', 'L']) {
       const shoulder = m['sh' + side], vector = () => shoulder.position.clone();
       m.rigs[side] = {
-        target: vector(), axis: vector(), pole: vector(), elbow: vector(),
+        target: vector(), axis: vector(), pole: vector(), hint: vector(), elbow: vector(),
         upper: vector(), lower: vector(), normal: vector(), z: vector(),
         matrix: shoulder.matrix.clone(), quaternion: shoulder.quaternion.clone(),
       };
@@ -127,14 +143,23 @@ window.LongCatch = window.LongCatch || (() => {
   function poseArm(m, side, a, P, slipness, bodyRoll) {
     const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
     const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll), lateral = sgn * 0.8;
-    const z = (a.height + 0.06 - sin * (sh.position.y + sgn * a.out)) / cos;
-    r.target.set(a.x, sgn * a.out, z);
-    const reach = clamp(r.target.length(), MIN_REACH, MAX_REACH);
+    // Convert a shoulder-relative point with a world height into the rolled chest frame.
+    const chestZ = (height, out) => (height + 0.06 - sin * (sh.position.y + sgn * out)) / cos;
+    r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out));
+    const reach = softReach(r.target.length());
     r.axis.copy(r.target).normalize();
     r.target.copy(r.axis).multiplyScalar(reach);
-    // Keep the elbow guide world-up when the chest rolls underneath the recovering arm.
+    // Keep the elbow guide world-up when the chest rolls underneath the arm.
     r.pole.set(lerp(-0.15, 0.35, P.catch), lateral * cos + a.pole * sin, -lateral * sin + a.pole * cos);
     r.pole.addScaledVector(r.axis, -r.pole.dot(r.axis)).normalize();
+    if (a.recovery > 0) {
+      const [ex, eo, eh] = a.elbow;
+      r.hint.set(ex, sgn * eo, chestZ(eh, eo));
+      r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis));
+      // A guide lying on the shoulder-wrist line has no direction; keep the world-up guide then.
+      const weight = a.recovery * smooth(clamp(r.hint.length() / 0.08, 0, 1));
+      r.pole.lerp(r.hint.normalize(), weight).addScaledVector(r.axis, -r.pole.dot(r.axis)).normalize();
+    }
     const along = (UPPER ** 2 - FOREARM ** 2 + reach ** 2) / (2 * reach);
     const lift = Math.sqrt(Math.max(0, UPPER ** 2 - along ** 2));
     // Bound elbow position, not its bend direction: recovery may fold inward without crossing the torso.
@@ -142,7 +167,15 @@ window.LongCatch = window.LongCatch || (() => {
     const minOut = clamp((0.015 - along * sgn * r.axis.y) / (lift * Math.sqrt(1 - r.axis.y ** 2)), -1, 1);
     const outward = r.pole.dot(r.z);
     if (outward < minOut) {
-      r.normal.copy(r.pole).addScaledVector(r.z, -outward).normalize();
+      r.normal.copy(r.pole).addScaledVector(r.z, -outward);
+      // With the guide nearly all inward, its remainder can flip fore/aft; bias it to the back side.
+      const spare = r.normal.length();
+      if (spare < 0.35) {
+        r.hint.set(0, 0, 1).addScaledVector(r.axis, -r.axis.z);
+        r.hint.addScaledVector(r.z, -r.hint.dot(r.z)).normalize();
+        r.normal.addScaledVector(r.hint, 0.35 - spare);
+      }
+      r.normal.normalize();
       r.pole.copy(r.z).multiplyScalar(minOut).addScaledVector(r.normal, Math.sqrt(1 - minOut ** 2));
     }
     r.elbow.copy(r.axis).multiplyScalar(along).addScaledVector(r.pole, lift);
@@ -210,12 +243,12 @@ window.LongCatch = window.LongCatch || (() => {
       S.phase = (S.phase + scaled / (120 / P.rate)) % 1;
       S.offset += P.speed * scaled;
     }
-    // Body roll: positive = right shoulder down. Connected drive lets the hips lead.
+    // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
     const roll = P.roll * D, w = 2 * Math.PI;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
-    const bodyRoll = roll * Math.cos(w * (S.phase - 0.1));
+    const bodyRoll = roll * Math.cos(w * (S.phase - ROLL_PEAK));
     m.chest.rotation.set(bodyRoll, 0, 0);
-    m.pelvis.rotation.set(roll * (0.3 + 0.6 * P.drive) * Math.cos(w * (S.phase - 0.1 + lead)), 0, 0);
+    m.pelvis.rotation.set(roll * (0.3 + 0.6 * P.drive) * Math.cos(w * (S.phase - ROLL_PEAK + lead)), 0, 0);
 
     const right = arm(S.phase, P), left = arm((S.phase + 0.5) % 1, P);
     const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
@@ -225,7 +258,7 @@ window.LongCatch = window.LongCatch || (() => {
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
-    const core = Math.abs(Math.sin(w * (S.phase - 0.1 + lead))) * (0.35 + 0.65 * P.drive);
+    const core = Math.abs(Math.sin(w * (S.phase - ROLL_PEAK + lead))) * (0.35 + 0.65 * P.drive);
     patch(m.backR, eb * k * right.back);
     patch(m.backL, eb * k * left.back);
     patch(m.triR, et * k * right.triceps);

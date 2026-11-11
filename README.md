@@ -20,8 +20,10 @@ It demonstrates:
 The swimmer has a tapered torso and limbs, rounded joints, hands, feet, and
 simple goggles. Fixed-length arm segments follow a two-bone joint solver with
 an outward elbow guide and 8–145° elbow flexion, rather than winding the
-shoulder through a full revolution. It is still a simplified teaching model,
-not a validated biomechanical simulation.
+shoulder through a full revolution. The elbow eases into full extension instead
+of snapping straight, stays bent through a high-elbow pull, and leads an
+elbow-high recovery while the body roll peaks at each catch. It is still a
+simplified teaching model, not a validated biomechanical simulation.
 
 All metrics and muscle colours are coaching estimates. They are not measured
 EMG, force, medical, or diagnostic data.
