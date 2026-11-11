@@ -24,7 +24,9 @@ class Palette:
     suit: str = '#1f5563'
     patch: str = '#f2c14e'
     water: str = '#2a8fa8'
-    goggles: str = '#233c49'
+    cap: str = '#2b4f86'
+    lens: str = '#5d9cc9'
+    rubber: str = '#141c21'
 
     def css_variables(self) -> str:
         """A ``:root`` rule declaring one CSS custom property per colour."""

@@ -46,6 +46,47 @@ def ellipsoid(sx: float, sy: float, sz: float, color: str, opacity: float = 1.0)
     return ui.scene.sphere(1, 20, 12).material(color, opacity).scale(sx, sy, sz)
 
 
+# ---- head geometry (chest frame, metres) ----------------------------------------------------
+Vec = tuple[float, float, float]
+HEAD_CENTRE: Vec = (0.50, 0.0, 0.015)
+HEAD_AXES: Vec = (0.1375, 0.0935, 0.113)  # skull semi-axes: crown (+x), side (y), back of head (+z)
+EYE_DIR: Vec = (0.04, 0.052, -0.097)  # right/left eye offset from the head centre (y sign flipped per side)
+
+
+def _add(a: Vec, b: Vec) -> Vec:
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def _sub(a: Vec, b: Vec) -> Vec:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _scaled(a: Vec, k: float) -> Vec:
+    return (a[0] * k, a[1] * k, a[2] * k)
+
+
+def _cross(a: Vec, b: Vec) -> Vec:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _unit(a: Vec) -> Vec:
+    return _scaled(a, 1 / math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2))
+
+
+def head_surface(dx: float, dy: float, dz: float) -> tuple[Vec, Vec]:
+    """Point on the skull in direction (dx, dy, dz) from its centre, and the outward normal there."""
+    u = _unit((dx / HEAD_AXES[0], dy / HEAD_AXES[1], dz / HEAD_AXES[2]))
+    point = _add(HEAD_CENTRE, (u[0] * HEAD_AXES[0], u[1] * HEAD_AXES[1], u[2] * HEAD_AXES[2]))
+    normal = _unit((u[0] / HEAD_AXES[0], u[1] / HEAD_AXES[1], u[2] / HEAD_AXES[2]))
+    return point, normal
+
+
+def basis(x_axis: Vec, y_axis: Vec) -> list[list[float]]:
+    """Rotation matrix (rows) whose columns turn local x, y, z onto the given orthonormal axes."""
+    z_axis = _cross(x_axis, y_axis)
+    return [[x_axis[i], y_axis[i], z_axis[i]] for i in range(3)]
+
+
 class SwimmerBuilder:
     """Builds the scene inside an active ``ui.scene`` context and records animated object ids."""
 
@@ -98,15 +139,71 @@ class SwimmerBuilder:
             self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
     def _head(self) -> None:
-        """Neck, head, swim cap, nose, and goggles; the face points down (-z)."""
-        skin = self.colors.skin
+        """Neck, head, jaw, nose, swim cap, and goggles; the face points down (-z).
+
+        The skull and cap are built on a unit sphere inside one scaled group,
+        so the cap dome hugs the head exactly. The goggles are placed in the
+        chest frame, aimed along the skull's surface normal, so the lenses
+        are not stretched by that scale.
+        """
+        c = self.colors
         with ui.scene.group().move(0.29, 0, 0):
-            limb_x(0.11, 0.052, 0.045, skin)
-        ui.scene.sphere(0.11, 24, 16).material(skin).scale(1.25, 0.85, 1.03).move(0.50, 0, 0.015)
-        ui.scene.sphere(0.112, 24, 16).material(self.colors.suit).scale(1.02, 0.87, 0.94).move(0.47, 0, 0.055)
-        ui.scene.sphere(0.028, 16, 10).material(skin).scale(1.2, 0.7, 0.7).move(0.56, 0, -0.08)
-        for y in (-0.052, 0.052):
-            ui.scene.sphere(0.032, 16, 10).material(self.colors.goggles).scale(0.9, 1, 0.4).move(0.54, y, -0.082)
+            limb_x(0.11, 0.052, 0.045, c.skin)
+        centre, axes = HEAD_CENTRE, HEAD_AXES
+        # Chin and nose: in swim pose "down and forward" maps to -x and -z.
+        ellipsoid(0.07, 0.068, 0.05, c.skin).move(centre[0] - 0.035, 0, centre[2] - 0.065)
+        ui.scene.sphere(0.026, 16, 10).material(c.skin).scale(1.25, 0.7, 0.75).move(0.565, 0, -0.085)
+        with ui.scene.group().move(*centre).scale(*axes):
+            ui.scene.sphere(1, 32, 20).material(c.skin)
+            # Cap dome: axis tilted 30 deg from straight up towards the crown, covering ears and nape.
+            with ui.scene.group().rotate(0, math.radians(30), 0):
+                with ui.scene.group().rotate(math.pi / 2, 0, 0):
+                    edge = math.radians(100)
+                    profile = [
+                        [1.05 * math.sin(t), 1.05 * math.cos(t)] for t in (edge * (1 - i / 14) for i in range(15))
+                    ]
+                    ui.scene.lathe(profile, 40).material(c.cap, 1.0, 'both')
+                    rim = ui.scene.torus(1.05 * math.sin(edge), 0.035, 10, 64).material(c.cap)
+                    rim.rotate(math.pi / 2, 0, 0).move(0, 1.05 * math.cos(edge), 0)
+            self._goggle_strap()
+        eyes = []
+        for sign in (-1, 1):
+            point, normal = head_surface(EYE_DIR[0], sign * EYE_DIR[1], EYE_DIR[2])
+            eyes.append((point, normal))
+            across = _unit(_sub((0.0, 1.0, 0.0), _scaled(normal, normal[1])))
+            with ui.scene.group().move(*point).rotate_R(basis(across, normal)):
+                ui.scene.cylinder(0.025, 0.028, 0.016, 24).material(c.rubber).scale(1.3, 1, 1).move(0, 0.004, 0)
+                ui.scene.torus(0.026, 0.0045, 8, 32).material(c.rubber).rotate(math.pi / 2, 0, 0).scale(1.3, 1, 1).move(
+                    0, 0.012, 0
+                )
+                ellipsoid(0.031, 0.008, 0.023, c.lens).move(0, 0.012, 0)
+        # Nose bridge between the two eye cups, standing just off the face.
+        (p_r, n_r), (p_l, _) = eyes
+        gap = p_l[1] - p_r[1] - 2 * 0.03
+        mid = _add(_scaled(_add(p_r, p_l), 0.5), _scaled(n_r, 0.012))
+        ui.scene.cylinder(0.0035, 0.0035, gap, 8).material(c.rubber).move(mid[0], 0, mid[2])
+
+    def _goggle_strap(self) -> None:
+        """Strap arc (unit-head space) from one goggle's outer edge round the back of the cap to the other."""
+        u_eye = _unit((EYE_DIR[0] / HEAD_AXES[0], EYE_DIR[1] / HEAD_AXES[1], EYE_DIR[2] / HEAD_AXES[2]))
+        u_back = _unit((-0.3, 0.0, 0.95))
+        # Plane through both eyes and the back of the head; symmetric, so its normal lies in x-z.
+        dx, dz = u_eye[0] - u_back[0], u_eye[2] - u_back[2]
+        normal = _unit((-dz, 0.0, dx))
+        if normal[0] < 0:
+            normal = _scaled(normal, -1)
+        offset = sum(a * n for a, n in zip(u_back, normal, strict=True))
+        x0 = _unit(_sub(u_back, _scaled(normal, offset)))
+        y0 = _cross(normal, x0)
+        v = _sub(u_eye, _scaled(normal, offset))
+        half = abs(
+            math.atan2(sum(a * b for a, b in zip(v, y0, strict=True)), sum(a * b for a, b in zip(v, x0, strict=True)))
+        )
+        half -= 0.32  # stop at the goggle's outer edge, not its centre
+        start = _add(_scaled(x0, math.cos(-half)), _scaled(y0, math.sin(-half)))
+        radius = 1.075 * math.sqrt(max(0.0, 1 - offset**2))
+        strap = ui.scene.torus(radius, 0.04, 8, 64, 2 * half).material(self.colors.rubber)
+        strap.rotate_R(basis(start, _cross(normal, start))).move(*_scaled(normal, 1.075 * offset))
 
     def _arm(self, side: str, sign: int) -> None:
         """Nested shoulder -> elbow -> wrist groups so the engine can pose each joint."""
