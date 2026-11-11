@@ -32,6 +32,10 @@ SKIN = '#d8bfa3'
 SUIT = '#1f5563'
 PATCH = '#f2c14e'
 WATER = '#2a8fa8'
+UPPER_ARM = 0.28
+FOREARM = 0.27
+THIGH = 0.38
+SHIN = 0.36
 
 # Browser-side pose loop. Python owns settings; the browser only animates.
 ENGINE_JS = (
@@ -49,6 +53,9 @@ window.LongCatch = window.LongCatch || (() => {
     back: [1, 0, 0], triceps: [0, 1, 0], core: [0, 0, 1], balanced: [0.55, 0.55, 0.55],
   };
   const PHASES = __PHASES__;
+  const [UPPER, FOREARM] = __ARM_LENGTHS__;
+  const MIN_REACH = Math.sqrt(UPPER ** 2 + FOREARM ** 2 + 2 * UPPER * FOREARM * Math.cos(145 * D));
+  const MAX_REACH = Math.sqrt(UPPER ** 2 + FOREARM ** 2 + 2 * UPPER * FOREARM * Math.cos(8 * D));
 
   function keyed(p, keys) {
     for (let i = 0; i < keys.length - 1; i++) {
@@ -61,22 +68,26 @@ window.LongCatch = window.LongCatch || (() => {
   function arm(p, P) {
     const c = P.catch, s = P.slip, L = P.length;
     const exit = P.exit;
-    const midRec = exit + (1 - exit) * 0.5;
-    // Shoulder pitch: 0 = reaching forward, 90 = straight down, 180 = along the body.
-    const pitch = keyed(p, [
-      [0, 8], [0.12, 3], [0.30, lerp(44, 18, c) + 34 * s],
-      [0.62, 100 + 10 * L + 8 * s], [exit, lerp(126, 162, L)], [midRec, 250], [1, 368],
+    const midRec = exit + (1 - exit) * 0.45, lateRec = exit + (1 - exit) * 0.82;
+    const x = keyed(p, [
+      [0, 0.51], [0.12, 0.50], [0.30, lerp(0.10, 0.30, c) - 0.12 * s],
+      [0.48, -0.04 - 0.08 * s], [0.62, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
+      [midRec, -0.04], [lateRec, 0.34], [1, 0.51],
     ]);
-    const elbow = keyed(p, [
-      [0, 8], [0.12, 0], [0.30, lerp(10, 74, c) * (1 - 0.5 * s)],
-      [0.62, lerp(10, 55, c) * (1 - 0.4 * s)], [exit, 6], [midRec, 125], [1, 8],
+    const out = keyed(p, [
+      [0, 0.025], [0.12, 0.035], [0.30, 0.07 + 0.08 * (1 - c)], [0.48, 0.10],
+      [0.62, 0.06], [exit, 0.08], [midRec, 0.27], [lateRec, 0.13], [1, 0.025],
+    ]);
+    const height = keyed(p, [
+      [0, -0.045], [0.12, -0.07], [0.30, lerp(-0.27, -0.34, c)], [0.48, -0.43],
+      [0.62, -0.28], [exit, 0.015], [midRec, 0.08], [lateRec, 0.06], [1, -0.045],
     ]);
     const under = p < exit;
-    const abd = under ? 6 * Math.sin(Math.PI * p / exit) : 55 * Math.sin(Math.PI * (p - exit) / (1 - exit));
     const wrist = under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15;
     const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < 0.62 ? 2 : p < exit ? 3 : 4;
     return {
-      pitch: pitch * D, elbow: elbow * D, abd: abd * D, wrist: wrist * D, under, stage,
+      x, out, height, pole: lerp(lerp(-0.35, 1, c), 1.5, bump(p, exit, 1)),
+      wrist: wrist * D, under, stage,
       back: bump(p, 0.10, 0.64), triceps: bump(p, 0.50, exit + 0.04),
     };
   }
@@ -102,6 +113,15 @@ window.LongCatch = window.LongCatch || (() => {
       m[k].renderOrder = 10;
     }
     m.basePos = m.buoys.map(b => b.position.x);
+    m.rigs = {};
+    for (const side of ['R', 'L']) {
+      const shoulder = m['sh' + side], vector = () => shoulder.position.clone();
+      m.rigs[side] = {
+        target: vector(), axis: vector(), pole: vector(), elbow: vector(),
+        upper: vector(), lower: vector(), normal: vector(), z: vector(),
+        matrix: shoulder.matrix.clone(), quaternion: shoulder.quaternion.clone(),
+      };
+    }
     el.$el.style.width = '100%';
     el.$el.style.height = '100%';
     S.el = el;
@@ -132,13 +152,44 @@ window.LongCatch = window.LongCatch || (() => {
     mesh.visible = value > 0.02;
   }
 
-  function poseArm(m, side, a, P, slipness) {
-    const sgn = side === 'R' ? 1 : -1;
-    m['sh' + side].rotation.set(sgn * a.abd, a.pitch, 0);
-    m['el' + side].rotation.set(0, a.elbow, 0);
+  function poseArm(m, side, a, P, slipness, bodyRoll) {
+    const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
+    const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll), lateral = sgn * 0.8;
+    // Wrist height is water-relative; solve a fixed-length chain in the rolled chest frame.
+    const z = (a.height + 0.06 - sin * (sh.position.y + sgn * a.out)) / cos;
+    r.target.set(a.x, sgn * a.out, z);
+    const reach = clamp(r.target.length(), MIN_REACH, MAX_REACH);
+    r.axis.copy(r.target).normalize();
+    r.target.copy(r.axis).multiplyScalar(reach);
+    // Keep the elbow guide world-up when the chest rolls underneath the recovering arm.
+    r.pole.set(lerp(-0.15, 0.35, P.catch), lateral * cos + a.pole * sin, -lateral * sin + a.pole * cos);
+    r.pole.addScaledVector(r.axis, -r.pole.dot(r.axis)).normalize();
+    const along = (UPPER ** 2 - FOREARM ** 2 + reach ** 2) / (2 * reach);
+    const lift = Math.sqrt(Math.max(0, UPPER ** 2 - along ** 2));
+    // Bound elbow position, not its bend direction: recovery may fold inward without crossing the torso.
+    r.z.set(0, sgn, 0).addScaledVector(r.axis, -sgn * r.axis.y).normalize();
+    const minOut = clamp((0.015 - along * sgn * r.axis.y) / (lift * Math.sqrt(1 - r.axis.y ** 2)), -1, 1);
+    const outward = r.pole.dot(r.z);
+    if (outward < minOut) {
+      r.normal.copy(r.pole).addScaledVector(r.z, -outward).normalize();
+      r.pole.copy(r.z).multiplyScalar(minOut).addScaledVector(r.normal, Math.sqrt(1 - minOut ** 2));
+    }
+    r.elbow.copy(r.axis).multiplyScalar(along).addScaledVector(r.pole, lift);
+    r.upper.copy(r.elbow).normalize();
+    r.lower.copy(r.target).sub(r.elbow).normalize();
+    // Both bones share one bend-plane normal: the elbow is a hinge, not another shoulder.
+    r.normal.crossVectors(r.pole, r.axis).normalize();
+    r.z.crossVectors(r.upper, r.normal);
+    r.matrix.makeBasis(r.upper, r.normal, r.z);
+    sh.quaternion.setFromRotationMatrix(r.matrix);
+    r.z.crossVectors(r.lower, r.normal);
+    r.matrix.makeBasis(r.lower, r.normal, r.z);
+    r.quaternion.setFromRotationMatrix(r.matrix);
+    m['el' + side].quaternion.copy(sh.quaternion).invert().multiply(r.quaternion);
     m['wr' + side].rotation.set(0, a.wrist, 0);
     paint(m['fa' + side], a.under, slipness);
     paint(m['ha' + side], a.under, slipness);
+    paint(m['thumb' + side], a.under, slipness);
   }
 
   function frame(t) {
@@ -152,22 +203,25 @@ window.LongCatch = window.LongCatch || (() => {
       S.phase = (S.phase + dt / (120 / P.rate)) % 1;
       S.offset += P.speed * dt;
     }
-    const right = arm(S.phase, P), left = arm((S.phase + 0.5) % 1, P);
-    const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
-    poseArm(m, 'R', right, P, slipness);
-    poseArm(m, 'L', left, P, slipness);
-
     // Body roll: positive = right shoulder down. Connected drive lets the hips lead.
     const roll = P.roll * D, w = 2 * Math.PI;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
-    m.chest.rotation.set(roll * Math.cos(w * (S.phase - 0.1)), 0, 0);
+    const bodyRoll = roll * Math.cos(w * (S.phase - 0.1));
+    m.chest.rotation.set(bodyRoll, 0, 0);
     m.pelvis.rotation.set(roll * (0.3 + 0.6 * P.drive) * Math.cos(w * (S.phase - 0.1 + lead)), 0, 0);
 
+    const right = arm(S.phase, P), left = arm((S.phase + 0.5) % 1, P);
+    const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
+    poseArm(m, 'R', right, P, slipness, bodyRoll);
+    poseArm(m, 'L', left, P, slipness, bodyRoll);
+
     const kick = w * 3 * S.phase;
-    m.legR.rotation.set(0, 0.2 * Math.sin(kick), 0);
-    m.legL.rotation.set(0, 0.2 * Math.sin(kick + Math.PI), 0);
-    m.kneeR.rotation.set(0, 0.35 * Math.max(0, Math.sin(kick + 1.0)), 0);
-    m.kneeL.rotation.set(0, 0.35 * Math.max(0, Math.sin(kick + Math.PI + 1.0)), 0);
+    for (const [side, offset] of [['R', 0], ['L', Math.PI]]) {
+      const angle = kick + offset;
+      m['leg' + side].rotation.set(0, P.kick * 0.26 * Math.sin(angle), 0);
+      m['knee' + side].rotation.set(0, P.kick * 0.45 * Math.max(0, Math.sin(angle - 0.7)), 0);
+      m['ankle' + side].rotation.set(0, -0.12 + P.kick * 0.10 * Math.sin(angle - 0.5), 0);
+    }
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
@@ -185,7 +239,7 @@ window.LongCatch = window.LongCatch || (() => {
       b.position.x = ((((m.basePos[i] - S.offset + 4.5) % span) + span) % span) - 4.5;
     });
 
-    const progress = Math.floor(S.phase * 20) * 5;
+    const progress = Math.floor(S.phase * 20 + 1e-8) * 5 % 100;
     const text =
       'Cycle ' + progress + '%  ·  Right arm: ' + PHASES[right.stage] + '  ·  Left arm: ' + PHASES[left.stage];
     if (text !== S.labelText) {
@@ -204,13 +258,14 @@ window.LongCatch = window.LongCatch || (() => {
       }
     },
     set(params) { S.params = Object.assign({}, S.params, params); },
-    step(amount) { S.phase = ((S.phase + amount) % 1 + 1) % 1; S.last = null; },
+    step(amount) { S.phase = ((S.phase + amount) % 1 + 1) % 1; S.last = null; return S.phase; },
   };
 })();
 """.replace('__HOLD__', HOLD)
     .replace('__SLIP__', SLIP)
     .replace('__SKIN__', SKIN)
     .replace('__PHASES__', json.dumps(list(PHASE_LABELS.values())))
+    .replace('__ARM_LENGTHS__', json.dumps([UPPER_ARM, FOREARM]))
 )
 
 LAYOUT_CSS = """
@@ -226,13 +281,13 @@ LAYOUT_CSS = """
 """
 
 
-def capsule_x(radius: float, length: float, color: str, start: float = 0.0, direction: int = 1):
-    """Capsule whose axis runs along local x from ``start``; NiceGUI capsules default to the y axis."""
+def limb_x(length: float, root_radius: float, tip_radius: float, color: str, direction: int = 1):
+    """Tapered segment ending exactly at its joint pivots, along local +/-x."""
     return (
-        ui.scene.capsule(radius, length, 6, 14)
+        ui.scene.cylinder(tip_radius, root_radius, length, 20)
         .material(color)
         .rotate(0, 0, -direction * math.pi / 2)
-        .move(start + direction * length / 2, 0, 0)
+        .move(direction * length / 2, 0, 0)
     )
 
 
@@ -250,43 +305,56 @@ def build_swimmer(ids: dict) -> None:
 
     with ui.scene.group().move(0, 0, -0.06):
         with reg('chest', ui.scene.group()):
-            ui.scene.cylinder(0.19, 0.13, 0.62, 24).material(SUIT).rotate(0, 0, -math.pi / 2).scale(1.3, 1, 0.75)
-            ui.scene.capsule(0.075, 0.40, 6, 14).material(SKIN).move(0.27, 0, 0)
-            capsule_x(0.05, 0.08, SKIN, start=0.33)
-            ui.scene.sphere(0.11, 24, 16).material(SKIN).scale(1.2, 0.92, 1.0).move(0.52, 0, 0.02)
-            ui.scene.sphere(0.112, 24, 16).material(SUIT).scale(1.0, 0.95, 0.9).move(0.5, 0, 0.05)
-            reg('backR', patch(ui.scene.sphere(0.12, 20, 12)).scale(1.6, 0.55, 0.7).move(0.06, -0.16, 0.06))
-            reg('backL', patch(ui.scene.sphere(0.12, 20, 12)).scale(1.6, 0.55, 0.7).move(0.06, 0.16, 0.06))
+            ui.scene.cylinder(0.20, 0.125, 0.55, 32).material(SKIN).rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62).move(
+                -0.025, 0, 0
+            )
+            ui.scene.sphere(1, 24, 16).material(SKIN).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
+            ui.scene.sphere(1, 24, 16).material(SKIN).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
+            with ui.scene.group().move(0.29, 0, 0):
+                limb_x(0.11, 0.052, 0.045, SKIN)
+            ui.scene.sphere(0.11, 24, 16).material(SKIN).scale(1.25, 0.85, 1.03).move(0.50, 0, 0.015)
+            ui.scene.sphere(0.112, 24, 16).material(SUIT).scale(1.02, 0.87, 0.94).move(0.47, 0, 0.055)
+            ui.scene.sphere(0.028, 16, 10).material(SKIN).scale(1.2, 0.7, 0.7).move(0.56, 0, -0.08)
+            for y in (-0.052, 0.052):
+                ui.scene.sphere(0.032, 16, 10).material('#233c49').scale(0.9, 1, 0.4).move(0.54, y, -0.082)
+            reg('backR', patch(ui.scene.sphere(1, 20, 12)).scale(0.18, 0.055, 0.03).move(0.01, -0.12, 0.10))
+            reg('backL', patch(ui.scene.sphere(1, 20, 12)).scale(0.18, 0.055, 0.03).move(0.01, 0.12, 0.10))
             for side, y in (('R', -0.235), ('L', 0.235)):
                 with reg('sh' + side, ui.scene.group().move(0.27, y, 0)):
-                    capsule_x(0.056, 0.26, SKIN)
+                    ui.scene.sphere(0.065, 20, 14).material(SKIN)
+                    limb_x(UPPER_ARM, 0.058, 0.041, SKIN)
                     reg(
                         'tri' + side,
-                        patch(ui.scene.capsule(0.042, 0.16, 6, 12)).rotate(0, 0, -math.pi / 2).move(0.13, 0, -0.03),
+                        patch(ui.scene.sphere(1, 20, 12)).scale(0.095, 0.038, 0.025).move(0.13, 0, 0.035),
                     )
-                    with reg('el' + side, ui.scene.group().move(0.28, 0, 0)):
-                        reg('fa' + side, capsule_x(0.045, 0.24, SKIN))
-                        with reg('wr' + side, ui.scene.group().move(0.27, 0, 0)):
-                            reg('ha' + side, ui.scene.box(0.15, 0.09, 0.028).material(SKIN).move(0.075, 0, 0))
+                    with reg('el' + side, ui.scene.group().move(UPPER_ARM, 0, 0)):
+                        ui.scene.sphere(0.042, 18, 12).material(SKIN)
+                        reg('fa' + side, limb_x(FOREARM, 0.042, 0.028, SKIN))
+                        with reg('wr' + side, ui.scene.group().move(FOREARM, 0, 0)):
+                            ui.scene.sphere(0.029, 16, 10).material(SKIN)
+                            reg('ha' + side, ui.scene.sphere(1, 20, 12).material(SKIN)).scale(0.08, 0.046, 0.018).move(
+                                0.065, 0, 0
+                            )
+                            reg('thumb' + side, ui.scene.sphere(0.028, 16, 10).material(SKIN)).scale(
+                                1.1, 0.6, 0.65
+                            ).move(0.026, 0.045 if side == 'R' else -0.045, -0.005)
 
         with reg('pelvis', ui.scene.group().move(-0.36, 0, 0)):
-            ui.scene.cylinder(0.135, 0.15, 0.22, 24).material(SUIT).rotate(0, 0, -math.pi / 2).scale(1.3, 1, 0.8)
-            reg(
-                'core',
-                patch(ui.scene.cylinder(0.15, 0.15, 0.1, 24))
-                .rotate(0, 0, -math.pi / 2)
-                .scale(1.3, 1, 0.9)
-                .move(0.13, 0, 0),
-            )
-            reg('hipR', patch(ui.scene.sphere(0.075, 16, 10)).scale(1.3, 0.6, 1).move(-0.02, -0.16, 0.02))
-            reg('hipL', patch(ui.scene.sphere(0.075, 16, 10)).scale(1.3, 0.6, 1).move(-0.02, 0.16, 0.02))
-            for side, y in (('R', -0.085), ('L', 0.085)):
+            ui.scene.sphere(1, 24, 16).material(SUIT).scale(0.16, 0.165, 0.12).move(-0.02, 0, 0)
+            reg('core', patch(ui.scene.sphere(1, 20, 12)).scale(0.10, 0.13, 0.105).move(0.13, 0, 0.015))
+            reg('hipR', patch(ui.scene.sphere(0.065, 16, 10)).scale(1.3, 0.5, 0.8).move(-0.02, -0.15, 0.025))
+            reg('hipL', patch(ui.scene.sphere(0.065, 16, 10)).scale(1.3, 0.5, 0.8).move(-0.02, 0.15, 0.025))
+            for side, y in (('R', -0.09), ('L', 0.09)):
                 with reg('leg' + side, ui.scene.group().move(-0.08, y, 0)):
-                    capsule_x(0.068, 0.36, SKIN, direction=-1)
-                    with reg('knee' + side, ui.scene.group().move(-0.38, 0, 0)):
-                        capsule_x(0.05, 0.34, SKIN, direction=-1)
-                        with ui.scene.group().move(-0.37, 0, 0):
-                            ui.scene.box(0.17, 0.075, 0.05).material(SKIN).move(-0.06, 0, 0)
+                    ui.scene.sphere(0.073, 20, 14).material(SUIT)
+                    limb_x(THIGH, 0.072, 0.045, SKIN, direction=-1)
+                    with reg('knee' + side, ui.scene.group().move(-THIGH, 0, 0)):
+                        ui.scene.sphere(0.046, 18, 12).material(SKIN)
+                        limb_x(SHIN, 0.046, 0.026, SKIN, direction=-1)
+                        ui.scene.sphere(1, 20, 12).material(SKIN).scale(0.13, 0.043, 0.044).move(-0.13, 0, 0)
+                        with reg('ankle' + side, ui.scene.group().move(-SHIN, 0, 0)):
+                            ui.scene.sphere(0.028, 16, 10).material(SKIN)
+                            ui.scene.sphere(1, 20, 12).material(SKIN).scale(0.115, 0.043, 0.026).move(-0.075, 0, -0.01)
 
     # Lane ropes on both sides; the near (right, -y) rope sits lower so it frames rather than hides the swimmer.
     buoys = []
@@ -360,13 +428,14 @@ async def index() -> None:
             set_playing(False)
         ui.run_javascript(f'window.LongCatch && window.LongCatch.step({amount})')
 
-    UNITS = {'rate': ' spm', 'catch': '%', 'roll': '°', 'slip': '%', 'drive': '%'}
+    UNITS = {'rate': ' spm', 'catch': '%', 'roll': '°', 'slip': '%', 'drive': '%', 'kick': '%'}
     LABELS = {
         'rate': 'Stroke rate',
         'catch': 'Catch quality',
         'roll': 'Body roll',
         'slip': 'Slip',
         'drive': 'Drive balance',
+        'kick': 'Kick amplitude',
     }
     EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
     assert set(EMPHASIS_LABELS) == set(EMPHASES)
@@ -417,10 +486,12 @@ async def index() -> None:
                     values[key] = ui.label(f'{value}{UNITS[key]}').classes('text-sm').style(f'color:{MUTED}')
                 sliders[key] = ui.slider(
                     min=lo, max=hi, step=1, value=value, on_change=lambda e, k=key: on_slider(k, e.value)
-                )
-            with ui.row().classes('w-full justify-between text-xs -mt-3').style(f'color:{MUTED}'):
-                ui.label('arm-driven')
-                ui.label('hip-connected')
+                ).props(f'aria-label="{LABELS[key]}"')
+                if key in {'drive', 'kick'}:
+                    with ui.row().classes('w-full justify-between text-xs -mt-3').style(f'color:{MUTED}'):
+                        ui.label('arm-driven' if key == 'drive' else 'still legs')
+                        ui.label('hip-connected' if key == 'drive' else 'strong flutter')
+            ui.label('Kick changes the motion only, not the pace estimates.').classes('text-xs').style(f'color:{MUTED}')
 
             ui.label('Muscle emphasis').classes('text-xs uppercase tracking-wider').style(f'color:{MUTED}')
             ui.toggle(EMPHASIS_LABELS, value=view.emphasis, on_change=lambda e: update(emphasis=e.value)).props(

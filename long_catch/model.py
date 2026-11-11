@@ -133,6 +133,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'roll': (20, 62),
     'slip': (0, 100),
     'drive': (0, 100),
+    'kick': (0, 100),
 }
 
 
@@ -145,6 +146,7 @@ class StrokeSettings:
     roll: int = 46
     slip: int = 8
     drive: int = 85
+    kick: int = 45
 
     def __post_init__(self) -> None:
         for name, (lo, hi) in SETTING_RANGES.items():
@@ -179,6 +181,7 @@ class ViewState:
             'catch': s.catch / 100,
             'slip': s.slip / 100,
             'drive': s.drive / 100,
+            'kick': s.kick / 100,
             'roll': s.roll,
             'emphasis': self.emphasis,
             'playing': self.playing,
@@ -190,8 +193,8 @@ class ViewState:
 
 
 PRESETS: dict[str, StrokeSettings] = {
-    'Long power': StrokeSettings(rate=38, catch=92, roll=46, slip=8, drive=85),
-    'Long light': StrokeSettings(rate=40, catch=88, roll=44, slip=10, drive=70),
-    'Compact connected': StrokeSettings(rate=48, catch=82, roll=42, slip=14, drive=68),
-    'Short slipping': StrokeSettings(rate=54, catch=42, roll=34, slip=62, drive=35),
+    'Long power': StrokeSettings(rate=38, catch=92, roll=46, slip=8, drive=85, kick=45),
+    'Long light': StrokeSettings(rate=40, catch=88, roll=44, slip=10, drive=70, kick=25),
+    'Compact connected': StrokeSettings(rate=48, catch=82, roll=42, slip=14, drive=68, kick=60),
+    'Short slipping': StrokeSettings(rate=54, catch=42, roll=34, slip=62, drive=35, kick=35),
 }

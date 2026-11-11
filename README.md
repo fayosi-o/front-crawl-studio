@@ -12,11 +12,15 @@ It demonstrates:
 - body roll;
 - hand slip;
 - arm-driven versus hip-connected timing;
+- adjustable flutter-kick amplitude;
 - simple estimated back, triceps, and hip/core contribution;
 - rough distance-per-stroke and pace estimates.
 
-The swimmer is an intentionally simple procedural human, not a realistic
-anatomical model.
+The swimmer has a tapered torso and limbs, rounded joints, hands, feet, and
+simple goggles. Fixed-length arm segments follow a two-bone joint solver with
+an outward elbow guide and 8–145° elbow flexion, rather than winding the
+shoulder through a full revolution. It is still a simplified teaching model,
+not a validated biomechanical simulation.
 
 All metrics and muscle colours are coaching estimates. They are not measured
 EMG, force, medical, or diagnostic data.
@@ -81,6 +85,9 @@ python main.py
   connected, Short slipping.
 - **Sliders** adjust stroke rate, catch quality, body roll, slip, and drive
   balance. The estimates panel updates live.
+- **Kick amplitude** runs from still legs (0%) to a stronger six-beat flutter
+  kick (100%), including hip, knee, and ankle movement. This changes the
+  animation only; the arm-stroke pace estimates do not include kicking.
 - **Phase stepping:** Pause the animation, then use **− 5%** and **+ 5%** to
   inspect the stroke cycle in small increments. Stepping automatically pauses
   playback.
