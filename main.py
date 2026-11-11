@@ -185,7 +185,9 @@ window.LongCatch = window.LongCatch || (() => {
       b.position.x = ((((m.basePos[i] - S.offset + 4.5) % span) + span) % span) - 4.5;
     });
 
-    const text = 'Right arm: ' + PHASES[right.stage] + '  ·  Left arm: ' + PHASES[left.stage];
+    const progress = Math.floor(S.phase * 20) * 5;
+    const text =
+      'Cycle ' + progress + '%  ·  Right arm: ' + PHASES[right.stage] + '  ·  Left arm: ' + PHASES[left.stage];
     if (text !== S.labelText) {
       if (!S.label || !S.label.isConnected) S.label = document.querySelector('.lc-root .lc-phase');
       if (S.label) { S.label.textContent = text; S.labelText = text; }
@@ -202,6 +204,7 @@ window.LongCatch = window.LongCatch || (() => {
       }
     },
     set(params) { S.params = Object.assign({}, S.params, params); },
+    step(amount) { S.phase = ((S.phase + amount) % 1 + 1) % 1; S.last = null; },
   };
 })();
 """.replace('__HOLD__', HOLD)
@@ -344,11 +347,18 @@ async def index() -> None:
             applying_preset = False
         update(settings=preset)
 
-    def toggle_play() -> None:
-        playing = not view.playing
+    def set_playing(playing: bool) -> None:
         play_btn.text = 'Pause' if playing else 'Play'
         play_btn.props(f'icon={"pause" if playing else "play_arrow"}')
         update(playing=playing)
+
+    def toggle_play() -> None:
+        set_playing(not view.playing)
+
+    def step_phase(amount: float) -> None:
+        if view.playing:
+            set_playing(False)
+        ui.run_javascript(f'window.LongCatch && window.LongCatch.step({amount})')
 
     UNITS = {'rate': ' spm', 'catch': '%', 'roll': '°', 'slip': '%', 'drive': '%'}
     LABELS = {
@@ -388,6 +398,10 @@ async def index() -> None:
 
         with ui.column().classes('lc-panel p-5 gap-3 no-wrap').style(f'background:{PANEL}'):
             play_btn = ui.button('Pause', icon='pause', on_click=toggle_play).classes('w-full')
+            with ui.row().classes('w-full items-center gap-2'):
+                ui.button('− 5%', on_click=lambda: step_phase(-0.05)).props('outline dense').classes('flex-1')
+                ui.label('Step stroke phase').classes('text-xs').style(f'color:{MUTED}')
+                ui.button('+ 5%', on_click=lambda: step_phase(0.05)).props('outline dense').classes('flex-1')
 
             ui.label('Presets').classes('text-xs uppercase tracking-wider').style(f'color:{MUTED}')
             with ui.grid(columns=2).classes('w-full gap-2'):

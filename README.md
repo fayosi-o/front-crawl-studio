@@ -81,6 +81,9 @@ python main.py
   connected, Short slipping.
 - **Sliders** adjust stroke rate, catch quality, body roll, slip, and drive
   balance. The estimates panel updates live.
+- **Phase stepping:** Pause the animation, then use **− 5%** and **+ 5%** to
+  inspect the stroke cycle in small increments. Stepping automatically pauses
+  playback.
 - **Forearm and hand colour:** teal means holding water; coral means slipping.
 - **Amber patches** show the estimated muscle emphasis (Back, Triceps,
   Hips/core, or Balanced).
