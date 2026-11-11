@@ -1,7 +1,7 @@
 [project]
 name = "long-catch"
 version = "0.3.0"
-description = "Silent, local 3D teaching model of front-crawl stroke shape."
+description = "Local 3D front-crawl stroke explorer."
 requires-python = ">=3.12"
 readme = "README.md"
 dependencies = ["nicegui>=4.0,<5"]

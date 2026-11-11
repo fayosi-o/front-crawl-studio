@@ -1,4 +1,4 @@
-"""Long Catch: a silent, local 3D teaching model of front-crawl stroke shape.
+"""Long Catch: a local 3D front-crawl stroke explorer.
 
 Modules:
     model    Pure settings, phases, timing, faults, and estimates (no UI).

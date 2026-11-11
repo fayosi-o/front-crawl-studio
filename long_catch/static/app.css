@@ -209,11 +209,6 @@ body {
 .lc-hold.lc-good { background: rgba(61, 190, 165, 0.12); }
 .lc-hold.lc-bad { background: rgba(227, 107, 79, 0.14); }
 
-.lc-footnote {
-  font-size: 0.7rem; line-height: 1.6; color: var(--lc-muted);
-  padding: 12px 4px 6px; border-top: 1px solid rgba(231, 240, 234, 0.08);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .lc-root .q-btn, .lc-seg, .lc-stat-value, .lc-hold { transition: none; }
 }

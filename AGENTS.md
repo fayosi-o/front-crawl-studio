@@ -34,8 +34,8 @@ browser as `render_params()['faults']`. A new fault needs:
 - More slip must reduce estimated distance per stroke.
 - More drive must not compensate for a poor catch or heavy slip.
 - Every fault must cost estimated distance per stroke.
-- Muscle highlighting is an estimated teaching overlay, not EMG or medical
-  data. Never present any number as measured.
+- Muscle highlighting is an illustrative overlay. Don't present numbers as
+  measured, and don't add disclaimer text to the UI.
 
 ## Hard constraints
 

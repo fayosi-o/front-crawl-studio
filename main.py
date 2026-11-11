@@ -1,7 +1,6 @@
-"""Long Catch: a silent, local 3D teaching model of front-crawl stroke shape.
+"""Long Catch: a local 3D front-crawl stroke explorer.
 
 Run with ``python main.py`` and open http://127.0.0.1:8080.
-All numbers and muscle colours are coaching estimates, not measured data.
 """
 
 from nicegui import ui

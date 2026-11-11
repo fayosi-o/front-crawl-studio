@@ -1,13 +1,7 @@
 # Long Catch
 
-Long Catch is a local, visual front-crawl teaching prototype. Adjust the
-stroke, watch a procedural swimmer move, and compare the resulting coaching
-estimates. It runs in a browser but is served locally by Python and NiceGUI.
-
-> **Model limitations:** the swimmer and its estimates are illustrative, not a
-> validated biomechanical simulation. Muscle colours are teaching estimates,
-> not measured EMG, force, medical, or diagnostic data. The application is
-> completely silent and does not use microphone or audio APIs.
+Long Catch is a local, visual front-crawl explorer. Adjust the stroke, watch a
+3D swimmer move, and see how distance per stroke and time per 25 m respond.
 
 ## What you can explore
 
@@ -16,14 +10,10 @@ estimates. It runs in a browser but is served locally by Python and NiceGUI.
 - Eight switchable stroke faults, individually or in combination, with
   coaching cues: crossover, over-rotation, over-extension, flat hips, sinking
   legs, snaking, knee kick, and spinning arms.
-- A 3D swimmer with an adjustable muscle-emphasis overlay and estimated
-  distance per stroke, strokes per 25 m, and time per 25 m.
+- A 3D swimmer with a muscle-emphasis overlay and live distance per stroke,
+  strokes per 25 m, and time per 25 m.
 - An optional second camera (Top, Side, Front, or Below) and fading motion
   trails for the hands, feet, or both.
-
-The arm animation uses fixed-length segments and a two-bone joint solver to
-keep the shoulders and elbows within plausible ranges. This improves the
-visual teaching model, but does not make it an anatomical simulation.
 
 ## Run locally
 
@@ -60,10 +50,10 @@ while using the app; press Ctrl+C there to stop the server.
   **Short slipping** to load a starting stroke shape. Editing a control marks
   the settings as **Custom**.
 - Adjust stroke rate, catch quality, body roll, slip, and drive balance.
-  Estimates update as you change them.
+  The stroke metrics update as you change them.
 - Set **Entry angle** from 0° (near the surface) toward 40° (toward the pool
   floor). Change **Kick amplitude** from still legs to a stronger flutter.
-  These two controls affect the animation, not the estimates.
+  These two controls change the animation only.
 - Enable one or more **Stroke faults** to see common form errors and their
   coaching cues. **Clear** turns all faults off.
 
@@ -80,7 +70,7 @@ while using the app; press Ctrl+C there to stop the server.
   when stepping or scrubbing.
 - Drag the swimmer view to orbit and scroll to zoom. Teal hands and forearms
   indicate holding water; coral indicates slipping. Amber patches show the
-  selected estimated muscle emphasis.
+  selected muscle emphasis.
 
 ### Keyboard shortcuts
 
@@ -112,7 +102,7 @@ ruff format --check .
 ├── long_catch/
 │   ├── app.py              # NiceGUI page and controls
 │   ├── engine.py           # Browser-engine setup
-│   ├── model.py            # Stroke settings, timing, and estimates
+│   ├── model.py            # Stroke settings, timing, and metrics
 │   ├── swimmer.py          # Procedural swimmer and pool geometry
 │   ├── theme.py            # Palette and stylesheet loading
 │   └── static/

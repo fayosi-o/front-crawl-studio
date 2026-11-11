@@ -1,7 +1,6 @@
-"""Pure stroke model: settings, phases, timing, and coaching estimates.
+"""Pure stroke model: settings, phases, timing, faults, and stroke metrics.
 
-Everything here is UI-free so it can be unit tested. All outputs are coaching
-estimates, not measured, EMG, force, or medical data.
+Everything here is UI-free so it can be unit tested.
 """
 
 from __future__ import annotations
@@ -113,7 +112,7 @@ def format_duration(seconds: float) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Metrics:
-    """Coaching estimates for one stroke setup. None of these are measured."""
+    """Stroke metrics for one stroke setup."""
 
     hold_quality: float  # 0–1: how well the hand holds water
     distance_per_stroke: float  # metres per hand entry

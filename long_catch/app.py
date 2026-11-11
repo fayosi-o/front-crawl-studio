@@ -52,7 +52,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'entry',
         'Entry angle',
         '°',
-        'How steeply the arm extends after the hand enters. Visual only; it does not change the estimates.',
+        'How steeply the arm extends after the hand enters.',
         'near surface',
         'toward floor',
     ),
@@ -63,7 +63,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'kick',
         'Kick amplitude',
         '%',
-        'Flutter-kick size. Visual only; it does not change the estimates.',
+        'Flutter-kick size.',
         'still legs',
         'strong flutter',
     ),
@@ -159,7 +159,7 @@ class LongCatchPage:
             with ui.element('div').classes('lc-hud-top'):
                 with ui.element('div').classes('lc-glass lc-brand'):
                     ui.label('Long Catch').classes('lc-title')
-                    ui.label('Front-crawl stroke shape · estimated muscle emphasis').classes('lc-subtitle')
+                    ui.label('Front-crawl stroke explorer').classes('lc-subtitle')
                     with ui.row().classes('lc-legend'):
                         for css, text in (('hold', 'holding'), ('slip', 'slipping'), ('patch', 'emphasis')):
                             with ui.element('span').classes('lc-legend-item'):
@@ -237,7 +237,7 @@ class LongCatchPage:
             self._build_view()
 
             with ui.element('div').classes('lc-card'):
-                section_title('Estimates')
+                section_title('Stroke metrics')
                 with ui.element('div').classes('lc-stats'):
                     for key, caption in STATS:
                         with ui.element('div').classes('lc-stat'):
@@ -247,17 +247,13 @@ class LongCatchPage:
                     self.hold_icon = ui.icon('check_circle')
                     self.hold_text = ui.label()
 
-            ui.label(
-                'Coaching estimates only — not measured, EMG, or medical data. '
-                'Drag to orbit · scroll to zoom · Space play · ←/→ step · 1–4 presets · C camera · V split.'
-            ).classes('lc-footnote')
-
     def _build_view(self) -> None:
         """View card: split-view switch, second camera angle, and ghost-trail controls."""
         with ui.element('div').classes('lc-card'):
             with ui.row().classes('lc-card-head'):
                 section_title('View')
-                ui.switch('Split view', on_change=lambda e: self.update(split=e.value)).classes('lc-split-toggle')
+                split = ui.switch('Split view', on_change=lambda e: self.update(split=e.value))
+                split.classes('lc-split-toggle').tooltip('Shortcut: V')
             self.angle_toggle = ui.toggle(
                 ANGLE_LABELS, value=self.view.angle, on_change=lambda e: self.update(angle=e.value)
             )
@@ -455,7 +451,7 @@ class LongCatchPage:
         self.cues.clear()
         with self.cues:
             if not active:
-                hint = 'Switch on a fault to see how it changes the stroke and the estimates.'
+                hint = 'Switch on a fault to see how it changes the stroke.'
                 ui.label(hint).classes('lc-cue lc-cue-empty')
             for key, fault in FAULTS.items():
                 if key in active:
