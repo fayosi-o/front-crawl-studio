@@ -48,4 +48,6 @@ The prototype is complete when:
 - estimates update;
 - no placeholder controls remain.
 
-Run the application before claiming completion.
+Run the application before claiming completion. `python main.py` runs forever:
+start it detached and confirm it with one HTTP check. Never wait on it in a sync
+or attached shell (see `.github/copilot-instructions.md`).

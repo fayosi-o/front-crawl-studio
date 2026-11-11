@@ -285,10 +285,12 @@ def build_swimmer(ids: dict) -> None:
                         with ui.scene.group().move(-0.37, 0, 0):
                             ui.scene.box(0.17, 0.075, 0.05).material(SKIN).move(-0.06, 0, 0)
 
+    # Lane ropes on both sides; the near (right, -y) rope sits lower so it frames rather than hides the swimmer.
     buoys = []
-    for i in range(18):
-        color = HOLD if i % 2 else TEXT
-        buoys.append(ui.scene.sphere(0.045, 12, 8).material(color).move(-4.25 + i * 0.5, 1.2, 0.02).id)
+    for y, z in ((1.2, 0.02), (-1.2, -0.01)):
+        for i in range(18):
+            color = HOLD if i % 2 else TEXT
+            buoys.append(ui.scene.sphere(0.045, 12, 8).material(color).move(-4.25 + i * 0.5, y, z).id)
     ids['buoys'] = buoys
 
 

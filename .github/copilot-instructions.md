@@ -24,3 +24,15 @@ Keep the implementation in one `main.py` file until it works.
 - Prefer a visibly working prototype over architecture or polish.
 - Do not add unrequested pages, modules, services, tests, or features.
 - Run the application before claiming success.
+
+## Running the server (agents)
+
+`python main.py` never exits. Never run it in a sync or attached shell; that
+blocks the agent session waiting on a process that never finishes.
+
+- Use Git Bash for the venv (`source .venv/Scripts/activate`), not PowerShell.
+- Start the server **detached** (`mode: async`, `detach: true`), check it with
+  one HTTP request to `http://127.0.0.1:8080/`, then move on. Don't poll it.
+- Before restarting, stop the previous server process by its PID. Never kill
+  processes by name.
+- For quick checks without the server, run `python -m pytest -q`.
