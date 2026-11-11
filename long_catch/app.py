@@ -201,7 +201,7 @@ class LongCatchPage:
                     self.preset_badge = ui.label().classes('lc-badge')
                 with ui.element('div').classes('lc-presets'):
                     for number, name in enumerate(PRESETS, start=1):
-                        button = ui.button(name, on_click=lambda n=name: self.apply_preset(n))
+                        button = ui.button(name, on_click=lambda n=name: self.apply_preset(n), color=None)
                         button.props('flat no-caps').classes(f'lc-preset lc-preset-{number}')
                         button.tooltip(f'Shortcut: {number}')
                         self.preset_buttons[name] = button

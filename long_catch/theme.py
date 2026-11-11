@@ -12,10 +12,10 @@ STATIC_DIR = Path(__file__).parent / 'static'
 @dataclass(frozen=True, slots=True)
 class Palette:
     background: str = '#07131a'
-    panel: str = '#0e252c'
-    card: str = '#133139'
+    panel: str = '#0c1d25'
+    card: str = '#112831'
     text: str = '#e7f0ea'
-    muted: str = '#93aaa6'
+    muted: str = '#9bafb4'
     hold: str = '#3dbea5'
     slip: str = '#e36b4f'
     skin: str = '#d8bfa3'
