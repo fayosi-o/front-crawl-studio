@@ -1,119 +1,157 @@
-# Long Catch
+<h1 align="center">Long Catch</h1>
 
-Long Catch is a local, visual front-crawl explorer. Adjust the stroke, watch a
-3D swimmer move, and see how distance per stroke and time per 25 m respond.
+<p align="center">
+  <strong>An interactive 3D explorer for front-crawl stroke technique.</strong><br>
+  Shape the stroke, induce common faults, and see how each change affects the
+  swimmer and their distance per stroke.
+</p>
 
-## What you can explore
+<p align="center">
+  <img src="docs/screenshots/hero.png" alt="Long Catch showing a swimmer mid-pull with hand trails and the stroke controls panel" width="900">
+</p>
 
-- Four stroke presets, plus controls for stroke rate, catch quality, body roll,
-  slip, stroke depth, entry angle, drive balance, and kick amplitude.
-- Eight switchable stroke faults, individually or in combination, with
-  coaching cues: crossover, over-rotation, over-extension, flat hips, sinking
-  legs, snaking, knee kick, and spinning arms.
-- A 3D swimmer with a muscle-emphasis overlay and live distance per stroke,
-  strokes per 25 m, and time per 25 m.
-- An optional second camera (Top, Side, Front, or Below) and fading motion
-  trails for the hands, feet, or both.
+## Overview
 
-## Run locally
+Long Catch is a local web app built with Python and
+[NiceGUI](https://nicegui.io). A procedural swimmer animates a full stroke
+cycle in real time. Every control changes the motion, and the stroke metrics
+update as you go. It runs entirely on your machine. There are no accounts,
+external services or network assets.
 
-Requirements: Python 3.12.
+## Gallery
 
-### Linux
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/split-view.png" alt="Split view with an underwater camera and motion trails for hands and feet" width="300"><br>
+      <sub><b>Split view</b>: an underwater camera beside the orbit view, with motion trails for the hands and feet.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/stroke-faults.png" alt="Short slipping stroke with crossover, sinking legs and snaking faults enabled" width="300"><br>
+      <sub><b>Stroke faults</b>: crossover, sinking legs and snaking together, each with a coaching cue.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/high-elbow-catch.png" alt="Underwater close-up of a high-elbow catch" width="300"><br>
+      <sub><b>High-elbow catch</b>: the forearm sets as a vertical paddle early in the pull.</sub>
+    </td>
+  </tr>
+</table>
+
+## Features
+
+| Area | What it does |
+| --- | --- |
+| **Stroke controls** | Stroke rate, catch quality, body roll, slip, stroke depth, entry angle, drive balance and kick amplitude. |
+| **Presets** | Long power, Long light, Compact connected and Short slipping. Each one is a distinct starting point. |
+| **Stroke faults** | Crossover, over-rotation, over-extension, flat hips, sinking legs, snaking, knee kick and spinning arms. Combine them freely; each adds a short coaching cue. |
+| **Water feedback** | Hands and forearms turn teal when holding water and coral when slipping. Amber shows the selected muscle emphasis. |
+| **Cameras** | Orbit freely, or add a second Top, Side, Front or Below view in split view. |
+| **Motion trails** | Fading trails for the hands, feet or both, adjustable from 0.5 to 5 seconds. |
+| **Stroke metrics** | Distance per stroke, strokes per 25 m and time per 25 m, updated live. |
+| **Timeline** | Scrub or step through entry, catch, pull, finish and recovery, at ¼×, ½× or 1× speed. |
+
+## Quick start
+
+**Requirements:** Python 3.12.
 
 ```bash
+# Linux / macOS
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-python main.py
-```
 
-### Windows
-
-Use Git Bash or WSL:
-
-```bash
+# Windows (Git Bash)
 py -3.12 -m venv .venv
 source .venv/Scripts/activate
+
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080). Keep the terminal running
-while using the app; press Ctrl+C there to stop the server.
+Open <http://127.0.0.1:8080>. Leave the terminal running while you use the
+app, then press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server.
 
-## Using the app
+## Usage
 
-### Adjust the stroke
+### Shape the stroke
 
-- Select **Long power**, **Long light**, **Compact connected**, or
-  **Short slipping** to load a starting stroke shape. Editing a control marks
-  the settings as **Custom**.
-- Adjust stroke rate, catch quality, body roll, slip, and drive balance.
-  The stroke metrics update as you change them.
-- Set **Stroke depth** from a pull tucked close to the body to a deep pull
-  with a straighter arm. Set **Entry angle** from 0° (near the surface)
-  toward 40° (toward the pool floor). Change **Kick amplitude** from still
-  legs to a stronger flutter. These three controls change the animation only.
-- Enable one or more **Stroke faults** to see common form errors and their
-  coaching cues. **Clear** turns all faults off.
+1. Pick a **preset** to load a starting stroke. Editing any control after that
+   switches the label to **Custom**.
+2. Tune **stroke rate**, **catch quality**, **body roll**, **slip** and
+   **drive balance**. Each one changes the stroke metrics.
+3. Use **stroke depth** (close to the body or deep), **entry angle** (from
+   0° near the surface to 40° toward the pool floor) and **kick amplitude** to
+   change the shape of the motion.
+4. Turn on one or more **stroke faults** to see them on the swimmer.
+   **Clear** turns them all off.
+
+A complete arm cycle is two strokes, with each hand entry counting as one.
+Slip lowers the distance per stroke, and extra drive can't make up for a poor
+catch.
 
 ### Inspect the motion
 
-- Use the **View** card to enable split view and choose a second camera angle.
-  Choose **Hands**, **Feet**, or **Both** for a fading ghost trail; set its
-  length from 0.5 to 5 seconds.
-- Drag the timeline to scrub through the right arm's entry, catch, pull,
-  finish, and recovery. The cards above the swimmer show both arms' current
-  phases.
-- Use the transport dock to play or pause, step by ±5% of the cycle, change
-  playback speed, or reset the camera. Trails freeze while paused and clear
-  when stepping or scrubbing.
-- Drag the swimmer view to orbit and scroll to zoom. Teal hands and forearms
-  indicate holding water; coral indicates slipping. Amber patches show the
-  selected muscle emphasis.
+- Drag the scene to orbit and scroll to zoom.
+- Drag the timeline to scrub through the right arm's phases. The cards at the
+  top show the current phase of each arm.
+- In the **View** card, turn on split view, choose a second camera, and pick
+  a trail type and trail length.
+- Trails pause with the animation and clear when you step or scrub.
 
 ### Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
-| Space | Play or pause |
-| ← / → | Step through the stroke |
-| 1–4 | Select a preset |
-| C | Reset the camera |
-| V | Toggle split view |
+| <kbd>Space</kbd> | Play or pause |
+| <kbd>←</kbd> / <kbd>→</kbd> | Step through the stroke |
+| <kbd>1</kbd>–<kbd>4</kbd> | Select a preset |
+| <kbd>C</kbd> | Reset the camera |
+| <kbd>V</kbd> | Toggle split view |
 
-Shortcuts are ignored while a slider has focus.
+Shortcuts don't work while a slider has focus.
 
 ## Development
 
-Install the optional development tools and run the checks:
-
 ```bash
 python -m pip install -r requirements-dev.txt
-python -m pytest -q
-ruff check .
-ruff format --check .
+python -m pytest -q        # model tests
+ruff check .               # lint
+ruff format --check .      # formatting
 ```
 
-## Project structure
+### Architecture
+
+- **`long_catch/model.py`**: pure, UI-free stroke maths, including settings,
+  phase timing, faults and metrics. This is the part covered by the tests.
+- **`long_catch/app.py`**: the NiceGUI page. It owns the settings and sends
+  the render parameters to the browser.
+- **`long_catch/static/engine.js`**: the browser animation loop. It owns the
+  live phase, joint solving, cameras and trails.
+- **`long_catch/swimmer.py`**: builds the procedural swimmer and pool from
+  NiceGUI scene primitives.
+
+A new stroke fault needs three entries: `model.FAULTS` (label, cue and metric
+cost), `app.FAULT_ICONS`, and its visual in `engine.js`.
+
+### Project structure
 
 ```text
 .
 ├── long_catch/
 │   ├── app.py              # NiceGUI page and controls
 │   ├── engine.py           # Browser-engine setup
-│   ├── model.py            # Stroke settings, timing, and metrics
+│   ├── model.py            # Stroke settings, timing and metrics
 │   ├── swimmer.py          # Procedural swimmer and pool geometry
 │   ├── theme.py            # Palette and stylesheet loading
 │   └── static/
 │       ├── app.css         # Layout and component styles
-│       └── engine.js       # Animation, camera, trails, and joint solver
+│       └── engine.js       # Animation, camera, trails and joint solver
 ├── tests/
 │   └── test_model.py
+├── docs/
+│   └── screenshots/        # Images used in this README
 ├── main.py                 # Application entry point
 ├── AGENTS.md               # Rules and architecture notes for coding agents
-├── pyproject.toml          # Project metadata, pytest, and Ruff settings
+├── pyproject.toml          # Project metadata, pytest and Ruff settings
 ├── requirements.txt
 └── requirements-dev.txt
 ```
