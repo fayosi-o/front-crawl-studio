@@ -24,6 +24,8 @@ class Palette:
     suit: str = '#1f5563'
     patch: str = '#f2c14e'
     water: str = '#2a8fa8'
+    floor: str = '#123f4c'
+    lane_line: str = '#05171e'
     cap: str = '#2b4f86'
     lens: str = '#5d9cc9'
     rubber: str = '#141c21'

@@ -17,7 +17,14 @@ from long_catch.theme import PALETTE, STATIC_DIR
 def engine_script() -> str:
     """Inline <script>: engine configuration followed by the engine source."""
     config = {
-        'colors': {'hold': PALETTE.hold, 'slip': PALETTE.slip, 'skin': PALETTE.skin},
+        'colors': {
+            'hold': PALETTE.hold,
+            'slip': PALETTE.slip,
+            'skin': PALETTE.skin,
+            'water': PALETTE.water,
+            'floor': PALETTE.floor,
+            'laneLine': PALETTE.lane_line,
+        },
         'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
         'finish': FINISH_START,

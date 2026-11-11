@@ -11,7 +11,7 @@ window.LongCatch = window.LongCatch || (() => {
     sceneId: null, ids: null,   // scene element id and named object ids from Python
     params: null, faults: {},   // latest render params; active faults as {key: true}
     phase: 0,                   // right-arm cycle phase in [0, 1)
-    offset: 0,                  // distance swum, used to scroll the lane ropes
+    offset: 0,                  // distance swum, used to scroll the lane ropes and pool floor
     last: null,                 // previous frame timestamp (null after a pause or seek)
     m: null,                    // resolved meshes and per-arm IK scratch objects
     running: false,             // animation loop and listeners installed
@@ -258,6 +258,145 @@ window.LongCatch = window.LongCatch || (() => {
     S.trailReset = false;
   }
 
+  // ---- water ------------------------------------------------------------------
+
+  // Surface: a fine grid with a gentle travelling swell, a small bow wave at the head, and a soft sheen.
+  // Floor: tiles, a lane line, and two layers of drifting caustics, well below the swimmer.
+  // Every layer fades out at its edges so the pool has no hard slab outline.
+  const SURFACE = { w: 10, h: 4, nx: 120, ny: 48, x: -0.5 };
+  const FLOOR_Z = -2.1;
+
+  function canvasTexture(size, draw, repeat) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    draw(canvas.getContext('2d'), size);
+    const tex = new THREE.CanvasTexture(canvas);
+    if (repeat) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(...repeat); }
+    return tex;
+  }
+
+  // White in the middle, fading to black at every edge (used as an alpha map).
+  function drawEdgeFade(g, n) {
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, n, n);
+    g.globalCompositeOperation = 'multiply';
+    for (const [x1, y1] of [[n, 0], [0, n]]) {
+      const grad = g.createLinearGradient(0, 0, x1, y1);
+      grad.addColorStop(0, '#000');
+      grad.addColorStop(0.22, '#fff');
+      grad.addColorStop(0.78, '#fff');
+      grad.addColorStop(1, '#000');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, n, n);
+    }
+  }
+
+  // One metre of floor: 4 × 4 tiles with slight shade variation and pale grout.
+  function drawTiles(g, n) {
+    const base = rgb(CONFIG.colors.floor).map(v => v * 255), tile = n / 4;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        const k = 0.94 + 0.12 * (((i * 7 + j * 13) % 5) / 4);
+        g.fillStyle = `rgb(${base.map(v => Math.round(v * k)).join(',')})`;
+        g.fillRect(i * tile, j * tile, tile, tile);
+      }
+    }
+    g.strokeStyle = 'rgba(160, 215, 225, 0.12)';
+    g.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) {
+      g.beginPath(); g.moveTo(i * tile, 0); g.lineTo(i * tile, n); g.stroke();
+      g.beginPath(); g.moveTo(0, i * tile); g.lineTo(n, i * tile); g.stroke();
+    }
+  }
+
+  // Tileable caustic web: bright where two cellular-noise cells meet (Worley F2 − F1 near zero).
+  function drawCaustics(g, n) {
+    const seeds = Array.from({ length: 14 }, (_, i) => [((i * 0.618) % 1) * n, ((i * 0.377 + 0.13 * (i % 3)) % 1) * n]);
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        let f1 = Infinity, f2 = Infinity;
+        for (const [sx, sy] of seeds) {
+          const dx = Math.min(Math.abs(x - sx), n - Math.abs(x - sx)), dy = Math.min(Math.abs(y - sy), n - Math.abs(y - sy));
+          const d = Math.hypot(dx, dy);
+          if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+        }
+        const v = Math.max(0, 1 - (f2 - f1) / (0.07 * n)) ** 2.2, o = 4 * (y * n + x);
+        img.data[o] = img.data[o + 1] = img.data[o + 2] = 255 * v;
+        img.data[o + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+
+  // Build the surface waves and the pool floor once per scene; returns false until THREE has loaded.
+  function setupWater(m) {
+    if (m.pool) return true;
+    if (!THREE) return false;
+    const scene = S.el.scene, edge = canvasTexture(128, drawEdgeFade);
+    const old = scene.getObjectByName('lc-pool');
+    if (old) scene.remove(old);
+
+    m.water.geometry.dispose();
+    m.water.geometry = new THREE.PlaneGeometry(SURFACE.w, SURFACE.h, SURFACE.nx, SURFACE.ny);
+    m.water.material = new THREE.MeshPhongMaterial({
+      color: CONFIG.colors.water, specular: 0x6fa9b8, shininess: 90, transparent: true, opacity: 0.17,
+      side: THREE.DoubleSide, depthWrite: false, alphaMap: edge,
+    });
+    m.water.renderOrder = 2;
+
+    const pool = new THREE.Group();
+    pool.name = 'lc-pool';
+    const layer = (w, h, z, material, order) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+      mesh.position.set(SURFACE.x, 0, z);
+      mesh.renderOrder = order;
+      pool.add(mesh);
+      return mesh;
+    };
+    const flat = { transparent: true, depthWrite: false, alphaMap: edge };
+    const tiles = canvasTexture(256, drawTiles, [SURFACE.w, SURFACE.h]);
+    layer(SURFACE.w, SURFACE.h, FLOOR_Z, new THREE.MeshBasicMaterial({ ...flat, map: tiles }), -3);
+    layer(SURFACE.w, 0.24, FLOOR_Z + 0.004, new THREE.MeshBasicMaterial({ ...flat, color: CONFIG.colors.laneLine }), -2);
+    const glow = canvasTexture(128, drawCaustics);
+    const caustics = [[4, 1.6, 0.07], [6.5, 2.6, 0.05]].map(([rx, ry, opacity], i) => {
+      const map = glow.clone();
+      map.wrapS = map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(rx, ry);
+      map.needsUpdate = true;
+      layer(SURFACE.w, SURFACE.h, FLOOR_Z + 0.008 + 0.002 * i, new THREE.MeshBasicMaterial({
+        ...flat, map, opacity, color: 0xbff6ff, blending: THREE.AdditiveBlending,
+      }), -1);
+      return map;
+    });
+    scene.add(pool);
+    m.pool = { tiles, caustics, time: 0 };
+    return true;
+  }
+
+  // Move the swell and bow wave, and scroll the floor back at swim speed (so the pool slides past).
+  function updateWater(m, P, dt) {
+    if (!setupWater(m)) return;
+    const pool = m.pool, t = (pool.time += dt), off = S.offset;
+    const pos = m.water.geometry.attributes.position, a = pos.array;
+    for (let i = 0; i < pos.count; i++) {
+      const x = a[3 * i] + SURFACE.x + off, y = a[3 * i + 1], lx = a[3 * i] + SURFACE.x;
+      const swell = 0.009 * Math.sin(2.1 * x + 1.3 * y + 1.7 * t) + 0.006 * Math.sin(3.4 * x - 2.2 * y + 2.6 * t)
+        + 0.003 * Math.sin(7.9 * x + 5.1 * y + 4.1 * t);
+      // Bow wave lifts the water at the head; a shallow trough follows at the shoulders.
+      const bow = 0.018 * Math.exp(-((lx - 0.62) ** 2) / 0.02 - y * y / 0.03)
+        - 0.012 * Math.exp(-((lx - 0.3) ** 2) / 0.03 - y * y / 0.09);
+      a[3 * i + 2] = swell + bow * Math.min(1, P.speed);
+    }
+    pos.needsUpdate = true;
+    m.water.geometry.computeVertexNormals();
+    pool.tiles.offset.x = wrap(off);
+    pool.caustics.forEach((map, i) => {
+      const r = map.repeat.x / SURFACE.w, s = i ? -1 : 1;
+      map.offset.set(wrap(off * r + 0.02 * s * t), wrap(0.015 * t * s));
+    });
+  }
+
   // ---- split view -------------------------------------------------------------
 
   // Extra scene views share the scene; the engine aims their camera from a preset angle and keeps it fitted.
@@ -453,6 +592,7 @@ window.LongCatch = window.LongCatch || (() => {
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F);
     updateTrails(m, P, scaled);
+    updateWater(m, P, scaled);
     fitView();
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;

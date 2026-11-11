@@ -125,7 +125,7 @@ class SwimmerBuilder:
         return self._register(name, obj.material(self.colors.patch, 0.0))
 
     def _water(self) -> None:
-        """Translucent, double-sided surface plane at z = 0."""
+        """Double-sided surface plane at z = 0; the engine adds waves and the pool floor."""
         self._register('water', ui.scene.plane(10, 4).material(self.colors.water, 0.16, 'both').move(-0.5, 0, 0.0))
 
     def _torso(self) -> None:
