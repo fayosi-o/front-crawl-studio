@@ -69,18 +69,21 @@ window.LongCatch = window.LongCatch || (() => {
     const tilt = deg => [0.56 * Math.cos(deg * D), -0.56 * Math.sin(deg * D)];
     const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
     const x = keyed(p, [
-      [0, enterX + 0.08 * over], [0.12, glideX - 0.01 + 0.08 * over], [0.30, lerp(0.10, 0.30, c) - 0.12 * s + 0.10 * over],
+      [0, enterX + 0.08 * over], [0.12, glideX - 0.01 + 0.08 * over], [0.21, lerp(0.30, 0.40, c) + 0.08 * over],
+      [0.30, lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over],
       [0.50, -0.04 - 0.08 * s], [fin, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
       [midRec, -0.10], [lateRec, 0.22], [1, enterX + 0.08 * over],
     ]);
     // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
     const out = keyed(p, [
-      [0, 0.025], [0.12, 0.035], [0.30, 0.07 + 0.08 * (1 - c)], [0.50, 0.10],
+      [0, 0.025], [0.12, 0.035], [0.21, 0.06], [0.30, 0.12 + 0.04 * (1 - c)], [0.50, 0.12],
       [fin, 0.08], [exit, 0.10], [midRec, 0.30], [lateRec, 0.22], [1, 0.025],
     ]) - cross * keyed(p, [[0, 0.33], [0.12, 0.31], [0.30, 0.15], [0.50, 0.02], [exit, 0], [lateRec, 0.08], [1, 0.33]]);
-    // Mid-pull hand sits about a forearm below the shoulder, so the elbow stays bent near 90-110 deg.
+    // Distance-style catch: the hand tips down in front while the elbow stays high, then hangs
+    // under the elbow so the forearm and hand form one near-vertical paddle facing backwards.
     const height = keyed(p, [
-      [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.30, lerp(-0.26, -0.32, c) - 0.05 * d],
+      [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.21, lerp(-0.16, -0.22, c) + 0.03 * over],
+      [0.30, lerp(-0.26, -0.40, c) - 0.05 * d],
       [0.50, -0.37 - 0.09 * d], [fin, -0.26 - 0.05 * d], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12],
       [1, enterH + 0.03 * over],
     ]);
@@ -96,10 +99,12 @@ window.LongCatch = window.LongCatch || (() => {
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
     const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
     const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < fin ? 2 : p < exit ? 3 : 4;
-    // The elbow guide dips through the catch so the elbow sits a little lower than in the glide.
-    const pole = lerp(-0.35, 1, c) - 0.35 * bump(p, 0.06, 0.46);
+    // Through the catch the upper arm rotates inward: the elbow guide swings forward and out
+    // (dipping slightly from straight up), so a good catch keeps the elbow ahead of the hand.
+    const catching = bump(p, 0.14, 0.46);
+    const pole = lerp(-0.35, 1, c) - 0.25 * catching;
     return {
-      x, out, height, elbow, recovery, pole, shrug: front,
+      x, out, height, elbow, recovery, pole, lead: 0.7 * c * catching, shrug: front,
       wrist: wrist * D, under, stage,
       back: bump(p, 0.10, fin + 0.02), triceps: bump(p, fin - 0.12, exit + 0.04),
     };
@@ -321,7 +326,7 @@ window.LongCatch = window.LongCatch || (() => {
     r.axis.copy(r.target).normalize();
     r.target.copy(r.axis).multiplyScalar(reach);
     // Keep the elbow guide world-up when the chest rolls underneath the arm.
-    r.pole.set(lerp(-0.15, 0.35, P.catch), lateral * cos + a.pole * sin, -lateral * sin + a.pole * cos);
+    r.pole.set(lerp(-0.15, 0.35, P.catch) + a.lead, lateral * cos + a.pole * sin, -lateral * sin + a.pole * cos);
     r.pole.addScaledVector(r.axis, -r.pole.dot(r.axis)).normalize();
     if (a.recovery > 0) {
       const [ex, eo, eh] = a.elbow;
