@@ -8,17 +8,18 @@ The current objective is the 30–60 minute visual prototype described in
 Use `.github/prompts/build-prototype.prompt.md` for the initial build.
 
 The prototype must remain in one `main.py` file until the manual acceptance
-checklist passes.
+checklist passes. (It has passed; see Deferred work.)
 
 ## Deferred work
 
-`.github/prompts/future-production-refactor.prompt.md` is not part of the
-initial build. Do not use it unless explicitly requested after the visual
-prototype works.
+The visual prototype passed its checklist, and the Stage 1 refactor in
+`.github/prompts/future-production-refactor.prompt.md` has been done at the
+user's request: `long_catch/model.py` (typed settings, phases, timing,
+estimates), `tests/test_model.py`, and Ruff config in `pyproject.toml`.
+`main.py` imports the model; keep pure maths there and keep it UI-free.
 
-Do not introduce typed domain modules, a package hierarchy, Ruff, pytest,
-browser-runtime files, persistence, multiple pages, or production architecture
-during the prototype build.
+Still deferred: browser-runtime files, persistence, multiple pages, and any
+further production architecture.
 
 ## Hard rules
 

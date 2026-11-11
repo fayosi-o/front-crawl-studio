@@ -6,8 +6,21 @@ All numbers and muscle colours are coaching estimates, not measured data.
 
 import json
 import math
+from dataclasses import replace
 
 from nicegui import ui
+
+from long_catch.model import (
+    EMPHASES,
+    PHASE_LABELS,
+    PRESETS,
+    SETTING_RANGES,
+    ViewState,
+    clamp,  # noqa: F401  (build-prompt hook)
+    cycle_duration,  # noqa: F401  (build-prompt hook)
+    estimate_metrics,  # noqa: F401  (build-prompt hook)
+    format_duration,
+)
 
 BG = '#08141a'
 PANEL = '#123038'
@@ -20,66 +33,9 @@ SUIT = '#1f5563'
 PATCH = '#f2c14e'
 WATER = '#2a8fa8'
 
-PRESETS = {
-    'Long power': {'catch': 92, 'roll': 46, 'rate': 38, 'slip': 8, 'drive': 85},
-    'Long light': {'catch': 88, 'roll': 44, 'rate': 40, 'slip': 10, 'drive': 70},
-    'Compact connected': {'catch': 82, 'roll': 42, 'rate': 48, 'slip': 14, 'drive': 68},
-    'Short slipping': {'catch': 42, 'roll': 34, 'rate': 54, 'slip': 62, 'drive': 35},
-}
-
-
-def clamp(value: float, minimum: float, maximum: float) -> float:
-    return max(minimum, min(value, maximum))
-
-
-def cycle_duration(stroke_rate: float) -> float:
-    """Seconds for one right-and-left cycle; every hand entry is one stroke."""
-    return 120.0 / stroke_rate
-
-
-def arm_phases(phase: float) -> tuple[float, float]:
-    return phase % 1.0, (phase + 0.5) % 1.0
-
-
-def estimate_metrics(
-    catch_quality: float,
-    slip: float,
-    drive_balance: float,
-    stroke_rate: float,
-) -> dict[str, float]:
-    hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
-    connection = 0.7 + 0.3 * drive_balance
-    rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
-    distance_per_stroke = clamp(
-        0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty,
-        0.45,
-        1.40,
-    )
-    strokes_per_25 = 25.0 / distance_per_stroke
-    seconds_per_25 = strokes_per_25 * 60.0 / stroke_rate
-    return {
-        'hold_quality': hold_quality,
-        'distance_per_stroke': distance_per_stroke,
-        'strokes_per_25': strokes_per_25,
-        'seconds_per_25': seconds_per_25,
-    }
-
-
-def format_duration(seconds: float) -> str:
-    return f'{seconds:.1f} s'
-
-
-def path_length(stroke_rate: float) -> float:
-    """1.0 = long underwater path (low rate), 0.0 = compact path (high rate)."""
-    return clamp((60.0 - stroke_rate) / 22.0, 0.0, 1.0)
-
-
-def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
-    return 0.15 + 0.85 * (hold_quality * drive_balance) ** 1.5
-
-
 # Browser-side pose loop. Python owns settings; the browser only animates.
-ENGINE_JS = r'''
+ENGINE_JS = (
+    r"""
 window.LongCatch = window.LongCatch || (() => {
   const S = { sceneId: null, ids: null, params: null, phase: 0, offset: 0, last: null, m: null, running: false };
   const D = Math.PI / 180;
@@ -92,7 +48,7 @@ window.LongCatch = window.LongCatch || (() => {
   const EMPHASIS = {
     back: [1, 0, 0], triceps: [0, 1, 0], core: [0, 0, 1], balanced: [0.55, 0.55, 0.55],
   };
-  const PHASES = ['Entry & reach', 'Catch', 'Pull', 'Finish', 'Recovery'];
+  const PHASES = __PHASES__;
 
   function keyed(p, keys) {
     for (let i = 0; i < keys.length - 1; i++) {
@@ -104,7 +60,7 @@ window.LongCatch = window.LongCatch || (() => {
 
   function arm(p, P) {
     const c = P.catch, s = P.slip, L = P.length;
-    const exit = lerp(0.68, 0.76, L);
+    const exit = P.exit;
     const midRec = exit + (1 - exit) * 0.5;
     // Shoulder pitch: 0 = reaching forward, 90 = straight down, 180 = along the body.
     const pitch = keyed(p, [
@@ -229,8 +185,11 @@ window.LongCatch = window.LongCatch || (() => {
       b.position.x = ((((m.basePos[i] - S.offset + 4.5) % span) + span) % span) - 4.5;
     });
 
-    const label = document.querySelector('.lc-root .lc-phase');
-    if (label) label.textContent = 'Right arm: ' + PHASES[right.stage] + '  ·  Left arm: ' + PHASES[left.stage];
+    const text = 'Right arm: ' + PHASES[right.stage] + '  ·  Left arm: ' + PHASES[left.stage];
+    if (text !== S.labelText) {
+      if (!S.label || !S.label.isConnected) S.label = document.querySelector('.lc-root .lc-phase');
+      if (S.label) { S.label.textContent = text; S.labelText = text; }
+    }
   }
 
   return {
@@ -245,9 +204,13 @@ window.LongCatch = window.LongCatch || (() => {
     set(params) { S.params = Object.assign({}, S.params, params); },
   };
 })();
-'''.replace('__HOLD__', HOLD).replace('__SLIP__', SLIP).replace('__SKIN__', SKIN)
+""".replace('__HOLD__', HOLD)
+    .replace('__SLIP__', SLIP)
+    .replace('__SKIN__', SKIN)
+    .replace('__PHASES__', json.dumps(list(PHASE_LABELS.values())))
+)
 
-LAYOUT_CSS = '''
+LAYOUT_CSS = """
 .nicegui-content { padding: 0 !important; }
 .lc-root { display: flex; width: 100%; height: 100vh; }
 .lc-stage { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
@@ -257,7 +220,7 @@ LAYOUT_CSS = '''
   .lc-stage { flex: none; height: 62vh; }
   .lc-panel { flex: none; width: 100%; height: auto; }
 }
-'''
+"""
 
 
 def capsule_x(radius: float, length: float, color: str, start: float = 0.0, direction: int = 1):
@@ -294,8 +257,10 @@ def build_swimmer(ids: dict) -> None:
             for side, y in (('R', -0.235), ('L', 0.235)):
                 with reg('sh' + side, ui.scene.group().move(0.27, y, 0)):
                     capsule_x(0.056, 0.26, SKIN)
-                    reg('tri' + side, patch(ui.scene.capsule(0.042, 0.16, 6, 12))
-                        .rotate(0, 0, -math.pi / 2).move(0.13, 0, -0.03))
+                    reg(
+                        'tri' + side,
+                        patch(ui.scene.capsule(0.042, 0.16, 6, 12)).rotate(0, 0, -math.pi / 2).move(0.13, 0, -0.03),
+                    )
                     with reg('el' + side, ui.scene.group().move(0.28, 0, 0)):
                         reg('fa' + side, capsule_x(0.045, 0.24, SKIN))
                         with reg('wr' + side, ui.scene.group().move(0.27, 0, 0)):
@@ -303,8 +268,13 @@ def build_swimmer(ids: dict) -> None:
 
         with reg('pelvis', ui.scene.group().move(-0.36, 0, 0)):
             ui.scene.cylinder(0.135, 0.15, 0.22, 24).material(SUIT).rotate(0, 0, -math.pi / 2).scale(1.3, 1, 0.8)
-            reg('core', patch(ui.scene.cylinder(0.15, 0.15, 0.1, 24))
-                .rotate(0, 0, -math.pi / 2).scale(1.3, 1, 0.9).move(0.13, 0, 0))
+            reg(
+                'core',
+                patch(ui.scene.cylinder(0.15, 0.15, 0.1, 24))
+                .rotate(0, 0, -math.pi / 2)
+                .scale(1.3, 1, 0.9)
+                .move(0.13, 0, 0),
+            )
             reg('hipR', patch(ui.scene.sphere(0.075, 16, 10)).scale(1.3, 0.6, 1).move(-0.02, -0.16, 0.02))
             reg('hipL', patch(ui.scene.sphere(0.075, 16, 10)).scale(1.3, 0.6, 1).move(-0.02, 0.16, 0.02))
             for side, y in (('R', -0.085), ('L', 0.085)):
@@ -329,63 +299,76 @@ async def index() -> None:
     ui.add_body_html(f'<script>{ENGINE_JS}</script>')
     ui.add_head_html(f'<style>{LAYOUT_CSS}</style>')
 
-    state = {'rate': 38, 'catch': 92, 'roll': 46, 'slip': 8, 'drive': 85, 'emphasis': 'back', 'playing': True}
+    view = ViewState()
     ids: dict = {}
     sliders: dict = {}
     values: dict = {}
     stats: dict = {}
-
-    def params() -> dict:
-        c, s, d, r = state['catch'] / 100, state['slip'] / 100, state['drive'] / 100, state['rate']
-        m = estimate_metrics(c, s, d, r)
-        return {
-            'rate': r, 'catch': c, 'slip': s, 'drive': d, 'roll': state['roll'],
-            'emphasis': state['emphasis'], 'playing': state['playing'],
-            'length': path_length(r), 'intensity': highlight_intensity(m['hold_quality'], d),
-            'speed': m['distance_per_stroke'] * r / 60.0,
-        }
+    applying_preset = False
 
     def refresh() -> None:
-        m = estimate_metrics(state['catch'] / 100, state['slip'] / 100, state['drive'] / 100, state['rate'])
+        m = view.settings.metrics()
         holding = m['hold_quality'] >= 0.7
-        stats['rate'].text = f"{state['rate']:.0f} spm"
-        stats['dps'].text = f"{m['distance_per_stroke']:.2f} m"
-        stats['dps'].style(f'color:{HOLD if holding else SLIP}')
-        stats['spl'].text = f"{m['strokes_per_25']:.1f}"
+        color = f'color:{HOLD if holding else SLIP}'
+        stats['rate'].text = f'{view.settings.rate} spm'
+        stats['dps'].text = f'{m["distance_per_stroke"]:.2f} m'
+        stats['dps'].style(color)
+        stats['spl'].text = f'{m["strokes_per_25"]:.1f}'
         stats['t25'].text = format_duration(m['seconds_per_25'])
         stats['hold'].text = 'Hand holding water' if holding else 'Hand slipping'
-        stats['hold'].style(f'color:{HOLD if holding else SLIP}')
-        ui.run_javascript(f'window.LongCatch && window.LongCatch.set({json.dumps(params())})')
+        stats['hold'].style(color)
+        ui.run_javascript(f'window.LongCatch && window.LongCatch.set({json.dumps(view.render_params(m))})')
+
+    def update(**changes) -> None:
+        nonlocal view
+        new = replace(view, **changes)
+        if new != view:
+            view = new
+            refresh()
 
     def on_slider(key: str, value: float) -> None:
-        state[key] = value
         values[key].text = f'{value:.0f}{UNITS[key]}'
-        refresh()
+        if not applying_preset:
+            update(settings=view.settings.with_values(**{key: int(value)}))
 
     def apply_preset(name: str) -> None:
-        for key, value in PRESETS[name].items():
-            sliders[key].value = value  # each change runs on_slider
-        refresh()
+        nonlocal applying_preset
+        preset = PRESETS[name]
+        applying_preset = True
+        try:
+            for key in SETTING_RANGES:
+                sliders[key].value = getattr(preset, key)
+        finally:
+            applying_preset = False
+        update(settings=preset)
 
     def toggle_play() -> None:
-        state['playing'] = not state['playing']
-        play_btn.text = 'Pause' if state['playing'] else 'Play'
-        play_btn.props(f"icon={'pause' if state['playing'] else 'play_arrow'}")
-        refresh()
+        playing = not view.playing
+        play_btn.text = 'Pause' if playing else 'Play'
+        play_btn.props(f'icon={"pause" if playing else "play_arrow"}')
+        update(playing=playing)
 
     UNITS = {'rate': ' spm', 'catch': '%', 'roll': '°', 'slip': '%', 'drive': '%'}
-    CONTROLS = [
-        ('rate', 'Stroke rate', 32, 72),
-        ('catch', 'Catch quality', 0, 100),
-        ('roll', 'Body roll', 20, 62),
-        ('slip', 'Slip', 0, 100),
-        ('drive', 'Drive balance', 0, 100),
-    ]
+    LABELS = {
+        'rate': 'Stroke rate',
+        'catch': 'Catch quality',
+        'roll': 'Body roll',
+        'slip': 'Slip',
+        'drive': 'Drive balance',
+    }
+    EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
+    assert set(EMPHASIS_LABELS) == set(EMPHASES)
 
     with ui.element('div').classes('lc-root'):
         with ui.element('div').classes('lc-stage'):
-            scene = ui.scene(width=900, height=700, grid=False, background_color=BG, fps=60,
-                             camera=ui.scene.perspective_camera(fov=42))
+            scene = ui.scene(
+                width=900,
+                height=700,
+                grid=False,
+                background_color=BG,
+                fps=60,
+                camera=ui.scene.perspective_camera(fov=42),
+            )
             with scene:
                 build_swimmer(ids)
             scene.move_camera(0.6, -2.3, 0.3, -0.1, 0, -0.22, duration=0)
@@ -393,7 +376,9 @@ async def index() -> None:
                 ui.label('Long Catch').classes('text-2xl font-bold')
                 ui.label('Estimated contribution for this modelled stroke').style(f'color:{PATCH}')
                 ui.label('').classes('lc-phase text-sm').style(f'color:{MUTED}')
-            with ui.row().classes('absolute bottom-4 left-5 gap-4 text-xs').style(f'color:{MUTED}; pointer-events:none'):
+            with (
+                ui.row().classes('absolute bottom-4 left-5 gap-4 text-xs').style(f'color:{MUTED}; pointer-events:none')
+            ):
                 ui.label('● holding').style(f'color:{HOLD}')
                 ui.label('● slipping').style(f'color:{SLIP}')
                 ui.label('● estimated muscle emphasis').style(f'color:{PATCH}')
@@ -405,36 +390,45 @@ async def index() -> None:
             ui.label('Presets').classes('text-xs uppercase tracking-wider').style(f'color:{MUTED}')
             with ui.grid(columns=2).classes('w-full gap-2'):
                 for name in PRESETS:
-                    ui.button(name, on_click=lambda n=name: apply_preset(n)).props('outline no-caps dense').classes('w-full')
+                    ui.button(name, on_click=lambda n=name: apply_preset(n)).props('outline no-caps dense').classes(
+                        'w-full'
+                    )
 
-            for key, label, lo, hi in CONTROLS:
+            for key, (lo, hi) in SETTING_RANGES.items():
+                value = getattr(view.settings, key)
                 with ui.row().classes('w-full justify-between items-end -mb-2'):
-                    ui.label(label).classes('text-sm')
-                    values[key] = ui.label(f'{state[key]:.0f}{UNITS[key]}').classes('text-sm').style(f'color:{MUTED}')
-                sliders[key] = ui.slider(min=lo, max=hi, step=1, value=state[key],
-                                         on_change=lambda e, k=key: on_slider(k, e.value))
+                    ui.label(LABELS[key]).classes('text-sm')
+                    values[key] = ui.label(f'{value}{UNITS[key]}').classes('text-sm').style(f'color:{MUTED}')
+                sliders[key] = ui.slider(
+                    min=lo, max=hi, step=1, value=value, on_change=lambda e, k=key: on_slider(k, e.value)
+                )
             with ui.row().classes('w-full justify-between text-xs -mt-3').style(f'color:{MUTED}'):
                 ui.label('arm-driven')
                 ui.label('hip-connected')
 
             ui.label('Muscle emphasis').classes('text-xs uppercase tracking-wider').style(f'color:{MUTED}')
-            ui.toggle({'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'},
-                      value=state['emphasis'],
-                      on_change=lambda e: (state.update(emphasis=e.value), refresh())).props('dense no-caps spread').classes('w-full')
+            ui.toggle(EMPHASIS_LABELS, value=view.emphasis, on_change=lambda e: update(emphasis=e.value)).props(
+                'dense no-caps spread'
+            ).classes('w-full')
 
             ui.label('Estimates').classes('text-xs uppercase tracking-wider').style(f'color:{MUTED}')
             with ui.grid(columns=2).classes('w-full gap-3'):
-                for key, caption in (('rate', 'Stroke rate'), ('dps', 'Distance / stroke (est.)'),
-                                     ('spl', 'Strokes / 25 m (est.)'), ('t25', 'Time / 25 m (est.)')):
+                for key, caption in (
+                    ('rate', 'Stroke rate'),
+                    ('dps', 'Distance / stroke (est.)'),
+                    ('spl', 'Strokes / 25 m (est.)'),
+                    ('t25', 'Time / 25 m (est.)'),
+                ):
                     with ui.column().classes('gap-0'):
                         stats[key] = ui.label().classes('text-xl font-bold')
                         ui.label(caption).classes('text-xs').style(f'color:{MUTED}')
             stats['hold'] = ui.label().classes('text-sm font-medium')
             ui.label('Coaching estimates only — not measured, EMG, or medical data.').classes('text-xs').style(
-                f'color:{MUTED}')
+                f'color:{MUTED}'
+            )
 
     await ui.context.client.connected()
-    ui.run_javascript(f'window.LongCatch.start({scene.id}, {json.dumps(ids)}, {json.dumps(params())})')
+    ui.run_javascript(f'window.LongCatch.start({scene.id}, {json.dumps(ids)}, {json.dumps(view.render_params())})')
     refresh()
 
 

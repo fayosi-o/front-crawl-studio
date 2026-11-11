@@ -1,0 +1,21 @@
+[project]
+name = "long-catch"
+version = "0.2.0"
+description = "Silent local visual prototype of front-crawl stroke shape."
+requires-python = ">=3.12"
+dependencies = ["nicegui"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "single"

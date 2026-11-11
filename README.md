@@ -2,8 +2,9 @@
 
 Long Catch is a rapid local prototype for visualising front-crawl stroke shape.
 
-> **Status:** working rapid prototype in `main.py`. See
-> [BUILD_SPEC.md](BUILD_SPEC.md) and [AGENTS.md](AGENTS.md).
+> **Status:** working prototype. The NiceGUI app and the browser animation live
+> in `main.py`; the typed, tested stroke model lives in `long_catch/model.py`
+> (Stage 1 refactor done). See [BUILD_SPEC.md](BUILD_SPEC.md) and [AGENTS.md](AGENTS.md).
 
 It demonstrates:
 
@@ -29,14 +30,21 @@ The application is completely silent and does not use microphone or audio APIs.
 ├── .github/
 │   ├── copilot-instructions.md               # Always-on Copilot rules
 │   └── prompts/
-│       ├── build-prototype.prompt.md         # Current build: /build-prototype
-│       └── future-production-refactor.prompt.md  # Deferred; do not run yet
+│       ├── build-prototype.prompt.md         # Initial build (done)
+│       └── future-production-refactor.prompt.md  # Stage 1 refactor (done)
+├── long_catch/
+│   ├── __init__.py
+│   └── model.py                              # Typed settings, phases, timing, estimates
+├── tests/
+│   └── test_model.py                         # pytest unit tests for the model
 ├── AGENTS.md                                 # Current objective and hard rules
 ├── BUILD_SPEC.md                             # Source-of-truth specification
 ├── README.md
+├── pyproject.toml                            # pytest and Ruff configuration
 ├── requirements.txt
+├── requirements-dev.txt                      # + pytest, ruff
 ├── .gitignore
-└── main.py                                   # The whole prototype
+└── main.py                                   # NiceGUI page, 3D swimmer, browser animation loop
 ```
 
 ## Requirements
@@ -77,6 +85,14 @@ python main.py
 - **Amber patches** show the estimated muscle emphasis (Back, Triceps,
   Hips/core, or Balanced).
 - Drag to orbit and scroll to zoom. Use Pause to freeze the stroke at any phase.
+
+## Development
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+ruff check . && ruff format --check .
+```
 
 Open:
 
