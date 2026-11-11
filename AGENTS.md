@@ -68,3 +68,17 @@ that blocks the agent session.
 - The page inlines `app.css` and `engine.js` at startup, so restart the server
   after editing either file.
 - Verify UI changes in the browser before claiming success.
+
+## Browser automation
+
+On Windows, `playwright-cli` resolves to a `.ps1` script that PowerShell's
+execution policy blocks. Never call it from PowerShell. Run it through Git
+Bash or WSL so the `sh` shim is used instead:
+
+```bash
+bash -lc "playwright-cli open http://127.0.0.1:8080/"
+```
+
+If `node` itself is blocked in the agent shell, use the shared VS Code browser
+(`runPlaywrightCode`) instead. For screenshots at a fixed size, open a new page
+with `page.context().newPage()` and call `setViewportSize` on it.
