@@ -77,6 +77,8 @@ FAULT_ICONS = {
     'crossover': 'compare_arrows',
     'overrotation': 'rotate_right',
     'overreach': 'front_hand',
+    'flathips': 'horizontal_rule',
+    'sinking': 'trending_down',
     'snaking': 'gesture',
     'kneekick': 'directions_bike',
     'rushing': 'fast_forward',

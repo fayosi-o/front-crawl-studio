@@ -158,13 +158,15 @@ window.LongCatch = window.LongCatch || (() => {
   }
 
   // Fixed-length two-bone inverse kinematics for one arm in the rolled chest frame.
-  function poseArm(m, side, a, P, slipness, bodyRoll) {
+  function poseArm(m, side, a, P, slipness, bodyRoll, pitch = 0) {
     const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
     const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll), lateral = sgn * 0.8;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
     sh.position.x = r.baseX + 0.04 * a.shrug;
-    // Convert a shoulder-relative point with a world height into the rolled chest frame.
-    const chestZ = (height, out) => (height + 0.06 - sin * (sh.position.y + sgn * out)) / cos;
-    r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out));
+    // Convert a shoulder-relative point with a world height into the rolled (then pitched) chest frame.
+    const chestZ = (height, out, x) =>
+      ((height + 0.06 + (sh.position.x + x) * sp) / cp - sin * (sh.position.y + sgn * out)) / cos;
+    r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out, a.x));
     const reach = softReach(r.target.length());
     r.axis.copy(r.target).normalize();
     r.target.copy(r.axis).multiplyScalar(reach);
@@ -173,7 +175,7 @@ window.LongCatch = window.LongCatch || (() => {
     r.pole.addScaledVector(r.axis, -r.pole.dot(r.axis)).normalize();
     if (a.recovery > 0) {
       const [ex, eo, eh] = a.elbow;
-      r.hint.set(ex, sgn * eo, chestZ(eh, eo));
+      r.hint.set(ex, sgn * eo, chestZ(eh, eo, ex));
       r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis));
       // A guide lying on the shoulder-wrist line has no direction; keep the world-up guide then.
       const weight = a.recovery * smooth(clamp(r.hint.length() / 0.08, 0, 1));
@@ -267,26 +269,32 @@ window.LongCatch = window.LongCatch || (() => {
       S.offset += P.speed * scaled;
     }
     // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
+    // Flat hips moves the rotation into the shoulders; sinking legs pitches the chest up and the pelvis down.
     const F = S.faults, w = 2 * Math.PI;
-    const roll = (F.overrotation ? Math.min(80, P.roll * 1.65) : P.roll) * D;
+    const chestGain = F.overrotation ? 1.65 : F.flathips ? 1.25 : 1;
+    const roll = Math.min(80, P.roll * chestGain) * D;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
-    const hipShare = F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
+    const hipShare = F.flathips ? 0.06 : F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
     const bodyRoll = roll * Math.cos(w * (S.phase - ROLL_PEAK));
+    const pitch = F.sinking ? -14 * D : 0, legPitch = F.sinking ? -24 * D : 0;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = F.snaking ? 7 * D * Math.sin(w * (S.phase - ROLL_PEAK)) : 0;
-    m.chest.rotation.set(bodyRoll, 0, yaw);
-    m.pelvis.rotation.set(roll * hipShare * Math.cos(w * (S.phase - ROLL_PEAK + lead)), 0, -1.8 * yaw);
+    m.chest.rotation.set(bodyRoll, pitch, yaw);
+    m.pelvis.rotation.set(roll * hipShare * Math.cos(w * (S.phase - ROLL_PEAK + lead)), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
+    // Keep the waist joined to the pitched chest, then let the hips drop a little further.
+    m.pelvis.position.x = -0.36 * Math.cos(pitch);
+    m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0);
 
     const right = arm(rushed(S.phase, P), P, F), left = arm(rushed((S.phase + 0.5) % 1, P), P, F);
     const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
-    poseArm(m, 'R', right, P, slipness, bodyRoll);
-    poseArm(m, 'L', left, P, slipness, bodyRoll);
+    poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
+    poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F);
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
-    const core = Math.abs(Math.sin(w * (S.phase - ROLL_PEAK + lead))) * (0.35 + 0.65 * P.drive);
+    const core = Math.abs(Math.sin(w * (S.phase - ROLL_PEAK + lead))) * (0.35 + 0.65 * P.drive) * (F.flathips ? 0.3 : 1);
     patch(m.backR, eb * k * right.back);
     patch(m.backL, eb * k * left.back);
     patch(m.triR, et * k * right.triceps);

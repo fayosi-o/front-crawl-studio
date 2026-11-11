@@ -14,8 +14,8 @@ It demonstrates:
 - hand slip;
 - arm-driven versus hip-connected timing;
 - adjustable flutter-kick amplitude and arm entry angle;
-- switchable stroke faults (crossover, over-rotation, over-extension, snaking,
-  knee kick, spinning arms) with coaching cues;
+- switchable stroke faults (crossover, over-rotation, over-extension, flat hips,
+  sinking legs, snaking, knee kick, spinning arms) with coaching cues;
 - simple estimated back, triceps, and hip/core contribution;
 - rough distance-per-stroke and pace estimates.
 
@@ -110,6 +110,10 @@ python main.py
   - *Over-rotation*: the body rolls far past 45°, and the hips follow.
   - *Over-extension*: the arm locks straight, the shoulder shrugs, and the
     wrist brakes at the front before a late catch.
+  - *Flat hips*: the hips stay flat and the shoulders take more of the roll,
+    so the core no longer links the pull.
+  - *Sinking legs*: the head and chest lift up while the hips and legs sink
+    and drag low in the water.
   - *Snaking*: the hips and legs sway side to side behind the chest.
   - *Knee kick*: a bicycle-style kick bent from the knees, not the hips.
   - *Spinning arms*: the arms rush the underwater phase faster than the hand

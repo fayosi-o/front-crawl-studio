@@ -162,6 +162,18 @@ FAULTS: dict[str, Fault] = {
         'Reach long but soft, then tip the fingertips down straight away.',
         drag=0.06,
     ),
+    'flathips': Fault(
+        'Flat hips',
+        'The shoulders do all the rotating while the hips stay flat, so the core cannot connect the pull.',
+        'Rotate hips and shoulders together, as one unit.',
+        drag=0.04,
+    ),
+    'sinking': Fault(
+        'Sinking legs',
+        'Head and chest lift up while the hips and legs sink low, dragging through the water.',
+        'Look at the floor and press the chest down; the hips will rise.',
+        drag=0.09,
+    ),
     'snaking': Fault(
         'Snaking',
         'Hips and legs sway side to side behind the chest.',
