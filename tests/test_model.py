@@ -1,3 +1,5 @@
+"""Unit tests for the pure stroke model: timing, phases, estimates, faults, and validation."""
+
 import math
 from dataclasses import astuple
 

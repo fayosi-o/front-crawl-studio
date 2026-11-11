@@ -28,12 +28,14 @@ from long_catch.model import (
 from long_catch.swimmer import SwimmerBuilder
 from long_catch.theme import PALETTE, stylesheet
 
-STEP = 0.05
+STEP = 0.05  # fraction of a cycle moved by each step button or arrow key
 
 
 @dataclass(frozen=True, slots=True)
 class SliderSpec:
-    key: str
+    """Label, unit, tooltip, and optional end-of-range captions for one stroke slider."""
+
+    key: str  # StrokeSettings field name
     label: str
     unit: str
     hint: str
@@ -66,6 +68,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'strong flutter',
     ),
 )
+# Import-time checks that the UI tables stay in step with the model.
 assert {spec.key for spec in SLIDERS} == set(SETTING_RANGES)
 
 EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
@@ -97,6 +100,7 @@ STATS: tuple[tuple[str, str], ...] = (
 
 
 def section_title(text: str) -> ui.label:
+    """Small uppercase heading used at the top of each panel card."""
     return ui.label(text).classes('lc-section-title')
 
 
@@ -117,11 +121,13 @@ class LongCatchPage:
         self._applying_preset = False
         self._segment_layout: tuple[float, ...] = ()
         self.second_view: ui.scene_view | None = None
+        # Last-rendered layouts; renderers skip DOM work when nothing changed.
         self._view_layout: tuple | None = None
 
     # ---- layout -------------------------------------------------------------------------------
 
     def build(self) -> None:
+        """Create the whole page: inline styles and engine, 3D stage, and side panel."""
         ui.add_head_html(stylesheet())
         ui.add_body_html(engine_script())
         ui.colors(primary=PALETTE.hold)
@@ -131,6 +137,7 @@ class LongCatchPage:
         self._render()
 
     def _build_stage(self) -> None:
+        """3D scene (plus a hidden second pane for split view) and the HUD overlays."""
         with ui.element('div').classes('lc-stage'):
             with ui.element('div').classes('lc-views') as self.views:
                 with ui.element('div').classes('lc-view'):
@@ -162,10 +169,16 @@ class LongCatchPage:
                     for side in ('right', 'left'):
                         with ui.element('div').classes('lc-arm'):
                             ui.label(f'{side.title()} arm').classes('lc-arm-side')
+                            # The engine rewrites this text every frame.
                             ui.label(Phase.ENTRY.label).classes(f'lc-arm-phase lc-arm-{side}')
             self._build_transport()
 
     def _build_transport(self) -> None:
+        """Bottom dock: phase timeline, step and play buttons, speed, and camera reset.
+
+        The engine finds these elements by their ``lc-*`` classes to drive the
+        timeline marker and cycle percentage, and to wire up shortcuts.
+        """
         with ui.element('div').classes('lc-glass lc-dock'):
             with ui.element('div').classes('lc-timeline').props('title="Drag to scrub the right-arm cycle"'):
                 for index, label in enumerate(PHASE_LABELS.values()):
@@ -183,17 +196,18 @@ class LongCatchPage:
                 ui.label('0%').classes('lc-cycle')
                 ui.element('div').classes('lc-spacer')
                 ui.toggle(PLAYBACK_LABELS, value=self.view.playback, on_change=lambda e: self.update(playback=e.value))
-                self._icon_button('center_focus_strong', 'Reset camera (C)', self.engine.reset_camera).classes(
-                    'lc-reset-camera'
-                )
+                reset = self._icon_button('center_focus_strong', 'Reset camera (C)', self.engine.reset_camera)
+                reset.classes('lc-reset-camera')
 
     @staticmethod
     def _icon_button(icon: str, tooltip: str, on_click) -> ui.button:
+        """Round icon-only button; the tooltip doubles as its accessible name."""
         button = ui.button(icon=icon, on_click=on_click).props(f'flat round dense aria-label="{tooltip}"')
         button.tooltip(tooltip)
         return button
 
     def _build_panel(self) -> None:
+        """Right-hand settings panel, one card per group of controls."""
         with ui.element('div').classes('lc-panel'):
             with ui.element('div').classes('lc-card'):
                 with ui.row().classes('lc-card-head'):
@@ -239,6 +253,7 @@ class LongCatchPage:
             ).classes('lc-footnote')
 
     def _build_view(self) -> None:
+        """View card: split-view switch, second camera angle, and ghost-trail controls."""
         with ui.element('div').classes('lc-card'):
             with ui.row().classes('lc-card-head'):
                 section_title('View')
@@ -273,6 +288,7 @@ class LongCatchPage:
                     ui.label('long trail')
 
     def _build_faults(self) -> None:
+        """Fault chips that toggle on click, a Clear button, and a list of coaching cues."""
         with ui.element('div').classes('lc-card'):
             with ui.row().classes('lc-card-head'):
                 section_title('Stroke faults')
@@ -291,6 +307,7 @@ class LongCatchPage:
             self.cues = ui.element('div').classes('lc-cues')
 
     def _build_slider(self, spec: SliderSpec) -> None:
+        """One labelled stroke slider with a live value pill and optional range captions."""
         lo, hi = SETTING_RANGES[spec.key]
         value = getattr(self.view.settings, spec.key)
         with ui.element('div').classes('lc-control'):
@@ -314,18 +331,22 @@ class LongCatchPage:
     # ---- state ---------------------------------------------------------------------------------
 
     def update(self, **changes: Any) -> None:
+        """Replace the view state (which validates it) and re-render if anything changed."""
         new = replace(self.view, **changes)
         if new != self.view:
             self.view = new
             self._render()
 
     def on_slider(self, spec: SliderSpec, value: float) -> None:
+        """Update the value pill; apply the change unless a preset is moving the sliders."""
         self.slider_values[spec.key].text = f'{value:.0f}{spec.unit}'
         if not self._applying_preset:
             self.update(settings=self.view.settings.with_values(**{spec.key: int(value)}))
 
     def apply_preset(self, name: str) -> None:
+        """Move every slider to the preset, then apply it as a single state change."""
         preset = PRESETS[name]
+        # Suppress per-slider updates so the preset applies as one render.
         self._applying_preset = True
         try:
             for key, slider in self.sliders.items():
@@ -335,22 +356,27 @@ class LongCatchPage:
         self.update(settings=preset)
 
     def toggle_play(self) -> None:
+        """Play or pause the animation."""
         self.update(playing=not self.view.playing)
 
     def toggle_fault(self, key: str) -> None:
+        """Switch one stroke fault on or off."""
         self.update(faults=self.view.with_fault(key, key not in self.view.faults).faults)
 
     def step(self, amount: float) -> None:
+        """Pause, then nudge the cycle phase by ``amount``."""
         self.update(playing=False)
         self.engine.step(amount)
 
     async def start(self) -> None:
+        """Wait for the browser to connect, then hand the scene to the engine."""
         await ui.context.client.connected()
         self.engine.start(self.scene.id, self.scene_ids, self.view.render_params())
 
     # ---- rendering -----------------------------------------------------------------------------
 
     def _render(self) -> None:
+        """Sync every widget and the engine with the current view state."""
         metrics = self.view.metrics()
         self._render_transport()
         self._render_presets()
@@ -386,17 +412,20 @@ class LongCatchPage:
 
     @staticmethod
     def _enable(element: ui.element, enabled: bool) -> None:
+        """Toggle Quasar's ``disable`` prop."""
         if enabled:
             element.props(remove='disable')
         else:
             element.props('disable')
 
     def _render_transport(self) -> None:
+        """Swap the play button's icon and accessible label."""
         playing = self.view.playing
         self.play_button.props(f'icon={"pause" if playing else "play_arrow"}')
         self.play_button.props(f'aria-label="{"Pause" if playing else "Play"}"')
 
     def _render_presets(self) -> None:
+        """Highlight the preset that matches the settings, or badge the stroke as Custom."""
         active = matching_preset(self.view.settings)
         self.preset_badge.text = 'Custom' if active is None else 'Preset'
         self.preset_badge.classes(replace='lc-badge lc-badge-custom' if active is None else 'lc-badge')
@@ -407,6 +436,7 @@ class LongCatchPage:
                 button.classes(remove='lc-active')
 
     def _render_faults(self) -> None:
+        """Update fault chips, the count badge, and the cue list (only when faults change)."""
         active = self.view.faults
         if active == self._fault_layout:
             return
@@ -425,9 +455,8 @@ class LongCatchPage:
         self.cues.clear()
         with self.cues:
             if not active:
-                ui.label('Switch on a fault to see how it changes the stroke and the estimates.').classes(
-                    'lc-cue lc-cue-empty'
-                )
+                hint = 'Switch on a fault to see how it changes the stroke and the estimates.'
+                ui.label(hint).classes('lc-cue lc-cue-empty')
             for key, fault in FAULTS.items():
                 if key in active:
                     with ui.element('div').classes('lc-cue'):
@@ -435,6 +464,7 @@ class LongCatchPage:
                         ui.label(fault.cue).classes('inline')
 
     def _render_stats(self, metrics: Metrics) -> None:
+        """Fill in the estimate tiles and colour the hold banner."""
         tone = 'lc-good' if metrics.holding else 'lc-bad'
         self.stats['rate'].text = f'{self.view.settings.rate} spm'
         self.stats['dps'].text = f'{metrics.distance_per_stroke:.2f} m'
@@ -458,6 +488,7 @@ class LongCatchPage:
 
 @ui.page('/')
 async def index() -> None:
+    """Build a fresh page, with its own state, for each browser tab."""
     page = LongCatchPage()
     page.build()
     await page.start()

@@ -1,9 +1,22 @@
+# Python
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tool caches
 .pytest_cache/
 .ruff_cache/
 .nicegui/
+.playwright-cli/
+
+# Local server logs
+*.log
+
+# Editors and OS
 .vscode/
-.server.log
-.server.err.log
+.idea/
+.DS_Store
+Thumbs.db

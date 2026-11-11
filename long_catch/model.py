@@ -11,22 +11,30 @@ from dataclasses import dataclass, field, replace
 from enum import IntEnum
 from typing import Literal
 
+# --- View options: each Literal is paired with the tuple the UI iterates over ---
+
 Emphasis = Literal['back', 'triceps', 'core', 'balanced']
 EMPHASES: tuple[Emphasis, ...] = ('back', 'triceps', 'core', 'balanced')
-PLAYBACK_SPEEDS: tuple[float, ...] = (0.25, 0.5, 1.0)
-HOLDING_THRESHOLD = 0.7
 ViewAngle = Literal['top', 'side', 'front', 'below']
 VIEW_ANGLES: tuple[ViewAngle, ...] = ('top', 'side', 'front', 'below')
 Trail = Literal['off', 'hands', 'feet', 'both']
 TRAILS: tuple[Trail, ...] = ('off', 'hands', 'feet', 'both')
-TRAIL_SECONDS = (0.5, 5.0)
+
+PLAYBACK_SPEEDS: tuple[float, ...] = (0.25, 0.5, 1.0)
+TRAIL_SECONDS = (0.5, 5.0)  # min and max ghost-trail length
+
+# Hold quality at or above this reads as "holding water" in the UI.
+HOLDING_THRESHOLD = 0.7
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
+    """Limit ``value`` to the closed range [minimum, maximum]."""
     return max(minimum, min(value, maximum))
 
 
 class Phase(IntEnum):
+    """Broad steps of one arm's stroke, in the order they happen."""
+
     ENTRY = 0
     CATCH = 1
     PULL = 2
@@ -35,6 +43,7 @@ class Phase(IntEnum):
 
     @property
     def label(self) -> str:
+        """Human-readable name shown in the HUD and timeline."""
         return PHASE_LABELS[self]
 
 
@@ -46,6 +55,8 @@ PHASE_LABELS: dict[Phase, str] = {
     Phase.RECOVERY: 'Recovery',
 }
 
+# Fixed step boundaries as fractions of one arm cycle. The recovery start
+# (hand exit) depends on path length; see `exit_phase`.
 CATCH_START = 0.12
 PULL_START = 0.30
 FINISH_START = 0.62
@@ -91,6 +102,7 @@ def cycle_duration(stroke_rate: float) -> float:
 
 
 def format_duration(seconds: float) -> str:
+    """Format seconds as ``'12.3 s'`` under a minute, else ``'m:ss.s'``; ``'–'`` if invalid."""
     if not math.isfinite(seconds) or seconds < 0:
         return '–'
     if round(seconds, 1) < 60:
@@ -101,13 +113,16 @@ def format_duration(seconds: float) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Metrics:
-    hold_quality: float
-    distance_per_stroke: float
+    """Coaching estimates for one stroke setup. None of these are measured."""
+
+    hold_quality: float  # 0–1: how well the hand holds water
+    distance_per_stroke: float  # metres per hand entry
     strokes_per_25: float
     seconds_per_25: float
 
     @property
     def holding(self) -> bool:
+        """True when the hold is good enough to call it "holding water"."""
         return self.hold_quality >= HOLDING_THRESHOLD
 
 
@@ -118,8 +133,14 @@ def estimate_metrics(
     stroke_rate: float,
     drag: float = 0.0,
 ) -> Metrics:
-    """BUILD_SPEC section 12. Drive cannot rescue a poor catch or heavy slip; faults add drag."""
+    """Estimate stroke efficiency from fractional inputs (0–1) and a rate in spm.
+
+    Drive only scales the benefit of a good hold, so it cannot rescue a poor
+    catch or heavy slip. Slip also costs distance directly, rates above 56 spm
+    shorten the stroke, and ``drag`` (from faults) removes a fixed fraction.
+    """
     hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
+    # Drive multiplies the hold rather than adding to it.
     connection = 0.7 + 0.3 * drive_balance
     rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
     distance_per_stroke = clamp(
@@ -141,11 +162,11 @@ class Fault:
     """A common stroke error that can be switched on to show its shape and cost."""
 
     label: str
-    hint: str
-    cue: str
-    drag: float = 0.0
-    slip: float = 0.0
-    catch: float = 0.0
+    hint: str  # what the fault looks like
+    cue: str  # coaching cue that fixes it
+    drag: float = 0.0  # fraction of distance per stroke lost
+    slip: float = 0.0  # added to slip (0–1)
+    catch: float = 0.0  # removed from catch quality (0–1)
 
 
 FAULTS: dict[str, Fault] = {
@@ -199,6 +220,9 @@ FAULTS: dict[str, Fault] = {
         catch=0.25,
     ),
 }
+
+# With 'rushing' on, the underwater part of the cycle is squeezed into this
+# fraction of its normal time, so the hand visibly hurries through the pull.
 RUSH = 0.72
 
 
@@ -217,9 +241,11 @@ def timeline_boundaries(length: float, rushed: bool = False) -> tuple[float, flo
 
 
 def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
+    """Muscle-overlay strength (0.15–1.0); a strong glow needs both hold and drive."""
     return 0.15 + 0.85 * (clamp(hold_quality, 0.0, 1.0) * clamp(drive_balance, 0.0, 1.0)) ** 1.5
 
 
+# Inclusive slider ranges; StrokeSettings rejects anything outside them.
 SETTING_RANGES: dict[str, tuple[int, int]] = {
     'rate': (32, 72),
     'catch': (0, 100),
@@ -250,14 +276,22 @@ class StrokeSettings:
                 raise ValueError(f'{name}={value} outside {lo}–{hi}')
 
     def with_values(self, **changes: int) -> StrokeSettings:
+        """Return a validated copy with the given fields changed."""
         return replace(self, **changes)
 
     def metrics(self) -> Metrics:
+        """Estimates for these settings alone, ignoring any faults."""
         return estimate_metrics(self.catch / 100, self.slip / 100, self.drive / 100, self.rate)
 
 
 @dataclass(frozen=True, slots=True)
 class ViewState:
+    """Everything one browser tab shows: stroke settings plus view options.
+
+    Immutable; the app replaces it on every change, and the constructor
+    validates every field.
+    """
+
     settings: StrokeSettings = field(default_factory=StrokeSettings)
     emphasis: Emphasis = 'back'
     playing: bool = True
@@ -284,6 +318,7 @@ class ViewState:
             raise ValueError(f'unknown faults {sorted(unknown)}')
 
     def with_fault(self, key: str, active: bool) -> ViewState:
+        """Return a copy with fault ``key`` switched on or off."""
         faults = self.faults | {key} if active else self.faults - {key}
         return replace(self, faults=frozenset(faults))
 
@@ -295,6 +330,7 @@ class ViewState:
         return clamp(catch, 0.0, 1.0), clamp(slip, 0.0, 1.0)
 
     def metrics(self) -> Metrics:
+        """Estimates for the settings with every active fault applied."""
         s = self.settings
         catch, slip = self.effective_hold()
         return estimate_metrics(catch, slip, s.drive / 100, s.rate, fault_drag(self.faults))
@@ -323,10 +359,11 @@ class ViewState:
             'trail': self.trail,
             'trailSeconds': self.trail_seconds,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
-            'speed': m.distance_per_stroke * s.rate / 60.0,
+            'speed': m.distance_per_stroke * s.rate / 60.0,  # metres per second
         }
 
 
+# Example strokes, ordered from most to least efficient (keys 1–4 in the UI).
 PRESETS: dict[str, StrokeSettings] = {
     'Long power': StrokeSettings(rate=38, catch=92, roll=46, slip=8, drive=85, kick=45),
     'Long light': StrokeSettings(rate=40, catch=88, roll=44, slip=10, drive=70, kick=25),

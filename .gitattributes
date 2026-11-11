@@ -1,0 +1,4 @@
+# Normalise line endings in the repository; check text out with LF everywhere.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

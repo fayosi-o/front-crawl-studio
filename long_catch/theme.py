@@ -11,6 +11,8 @@ STATIC_DIR = Path(__file__).parent / 'static'
 
 @dataclass(frozen=True, slots=True)
 class Palette:
+    """App colours; exposed to CSS as ``--lc-<name>`` and to the engine as hex strings."""
+
     background: str = '#07131a'
     panel: str = '#0c1d25'
     card: str = '#112831'
@@ -25,6 +27,7 @@ class Palette:
     goggles: str = '#233c49'
 
     def css_variables(self) -> str:
+        """A ``:root`` rule declaring one CSS custom property per colour."""
         names = (f'  --lc-{name.replace("_", "-")}: {value};' for name, value in asdict(self).items())
         return ':root {\n' + '\n'.join(names) + '\n}\n'
 

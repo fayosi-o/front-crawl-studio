@@ -1,25 +1,43 @@
 // Long Catch browser animation engine.
-// Python owns the settings; this loop owns the live cycle phase and the pose.
-// Configuration arrives as window.LONG_CATCH_CONFIG = {colors, phases, arm}.
+//
+// Python owns the settings and sends them through window.LongCatch.set();
+// this loop owns the live cycle phase and poses the swimmer every frame.
+// Configuration arrives as window.LONG_CATCH_CONFIG = {colors, background, phases, arm}.
+// Coordinates: head towards +x, z up, right side towards -y, water surface at z = 0.
 window.LongCatch = window.LongCatch || (() => {
   const CONFIG = window.LONG_CATCH_CONFIG;
-  const S = { sceneId: null, ids: null, params: null, faults: {}, phase: 0, offset: 0, last: null, m: null, running: false, ui: {}, trails: {}, trailReset: false };
+  // Engine state. `el`, `m`, `home`, `view`, and `puff` are filled in lazily.
+  const S = {
+    sceneId: null, ids: null,   // scene element id and named object ids from Python
+    params: null, faults: {},   // latest render params; active faults as {key: true}
+    phase: 0,                   // right-arm cycle phase in [0, 1)
+    offset: 0,                  // distance swum, used to scroll the lane ropes
+    last: null,                 // previous frame timestamp (null after a pause or seek)
+    m: null,                    // resolved meshes and per-arm IK scratch objects
+    running: false,             // animation loop and listeners installed
+    ui: {},                     // cached DOM nodes and last-written values
+    trails: {}, trailReset: false,
+  };
+
+  // ---- maths helpers --------------------------------------------------------
   const D = Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
   const smooth = t => t * t * (3 - 2 * t);
   const wrap = p => ((p % 1) + 1) % 1;
-  const bump = (p, a, b) => (p > a && p < b ? Math.sin(Math.PI * (p - a) / (b - a)) : 0);
-  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const bump = (p, a, b) => (p > a && p < b ? Math.sin(Math.PI * (p - a) / (b - a)) : 0);  // 0→1→0 over (a, b)
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);  // '#rrggbb' → [r, g, b] in 0–1
   const C = { hold: rgb(CONFIG.colors.hold), slip: rgb(CONFIG.colors.slip), skin: rgb(CONFIG.colors.skin) };
   const EMPHASIS = { back: [1, 0, 0], triceps: [0, 1, 0], core: [0, 0, 1], balanced: [0.55, 0.55, 0.55] };
   const PHASES = CONFIG.phases;
   const [UPPER, FOREARM] = CONFIG.arm;
+  // Shoulder-to-wrist distance for an elbow bent by `bend` degrees; reach is limited to 8–145°.
   const reachAt = bend => Math.sqrt(UPPER ** 2 + FOREARM ** 2 + 2 * UPPER * FOREARM * Math.cos(bend * D));
   const MIN_REACH = reachAt(145);
   const MAX_REACH = reachAt(8);
+  // Fraction of the cycle at which the right shoulder is deepest (the right catch).
   const ROLL_PEAK = 0.18;
-  // Ease into the reach limits so the elbow straightens or folds gradually instead of snapping.
+  // Ease into the reach limits (metres) so the elbow straightens or folds gradually instead of snapping.
   const SOFT = 0.045;
   function softReach(d) {
     if (d > MAX_REACH - SOFT) return MAX_REACH - SOFT * Math.exp(-(d - MAX_REACH + SOFT) / SOFT);
@@ -27,6 +45,7 @@ window.LongCatch = window.LongCatch || (() => {
     return d;
   }
 
+  // Smoothly interpolate a keyframe list [[phase, value], ...] at phase p.
   function keyed(p, keys) {
     for (let i = 0; i < keys.length - 1; i++) {
       const [p0, v0] = keys[i], [p1, v1] = keys[i + 1];
@@ -34,6 +53,8 @@ window.LongCatch = window.LongCatch || (() => {
     }
     return keys[keys.length - 1][1];
   }
+
+  // ---- arm path ---------------------------------------------------------------
 
   // Wrist target path for one arm at phase p, plus overlay and colouring values.
   // F holds active stroke faults; each one bends the healthy path toward a typical error.
@@ -86,6 +107,9 @@ window.LongCatch = window.LongCatch || (() => {
     return p < early ? p * exit / early : exit + (p - early) * (1 - exit) / (1 - early);
   }
 
+  // ---- scene setup and cameras ------------------------------------------------
+
+  // Look up the scene meshes once they exist; returns false until NiceGUI has created them all.
   function resolve() {
     if (S.m) return true;
     const el = typeof getElement === 'function' ? getElement(S.sceneId) : null;
@@ -140,6 +164,7 @@ window.LongCatch = window.LongCatch || (() => {
     el.controls.update();
   }
 
+  // Return the main camera to where it started, then refit it.
   function resetCamera() {
     if (!S.el || !S.home) return;
     S.el.camera.position.copy(S.home.position);
@@ -147,11 +172,13 @@ window.LongCatch = window.LongCatch || (() => {
     fitCamera();
   }
 
+  // ---- ghost trails -----------------------------------------------------------
+
   // Ghost trails: fading smoke behind the fingertips and toes that drifts back with the water.
   // THREE comes from NiceGUI's own scene module via the page import map (no CDN).
   let THREE = null;
   import('nicegui-scene').then(mod => { THREE = mod.THREE; }).catch(() => {});
-  const MAX_TRAIL = 360;
+  const MAX_TRAIL = 360;  // samples per trail (~6 s at 60 fps)
   const TRAIL_LIMBS = {
     hands: ['R', 'L'].map(s => ({ key: 'hand' + s, joint: 'wr' + s, tip: [0.13, 0, 0], color: C.hold })),
     feet: ['R', 'L'].map(s => ({ key: 'foot' + s, joint: 'ankle' + s, tip: [-0.15, 0, -0.01], color: rgb('#a9d4ff') })),
@@ -159,6 +186,7 @@ window.LongCatch = window.LongCatch || (() => {
   TRAIL_LIMBS.both = [...TRAIL_LIMBS.hands, ...TRAIL_LIMBS.feet];
   const ALL_LIMBS = TRAIL_LIMBS.both;
 
+  // Soft round sprite shared by every trail's points.
   function puffTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 64;
@@ -171,6 +199,7 @@ window.LongCatch = window.LongCatch || (() => {
     return new THREE.CanvasTexture(canvas);
   }
 
+  // One trail = fixed-size buffers drawn twice: soft points (smoke) and a thin line (path).
   function makeTrail(limb) {
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(MAX_TRAIL * 3), col = new Float32Array(MAX_TRAIL * 4);
@@ -186,6 +215,8 @@ window.LongCatch = window.LongCatch || (() => {
     return { limb, pts: [], geo, pos, col, points, line, at: new THREE.Vector3() };
   }
 
+  // Age, drift, and append trail samples; trails are created on first use and hidden when off.
+  // Each sample is [x, y, z, age in seconds].
   function updateTrails(m, P, dt) {
     if (!THREE) return;
     const wanted = TRAIL_LIMBS[P.trail] || [], seconds = P.trailSeconds || 1.5;
@@ -217,13 +248,17 @@ window.LongCatch = window.LongCatch || (() => {
     S.trailReset = false;
   }
 
+  // ---- split view -------------------------------------------------------------
+
   // Extra scene views share the scene; the engine aims their camera from a preset angle and keeps it fitted.
+  // dir: camera direction from the target; up: screen-up axis; half: half-extent (w, h) to keep in frame.
   const VIEWS = {
     top: { dir: [0, 0, 1], up: [1, 0, 0], half: [0.62, 1.3] },
     below: { dir: [0, 0, -1], up: [1, 0, 0], half: [0.62, 1.3] },
     side: { dir: [0, -1, 0], up: [0, 0, 1], half: [1.3, 0.5] },
     front: { dir: [1, 0, 0.18], up: [0, 0, 1], half: [0.7, 0.5], min: 3.4 },
   };
+  // Adopt a scene_view as the second camera; retries until NiceGUI has mounted it.
   function setView(viewId, angle) {
     const el = typeof getElement === 'function' ? getElement(viewId) : null;
     if (!el || !el.renderer || !el.camera) { setTimeout(() => setView(viewId, angle), 100); return; }
@@ -237,6 +272,7 @@ window.LongCatch = window.LongCatch || (() => {
     S.view.angle = angle;
   }
 
+  // Place the second camera so the swimmer fills its pane at the chosen angle (runs every frame).
   function fitView() {
     const v = S.view;
     if (!v) return;
@@ -252,11 +288,15 @@ window.LongCatch = window.LongCatch || (() => {
     cam.lookAt(v.target);
   }
 
+  // ---- posing -----------------------------------------------------------------
+
+  // Underwater forearm and hand fade from teal (holding) to red (slipping); skin colour in the air.
   function paint(mesh, under, slipness) {
     const col = under ? C.hold.map((v, i) => lerp(v, C.slip[i], slipness)) : C.skin;
     mesh.material.color.setRGB(col[0], col[1], col[2]);
   }
 
+  // Emphasis overlay opacity; sqrt keeps weak contributions visible.
   function patch(mesh, value) {
     mesh.material.opacity = clamp(Math.sqrt(Math.max(0, value)) * 0.85, 0, 0.85);
     mesh.visible = value > 0.02;
@@ -336,6 +376,8 @@ window.LongCatch = window.LongCatch || (() => {
     }
   }
 
+  // ---- HUD and input ----------------------------------------------------------
+
   // DOM lookups are cached and writes skipped when unchanged to keep frames cheap.
   function find(key, selector) {
     const cached = S.ui[key];
@@ -350,6 +392,7 @@ window.LongCatch = window.LongCatch || (() => {
     if (node) { node.textContent = text; S.ui[key + 'Text'] = text; }
   }
 
+  // Arm-phase labels, cycle percentage, and timeline marker.
   function updateHud(right, left) {
     setText('right', '.lc-arm-right', PHASES[right.stage]);
     setText('left', '.lc-arm-left', PHASES[left.stage]);
@@ -361,6 +404,9 @@ window.LongCatch = window.LongCatch || (() => {
     if (timeline && timeline.dataset.stage !== String(right.stage)) timeline.dataset.stage = right.stage;
   }
 
+  // ---- frame loop -------------------------------------------------------------
+
+  // Advance the phase, then pose body, arms, legs, overlays, trails, and lane ropes.
   function frame(t) {
     requestAnimationFrame(frame);
     if (document.hidden || !S.params) { S.last = null; return; }
@@ -410,6 +456,7 @@ window.LongCatch = window.LongCatch || (() => {
     patch(m.hipR, ec * k * core);
     patch(m.hipL, ec * k * core);
 
+    // Buoys scroll back at swim speed and wrap around a 9 m window centred on the swimmer.
     const span = 9;
     m.buoys.forEach((b, i) => {
       b.position.x = wrap((m.basePos[i] - S.offset + 4.5) / span) * span - 4.5;
@@ -459,6 +506,7 @@ window.LongCatch = window.LongCatch || (() => {
 
   const faultFlags = params => Object.fromEntries((params.faults || []).map(key => [key, true]));
 
+  // ---- public API (called from Python via BrowserEngine) ----------------------
   return {
     start(sceneId, ids, params) {
       S.sceneId = sceneId; S.ids = ids; S.params = params; S.faults = faultFlags(params);

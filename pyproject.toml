@@ -1,9 +1,13 @@
 [project]
 name = "long-catch"
-version = "0.2.0"
-description = "Silent local visual prototype of front-crawl stroke shape."
+version = "0.3.0"
+description = "Silent, local 3D teaching model of front-crawl stroke shape."
 requires-python = ">=3.12"
-dependencies = ["nicegui"]
+readme = "README.md"
+dependencies = ["nicegui>=4.0,<5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=9", "ruff>=0.17"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

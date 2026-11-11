@@ -109,9 +109,6 @@ ruff format --check .
 
 ```text
 .
-├── .github/
-│   ├── copilot-instructions.md
-│   └── prompts/
 ├── long_catch/
 │   ├── app.py              # NiceGUI page and controls
 │   ├── engine.py           # Browser-engine setup
@@ -124,8 +121,8 @@ ruff format --check .
 ├── tests/
 │   └── test_model.py
 ├── main.py                 # Application entry point
-├── BUILD_SPEC.md
-├── AGENTS.md
+├── AGENTS.md               # Rules and architecture notes for coding agents
+├── pyproject.toml          # Project metadata, pytest, and Ruff settings
 ├── requirements.txt
 └── requirements-dev.txt
 ```

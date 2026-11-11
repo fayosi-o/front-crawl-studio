@@ -33,28 +33,35 @@ class BrowserEngine:
         self.started = False
 
     def start(self, scene_id: int, ids: SceneIds, params: dict[str, Any]) -> None:
+        """Attach the engine to the scene once its objects exist and begin animating."""
         self._call('start', scene_id, ids, params)
         self.started = True
 
     def set(self, params: dict[str, Any]) -> None:
+        """Push new render parameters; ignored until the engine has started."""
         if self.started:
             self._call('set', params)
 
     def step(self, amount: float) -> None:
+        """Pause and move the arm phase by ``amount`` of a cycle (negative steps back)."""
         self._call('step', amount)
 
     def reset_camera(self) -> None:
+        """Return the main (orbit) camera to its starting position."""
         self._call('resetCamera')
 
     def fit(self) -> None:
+        """Resize the renderers after the stage layout changes (e.g. split view)."""
         if self.started:
             self._call('fit')
 
     def set_view(self, view_id: int, angle: str) -> None:
+        """Point the second (split) view's camera at a named angle."""
         if self.started:
             self._call('setView', view_id, angle)
 
     @staticmethod
     def _call(method: str, *args: Any) -> None:
+        # json.dumps makes every argument a JS literal, so nothing is spliced in raw.
         arguments = ', '.join(json.dumps(arg) for arg in args)
         ui.run_javascript(f'window.LongCatch && window.LongCatch.{method}({arguments})')

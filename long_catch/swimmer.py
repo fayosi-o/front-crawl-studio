@@ -12,12 +12,14 @@ from nicegui import ui
 
 from long_catch.theme import PALETTE, Palette
 
-SceneIds = dict[str, int | list[int]]
-SIDES = (('R', -1), ('L', 1))
+SceneIds = dict[str, int | list[int]]  # object name -> scene id(s) the engine animates
+SIDES = (('R', -1), ('L', 1))  # id suffix and y sign for each body side
 
 
 @dataclass(frozen=True, slots=True)
 class BodyDimensions:
+    """Limb lengths and joint offsets in metres. The engine's IK reads the arm lengths."""
+
     upper_arm: float = 0.28
     forearm: float = 0.27
     thigh: float = 0.38
@@ -40,6 +42,7 @@ def limb_x(length: float, root_radius: float, tip_radius: float, color: str, dir
 
 
 def ellipsoid(sx: float, sy: float, sz: float, color: str, opacity: float = 1.0):
+    """Unit sphere scaled to the given semi-axes."""
     return ui.scene.sphere(1, 20, 12).material(color, opacity).scale(sx, sy, sz)
 
 
@@ -52,6 +55,11 @@ class SwimmerBuilder:
         self.ids: SceneIds = {}
 
     def build(self) -> SceneIds:
+        """Create the water, swimmer, and lane ropes; return the ids the engine needs.
+
+        The chest and pelvis are separate groups so the engine can roll them
+        independently (flat hips, snaking, sinking legs).
+        """
         self._water()
         with ui.scene.group().move(0, 0, -0.06):
             with self._register('chest', ui.scene.group()):
@@ -67,6 +75,7 @@ class SwimmerBuilder:
         return self.ids
 
     def _register(self, name: str, obj):
+        """Record ``obj``'s id under ``name`` for the engine and return it for chaining."""
         self.ids[name] = obj.id
         return obj
 
@@ -75,19 +84,21 @@ class SwimmerBuilder:
         return self._register(name, obj.material(self.colors.patch, 0.0))
 
     def _water(self) -> None:
+        """Translucent, double-sided surface plane at z = 0."""
         self._register('water', ui.scene.plane(10, 4).material(self.colors.water, 0.16, 'both').move(-0.5, 0, 0.0))
 
     def _torso(self) -> None:
+        """Tapered trunk, chest and waist volumes, and the two back-muscle patches."""
         skin = self.colors.skin
-        ui.scene.cylinder(0.20, 0.125, 0.55, 32).material(skin).rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62).move(
-            -0.025, 0, 0
-        )
+        trunk = ui.scene.cylinder(0.20, 0.125, 0.55, 32).material(skin)
+        trunk.rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62).move(-0.025, 0, 0)
         ui.scene.sphere(1, 24, 16).material(skin).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
         ui.scene.sphere(1, 24, 16).material(skin).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
         for side, sign in SIDES:
             self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
     def _head(self) -> None:
+        """Neck, head, swim cap, nose, and goggles; the face points down (-z)."""
         skin = self.colors.skin
         with ui.scene.group().move(0.29, 0, 0):
             limb_x(0.11, 0.052, 0.045, skin)
@@ -98,6 +109,7 @@ class SwimmerBuilder:
             ui.scene.sphere(0.032, 16, 10).material(self.colors.goggles).scale(0.9, 1, 0.4).move(0.54, y, -0.082)
 
     def _arm(self, side: str, sign: int) -> None:
+        """Nested shoulder -> elbow -> wrist groups so the engine can pose each joint."""
         skin, b = self.colors.skin, self.body
         with self._register('sh' + side, ui.scene.group().move(0.27, sign * b.shoulder_y, 0)):
             ui.scene.sphere(0.065, 20, 14).material(skin)
@@ -114,6 +126,7 @@ class SwimmerBuilder:
                     self._register('thumb' + side, thumb).scale(1.1, 0.6, 0.65).move(0.026, -sign * 0.045, -0.005)
 
     def _pelvis(self) -> None:
+        """Hips in suit colour, plus the core and hip-drive emphasis patches."""
         ellipsoid(0.16, 0.165, 0.12, self.colors.suit).move(-0.02, 0, 0)
         self._patch('core', ellipsoid(0.10, 0.13, 0.105, self.colors.patch)).move(0.13, 0, 0.015)
         for side, sign in SIDES:
@@ -121,6 +134,7 @@ class SwimmerBuilder:
             self._patch('hip' + side, hip).scale(1.3, 0.5, 0.8).move(-0.02, sign * 0.15, 0.025)
 
     def _leg(self, side: str, sign: int) -> None:
+        """Nested hip -> knee -> ankle groups, pointing back (-x) from the pelvis."""
         skin, b = self.colors.skin, self.body
         with self._register('leg' + side, ui.scene.group().move(-0.08, sign * b.hip_y, 0)):
             ui.scene.sphere(0.073, 20, 14).material(self.colors.suit)
@@ -134,6 +148,7 @@ class SwimmerBuilder:
                     ellipsoid(0.115, 0.043, 0.026, skin).move(-0.075, 0, -0.01)
 
     def _lane_ropes(self) -> None:
+        """Two ropes of alternating buoys; the engine scrolls them to suggest forward speed."""
         # The near (right, -y) rope sits lower so it frames rather than hides the swimmer.
         buoys = []
         for y, z in ((1.2, 0.02), (-1.2, -0.01)):

@@ -1,63 +1,70 @@
 # Long Catch agent instructions
 
-## Current objective
+Long Catch is a silent, local front-crawl teaching app: Python 3.12 and NiceGUI
+serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
 
-The current objective is the 30–60 minute visual prototype described in
-`BUILD_SPEC.md`.
+## Architecture
 
-Use `.github/prompts/build-prototype.prompt.md` for the initial build.
+- `main.py` is a thin entry point. Keep it that way.
+- `long_catch/model.py` is pure and UI-free: settings, phases, timing, faults,
+  and estimates. All maths that can be unit tested lives here.
+- `long_catch/app.py` owns per-client state (`ViewState`) and the NiceGUI page.
+- `long_catch/static/engine.js` owns the live cycle phase and every per-frame
+  pose. Python sends settings via `BrowserEngine` (`engine.py`); the browser
+  never sends state back. Keyboard shortcuts click the matching buttons so
+  Python stays the single owner of settings.
+- `long_catch/swimmer.py` builds the scene once and records the ids of objects
+  the engine animates.
+- Scene coordinates: head towards +x, z up, right side towards -y, water
+  surface at z = 0.
 
-The prototype must remain in one `main.py` file until the manual acceptance
-checklist passes. (It has passed; see Deferred work.)
+### Adding a stroke fault
 
-## Deferred work
+Faults are data in `model.FAULTS` (label, hint, cue, metric cost) and reach the
+browser as `render_params()['faults']`. A new fault needs:
 
-The visual prototype passed its checklist, and the Stage 1 refactor in
-`.github/prompts/future-production-refactor.prompt.md` has been done at the
-user's request: `long_catch/model.py` (typed settings, phases, timing,
-estimates), `tests/test_model.py`, and Ruff config in `pyproject.toml`.
-Keep pure maths in the model and keep it UI-free.
+1. an entry in `model.FAULTS`;
+2. an icon in `app.FAULT_ICONS`;
+3. its visual effect in `static/engine.js`.
 
-At the user's request the UI is now split into modules: `main.py` is a thin
-entry point; `long_catch/app.py` (page controller), `swimmer.py` (geometry),
-`engine.py` + `static/engine.js` (browser animation), and `theme.py` +
-`static/app.css` (palette and styles).
+## Domain rules
 
-Stroke faults are data in `model.FAULTS` (label, hint, cue, metric cost) and
-travel to the browser as `render_params()['faults']`; each fault's visual
-lives in `static/engine.js`. Add a new fault in both places plus
-`app.FAULT_ICONS`.
-
-Still deferred: persistence, multiple pages, and any further production
-architecture.
-
-## Hard rules
-
-- Python 3.12 and NiceGUI.
-- Run on `127.0.0.1:8080`.
-- No Node.js or npm.
-- No external models or CDNs.
-- No sound, voice, microphone, AudioContext, mute, or volume features.
-- Build a basic volumetric human, not a stick figure and not realistic anatomy.
-- Count every hand entry as one stroke.
-- A complete arm cycle contains two strokes.
-- Cycle duration is `120 / stroke_rate`.
+- Every hand entry is one stroke; a right-and-left arm cycle is two strokes.
+- Cycle duration is `120 / stroke_rate` seconds.
 - More slip must reduce estimated distance per stroke.
-- More drive must not compensate for poor catch or severe slip.
-- Muscle highlighting is an estimated teaching overlay, not EMG or medical data.
+- More drive must not compensate for a poor catch or heavy slip.
+- Every fault must cost estimated distance per stroke.
+- Muscle highlighting is an estimated teaching overlay, not EMG or medical
+  data. Never present any number as measured.
 
-## Completion
+## Hard constraints
 
-The prototype is complete when:
+- Python 3.12 and NiceGUI with `ui.scene`; no Node.js, npm, React, databases,
+  cloud services, CDNs, or downloaded models.
+- No sound, voice, speech, microphone, AudioContext, mute, or volume features.
+- The swimmer is a simple volumetric human built from primitives: not a stick
+  figure and not realistic anatomy.
+- Don't add pages, persistence, or services unless asked.
 
-- `python main.py` starts;
-- the swimmer animates;
-- Play/Pause works;
-- all controls visibly affect the swimmer;
-- all four presets visibly differ;
-- estimates update;
-- no placeholder controls remain.
+## Checks
 
-Run the application before claiming completion. `python main.py` runs forever:
-start it detached and confirm it with one HTTP check. Never wait on it in a sync
-or attached shell (see `.github/copilot-instructions.md`).
+Use Git Bash (or WSL) for the virtual environment, not PowerShell:
+
+```bash
+source .venv/Scripts/activate
+ruff check . && ruff format --check .
+python -m pytest -q
+```
+
+## Running the server
+
+`python main.py` never exits. Never run it in a synchronous or attached shell;
+that blocks the agent session.
+
+- Start it detached, check it with one HTTP request to
+  `http://127.0.0.1:8080/`, then move on. Don't poll it.
+- Before restarting, stop the previous server by its PID. Never kill
+  processes by name.
+- The page inlines `app.css` and `engine.js` at startup, so restart the server
+  after editing either file.
+- Verify UI changes in the browser before claiming success.
