@@ -16,10 +16,15 @@ The visual prototype passed its checklist, and the Stage 1 refactor in
 `.github/prompts/future-production-refactor.prompt.md` has been done at the
 user's request: `long_catch/model.py` (typed settings, phases, timing,
 estimates), `tests/test_model.py`, and Ruff config in `pyproject.toml`.
-`main.py` imports the model; keep pure maths there and keep it UI-free.
+Keep pure maths in the model and keep it UI-free.
 
-Still deferred: browser-runtime files, persistence, multiple pages, and any
-further production architecture.
+At the user's request the UI is now split into modules: `main.py` is a thin
+entry point; `long_catch/app.py` (page controller), `swimmer.py` (geometry),
+`engine.py` + `static/engine.js` (browser animation), and `theme.py` +
+`static/app.css` (palette and styles).
+
+Still deferred: persistence, multiple pages, and any further production
+architecture.
 
 ## Hard rules
 

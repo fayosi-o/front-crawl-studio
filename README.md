@@ -2,9 +2,10 @@
 
 Long Catch is a rapid local prototype for visualising front-crawl stroke shape.
 
-> **Status:** working prototype. The NiceGUI app and the browser animation live
-> in `main.py`; the typed, tested stroke model lives in `long_catch/model.py`
-> (Stage 1 refactor done). See [BUILD_SPEC.md](BUILD_SPEC.md) and [AGENTS.md](AGENTS.md).
+> **Status:** working prototype. `main.py` is a thin entry point; the app is
+> split into a typed, tested stroke model, a swimmer geometry builder, a
+> browser animation engine, and a page controller under `long_catch/`.
+> See [BUILD_SPEC.md](BUILD_SPEC.md) and [AGENTS.md](AGENTS.md).
 
 It demonstrates:
 
@@ -38,7 +39,14 @@ The application is completely silent and does not use microphone or audio APIs.
 │       └── future-production-refactor.prompt.md  # Stage 1 refactor (done)
 ├── long_catch/
 │   ├── __init__.py
-│   └── model.py                              # Typed settings, phases, timing, estimates
+│   ├── app.py                                # Page controller, control specs, rendering
+│   ├── engine.py                             # Python handle for the browser engine
+│   ├── model.py                              # Typed settings, phases, timing, estimates
+│   ├── swimmer.py                            # Procedural swimmer, water, lane ropes
+│   ├── theme.py                              # Palette and stylesheet loading
+│   └── static/
+│       ├── app.css                           # Layout and component styles
+│       └── engine.js                         # Browser animation loop and joint solver
 ├── tests/
 │   └── test_model.py                         # pytest unit tests for the model
 ├── AGENTS.md                                 # Current objective and hard rules
@@ -48,7 +56,7 @@ The application is completely silent and does not use microphone or audio APIs.
 ├── requirements.txt
 ├── requirements-dev.txt                      # + pytest, ruff
 ├── .gitignore
-└── main.py                                   # NiceGUI page, 3D swimmer, browser animation loop
+└── main.py                                   # Entry point: registers the page and runs NiceGUI
 ```
 
 ## Requirements
@@ -88,13 +96,20 @@ python main.py
 - **Kick amplitude** runs from still legs (0%) to a stronger six-beat flutter
   kick (100%), including hip, knee, and ankle movement. This changes the
   animation only; the arm-stroke pace estimates do not include kicking.
-- **Phase stepping:** Pause the animation, then use **− 5%** and **+ 5%** to
-  inspect the stroke cycle in small increments. Stepping automatically pauses
-  playback.
+- **Transport dock** (bottom of the 3D view): play/pause, step ±5% (stepping
+  pauses playback), slow motion at ¼× or ½×, and a camera reset.
+- **Phase timeline:** shows the right arm's entry, catch, pull, finish, and
+  recovery (recovery starts later for longer strokes). Click or drag it to
+  scrub to any point in the cycle. The arm cards at the top show both arms'
+  current phases.
+- **Presets** highlight when active; any slider change shows a *Custom* badge.
+  Hover the ⓘ icons for what each control means.
 - **Forearm and hand colour:** teal means holding water; coral means slipping.
 - **Amber patches** show the estimated muscle emphasis (Back, Triceps,
   Hips/core, or Balanced).
-- Drag to orbit and scroll to zoom. Use Pause to freeze the stroke at any phase.
+- Drag to orbit and scroll to zoom.
+- **Keyboard:** Space play/pause · ←/→ step · 1–4 presets · C reset camera
+  (ignored while a slider has focus).
 
 ## Development
 

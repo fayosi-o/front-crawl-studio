@@ -9,10 +9,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 from enum import IntEnum
-from typing import Literal, TypedDict
+from typing import Literal
 
 Emphasis = Literal['back', 'triceps', 'core', 'balanced']
 EMPHASES: tuple[Emphasis, ...] = ('back', 'triceps', 'core', 'balanced')
+PLAYBACK_SPEEDS: tuple[float, ...] = (0.25, 0.5, 1.0)
+HOLDING_THRESHOLD = 0.7
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
@@ -92,11 +94,16 @@ def format_duration(seconds: float) -> str:
     return f'{int(minutes)}:{rest:04.1f}'
 
 
-class Metrics(TypedDict):
+@dataclass(frozen=True, slots=True)
+class Metrics:
     hold_quality: float
     distance_per_stroke: float
     strokes_per_25: float
     seconds_per_25: float
+
+    @property
+    def holding(self) -> bool:
+        return self.hold_quality >= HOLDING_THRESHOLD
 
 
 def estimate_metrics(
@@ -115,12 +122,12 @@ def estimate_metrics(
         1.40,
     )
     strokes_per_25 = 25.0 / distance_per_stroke
-    return {
-        'hold_quality': hold_quality,
-        'distance_per_stroke': distance_per_stroke,
-        'strokes_per_25': strokes_per_25,
-        'seconds_per_25': strokes_per_25 * 60.0 / stroke_rate,
-    }
+    return Metrics(
+        hold_quality=hold_quality,
+        distance_per_stroke=distance_per_stroke,
+        strokes_per_25=strokes_per_25,
+        seconds_per_25=strokes_per_25 * 60.0 / stroke_rate,
+    )
 
 
 def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
@@ -166,10 +173,13 @@ class ViewState:
     settings: StrokeSettings = field(default_factory=StrokeSettings)
     emphasis: Emphasis = 'back'
     playing: bool = True
+    playback: float = 1.0
 
     def __post_init__(self) -> None:
         if self.emphasis not in EMPHASES:
             raise ValueError(f'unknown emphasis {self.emphasis!r}')
+        if self.playback not in PLAYBACK_SPEEDS:
+            raise ValueError(f'unsupported playback speed {self.playback!r}')
 
     def render_params(self, metrics: Metrics | None = None) -> dict[str, float | str | bool]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
@@ -185,10 +195,11 @@ class ViewState:
             'roll': s.roll,
             'emphasis': self.emphasis,
             'playing': self.playing,
+            'playback': self.playback,
             'length': length,
             'exit': exit_phase(length),
-            'intensity': highlight_intensity(m['hold_quality'], s.drive / 100),
-            'speed': m['distance_per_stroke'] * s.rate / 60.0,
+            'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
+            'speed': m.distance_per_stroke * s.rate / 60.0,
         }
 
 
@@ -198,3 +209,8 @@ PRESETS: dict[str, StrokeSettings] = {
     'Compact connected': StrokeSettings(rate=48, catch=82, roll=42, slip=14, drive=68, kick=60),
     'Short slipping': StrokeSettings(rate=54, catch=42, roll=34, slip=62, drive=35, kick=35),
 }
+
+
+def matching_preset(settings: StrokeSettings) -> str | None:
+    """Name of the preset these settings equal, or None for a custom stroke."""
+    return next((name for name, preset in PRESETS.items() if preset == settings), None)

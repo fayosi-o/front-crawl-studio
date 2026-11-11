@@ -1,4 +1,5 @@
 import math
+from dataclasses import astuple
 
 import pytest
 
@@ -13,6 +14,7 @@ from long_catch.model import (
     exit_phase,
     format_duration,
     highlight_intensity,
+    matching_preset,
     path_length,
     phase_to_step,
 )
@@ -74,26 +76,26 @@ def test_format_duration(seconds, expected):
 def test_more_slip_reduces_distance_per_stroke():
     low_slip = estimate_metrics(0.9, 0.1, 0.7, 40)
     high_slip = estimate_metrics(0.9, 0.7, 0.7, 40)
-    assert high_slip['distance_per_stroke'] < low_slip['distance_per_stroke']
+    assert high_slip.distance_per_stroke < low_slip.distance_per_stroke
 
 
 def test_better_catch_improves_distance_per_stroke():
     poor = estimate_metrics(0.3, 0.1, 0.7, 40)
     good = estimate_metrics(0.9, 0.1, 0.7, 40)
-    assert good['distance_per_stroke'] > poor['distance_per_stroke']
+    assert good.distance_per_stroke > poor.distance_per_stroke
 
 
 def test_drive_cannot_rescue_poor_catch_and_slip():
     poor_full_drive = estimate_metrics(0.3, 0.7, 1.0, 40)
     good_no_drive = estimate_metrics(0.9, 0.1, 0.0, 40)
-    assert poor_full_drive['distance_per_stroke'] < good_no_drive['distance_per_stroke']
+    assert poor_full_drive.distance_per_stroke < good_no_drive.distance_per_stroke
 
 
 def test_outputs_are_finite_and_consistent():
     result = estimate_metrics(0.9, 0.1, 0.7, 40)
-    assert all(math.isfinite(value) for value in result.values())
-    assert result['strokes_per_25'] == pytest.approx(25 / result['distance_per_stroke'])
-    assert result['seconds_per_25'] == pytest.approx(result['strokes_per_25'] * 60 / 40)
+    assert all(math.isfinite(value) for value in astuple(result))
+    assert result.strokes_per_25 == pytest.approx(25 / result.distance_per_stroke)
+    assert result.seconds_per_25 == pytest.approx(result.strokes_per_25 * 60 / 40)
 
 
 def test_highlight_intensity_range():
@@ -113,13 +115,25 @@ def test_settings_validate_ranges():
     assert StrokeSettings().with_values(slip=20).slip == 20
 
 
-def test_view_state_rejects_unknown_emphasis():
+def test_view_state_rejects_unknown_emphasis_and_playback():
     with pytest.raises(ValueError):
         ViewState(emphasis='legs')
+    with pytest.raises(ValueError):
+        ViewState(playback=3.0)
+
+
+def test_holding_follows_hold_quality_threshold():
+    assert PRESETS['Long power'].metrics().holding
+    assert not PRESETS['Short slipping'].metrics().holding
+
+
+def test_matching_preset_identifies_unchanged_presets_only():
+    assert all(matching_preset(settings) == name for name, settings in PRESETS.items())
+    assert matching_preset(PRESETS['Long power'].with_values(kick=0)) is None
 
 
 def test_presets_differ_and_rank_sensibly():
-    metrics = {name: s.metrics()['distance_per_stroke'] for name, s in PRESETS.items()}
+    metrics = {name: s.metrics().distance_per_stroke for name, s in PRESETS.items()}
     assert len(set(PRESETS.values())) == 4
     assert metrics['Long power'] > metrics['Compact connected'] > metrics['Short slipping']
 

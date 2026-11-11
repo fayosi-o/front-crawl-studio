@@ -4,7 +4,8 @@ This is a 30–60 minute visual prototype built with Python 3.12 and NiceGUI.
 The full specification is `BUILD_SPEC.md`. Current scope is set by
 `AGENTS.md` and `.github/prompts/build-prototype.prompt.md`.
 
-Keep the implementation in one `main.py` file until it works.
+The prototype works and has been split into modules under `long_catch/`
+(see `AGENTS.md`). Keep `main.py` a thin entry point and the model UI-free.
 
 ## Rules
 
