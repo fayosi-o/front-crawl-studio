@@ -2,7 +2,7 @@
 //
 // Python owns the settings and sends them through window.LongCatch.set();
 // this loop owns the live cycle phase and poses the swimmer every frame.
-// Configuration arrives as window.LONG_CATCH_CONFIG = {colors, background, phases, arm}.
+// Configuration arrives as window.LONG_CATCH_CONFIG = {colors, background, phases, finish, arm}.
 // Coordinates: head towards +x, z up, right side towards -y, water surface at z = 0.
 window.LongCatch = window.LongCatch || (() => {
   const CONFIG = window.LONG_CATCH_CONFIG;
@@ -60,7 +60,9 @@ window.LongCatch = window.LongCatch || (() => {
   // F holds active stroke faults; each one bends the healthy path toward a typical error.
   function arm(p, P, F) {
     const c = P.catch, s = P.slip, L = P.length;
-    const exit = P.exit;
+    const exit = P.exit, fin = CONFIG.finish;
+    // Stroke depth: -1 keeps the hand tucked close to the body, +1 pulls deep with a straighter arm.
+    const d = 2 * P.depth - 1;
     const midRec = exit + (1 - exit) * 0.4, lateRec = exit + (1 - exit) * 0.72;
     const over = F.overreach ? 1 : 0, cross = F.crossover ? 1 : 0;
     // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
@@ -68,18 +70,19 @@ window.LongCatch = window.LongCatch || (() => {
     const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
     const x = keyed(p, [
       [0, enterX + 0.08 * over], [0.12, glideX - 0.01 + 0.08 * over], [0.30, lerp(0.10, 0.30, c) - 0.12 * s + 0.10 * over],
-      [0.48, -0.04 - 0.08 * s], [0.62, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
+      [0.50, -0.04 - 0.08 * s], [fin, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
       [midRec, -0.10], [lateRec, 0.22], [1, enterX + 0.08 * over],
     ]);
     // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
     const out = keyed(p, [
-      [0, 0.025], [0.12, 0.035], [0.30, 0.07 + 0.08 * (1 - c)], [0.48, 0.10],
-      [0.62, 0.08], [exit, 0.10], [midRec, 0.30], [lateRec, 0.22], [1, 0.025],
-    ]) - cross * keyed(p, [[0, 0.33], [0.12, 0.31], [0.30, 0.15], [0.48, 0.02], [exit, 0], [lateRec, 0.08], [1, 0.33]]);
+      [0, 0.025], [0.12, 0.035], [0.30, 0.07 + 0.08 * (1 - c)], [0.50, 0.10],
+      [fin, 0.08], [exit, 0.10], [midRec, 0.30], [lateRec, 0.22], [1, 0.025],
+    ]) - cross * keyed(p, [[0, 0.33], [0.12, 0.31], [0.30, 0.15], [0.50, 0.02], [exit, 0], [lateRec, 0.08], [1, 0.33]]);
     // Mid-pull hand sits about a forearm below the shoulder, so the elbow stays bent near 90-110 deg.
     const height = keyed(p, [
-      [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.30, lerp(-0.26, -0.32, c)], [0.48, -0.37],
-      [0.62, -0.26], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12], [1, enterH + 0.03 * over],
+      [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.30, lerp(-0.26, -0.32, c) - 0.05 * d],
+      [0.50, -0.37 - 0.09 * d], [fin, -0.26 - 0.05 * d], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12],
+      [1, enterH + 0.03 * over],
     ]);
     // Recovery is elbow-led: the elbow arcs highest while the relaxed hand swings below and outside it.
     const elbow = [
@@ -92,11 +95,13 @@ window.LongCatch = window.LongCatch || (() => {
     // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
     const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
-    const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < 0.62 ? 2 : p < exit ? 3 : 4;
+    const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < fin ? 2 : p < exit ? 3 : 4;
+    // The elbow guide dips through the catch so the elbow sits a little lower than in the glide.
+    const pole = lerp(-0.35, 1, c) - 0.35 * bump(p, 0.06, 0.46);
     return {
-      x, out, height, elbow, recovery, pole: lerp(-0.35, 1, c), shrug: front,
+      x, out, height, elbow, recovery, pole, shrug: front,
       wrist: wrist * D, under, stage,
-      back: bump(p, 0.10, 0.64), triceps: bump(p, 0.50, exit + 0.04),
+      back: bump(p, 0.10, fin + 0.02), triceps: bump(p, fin - 0.12, exit + 0.04),
     };
   }
 

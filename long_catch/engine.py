@@ -8,7 +8,7 @@ from typing import Any
 
 from nicegui import ui
 
-from long_catch.model import PHASE_LABELS
+from long_catch.model import FINISH_START, PHASE_LABELS
 from long_catch.swimmer import BODY, SceneIds
 from long_catch.theme import PALETTE, STATIC_DIR
 
@@ -20,6 +20,7 @@ def engine_script() -> str:
         'colors': {'hold': PALETTE.hold, 'slip': PALETTE.slip, 'skin': PALETTE.skin},
         'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
+        'finish': FINISH_START,
         'arm': [BODY.upper_arm, BODY.forearm],
     }
     source = (STATIC_DIR / 'engine.js').read_text(encoding='utf-8')

@@ -6,7 +6,7 @@ Long Catch is a local, visual front-crawl explorer. Adjust the stroke, watch a
 ## What you can explore
 
 - Four stroke presets, plus controls for stroke rate, catch quality, body roll,
-  slip, drive balance, entry angle, and kick amplitude.
+  slip, stroke depth, entry angle, drive balance, and kick amplitude.
 - Eight switchable stroke faults, individually or in combination, with
   coaching cues: crossover, over-rotation, over-extension, flat hips, sinking
   legs, snaking, knee kick, and spinning arms.
@@ -51,9 +51,10 @@ while using the app; press Ctrl+C there to stop the server.
   the settings as **Custom**.
 - Adjust stroke rate, catch quality, body roll, slip, and drive balance.
   The stroke metrics update as you change them.
-- Set **Entry angle** from 0° (near the surface) toward 40° (toward the pool
-  floor). Change **Kick amplitude** from still legs to a stronger flutter.
-  These two controls change the animation only.
+- Set **Stroke depth** from a pull tucked close to the body to a deep pull
+  with a straighter arm. Set **Entry angle** from 0° (near the surface)
+  toward 40° (toward the pool floor). Change **Kick amplitude** from still
+  legs to a stronger flutter. These three controls change the animation only.
 - Enable one or more **Stroke faults** to see common form errors and their
   coaching cues. **Clear** turns all faults off.
 

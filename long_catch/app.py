@@ -49,6 +49,14 @@ SLIDERS: tuple[SliderSpec, ...] = (
     SliderSpec('roll', 'Body roll', '°', 'Peak rotation of the chest about the long axis.'),
     SliderSpec('slip', 'Slip', '%', 'How much the hand slides through the water instead of holding it.'),
     SliderSpec(
+        'depth',
+        'Stroke depth',
+        '%',
+        'How deep the hand travels under the body during the pull.',
+        'close to body',
+        'deep',
+    ),
+    SliderSpec(
         'entry',
         'Entry angle',
         '°',

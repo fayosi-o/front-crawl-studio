@@ -50,8 +50,8 @@ def test_arms_are_half_a_cycle_apart(phase, expected):
         (0.1199, Phase.ENTRY),
         (0.12, Phase.CATCH),
         (0.30, Phase.PULL),
-        (0.62, Phase.FINISH),
-        (0.7201, Phase.RECOVERY),
+        (0.66, Phase.FINISH),
+        (0.7401, Phase.RECOVERY),
         (-0.05, Phase.RECOVERY),
     ],
 )
@@ -61,8 +61,8 @@ def test_phase_to_step_boundaries(phase, expected):
 
 def test_longer_stroke_stays_underwater_longer():
     assert exit_phase(1.0) > exit_phase(0.0)
-    assert phase_to_step(0.74, length=1.0) == Phase.FINISH
-    assert phase_to_step(0.74, length=0.0) == Phase.RECOVERY
+    assert phase_to_step(0.76, length=1.0) == Phase.FINISH
+    assert phase_to_step(0.76, length=0.0) == Phase.RECOVERY
 
 
 def test_path_length_shortens_with_rate():
@@ -174,6 +174,15 @@ def test_entry_angle_is_visual_only_and_passed_in_degrees():
     assert ViewState(settings=steep).render_params()['entry'] == 40
     with pytest.raises(ValueError):
         StrokeSettings(entry=41)
+
+
+def test_stroke_depth_is_visual_only_and_normalized():
+    shallow = StrokeSettings(depth=0)
+    deep = shallow.with_values(depth=100)
+    assert shallow.metrics() == deep.metrics()
+    assert ViewState(settings=deep).render_params()['depth'] == 1
+    with pytest.raises(ValueError):
+        StrokeSettings(depth=101)
 
 
 def test_every_fault_costs_distance_and_unknown_faults_are_rejected():

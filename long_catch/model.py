@@ -58,7 +58,7 @@ PHASE_LABELS: dict[Phase, str] = {
 # (hand exit) depends on path length; see `exit_phase`.
 CATCH_START = 0.12
 PULL_START = 0.30
-FINISH_START = 0.62
+FINISH_START = 0.66
 
 
 def path_length(stroke_rate: float) -> float:
@@ -68,7 +68,7 @@ def path_length(stroke_rate: float) -> float:
 
 def exit_phase(length: float) -> float:
     """Phase where the hand leaves the water; longer strokes stay in longer."""
-    return 0.68 + 0.08 * clamp(length, 0.0, 1.0)
+    return 0.70 + 0.08 * clamp(length, 0.0, 1.0)
 
 
 def phase_boundaries(length: float) -> tuple[float, float, float, float]:
@@ -250,6 +250,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'catch': (0, 100),
     'roll': (20, 62),
     'slip': (0, 100),
+    'depth': (0, 100),
     'entry': (0, 40),
     'drive': (0, 100),
     'kick': (0, 100),
@@ -264,6 +265,7 @@ class StrokeSettings:
     catch: int = 92
     roll: int = 46
     slip: int = 8
+    depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
     entry: int = 5
     drive: int = 85
     kick: int = 45
@@ -346,6 +348,7 @@ class ViewState:
             'slip': slip,
             'drive': s.drive / 100,
             'kick': s.kick / 100,
+            'depth': s.depth / 100,
             'entry': s.entry,
             'roll': s.roll,
             'emphasis': self.emphasis,
