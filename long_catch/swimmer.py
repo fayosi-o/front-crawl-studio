@@ -105,7 +105,9 @@ class SwimmerBuilder:
         with ui.scene.group().move(0, 0, -0.06):
             with self._register('chest', ui.scene.group()):
                 self._torso()
-                self._head()
+                # Pivots about the spine (chest x-axis) so the engine can turn the head to breathe.
+                with self._register('head', ui.scene.group()):
+                    self._head()
                 for side, sign in SIDES:
                     self._arm(side, sign)
             with self._register('pelvis', ui.scene.group().move(-0.36, 0, 0)):

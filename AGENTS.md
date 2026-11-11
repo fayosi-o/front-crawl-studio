@@ -17,6 +17,9 @@ serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
   the engine animates.
 - Scene coordinates: head towards +x, z up, right side towards -y, water
   surface at z = 0.
+- Natural motion in `engine.js` (breathing, heave, small per-stroke noise) is
+  visual only. It is keyed to stroke time and must never change the phase,
+  timeline, or Python metrics.
 
 ### Adding a stroke fault
 

@@ -11,6 +11,7 @@ window.LongCatch = window.LongCatch || (() => {
     sceneId: null, ids: null,   // scene element id and named object ids from Python
     params: null, faults: {},   // latest render params; active faults as {key: true}
     phase: 0,                   // right-arm cycle phase in [0, 1)
+    cycles: 0,                  // whole cycles played; seeds the natural variation and breathing pattern
     offset: 0,                  // distance swum, used to scroll the lane ropes and pool floor
     last: null,                 // previous frame timestamp (null after a pause or seek)
     m: null,                    // resolved meshes and per-arm IK scratch objects
@@ -27,6 +28,9 @@ window.LongCatch = window.LongCatch || (() => {
   const wrap = p => ((p % 1) + 1) % 1;
   const bump = (p, a, b) => (p > a && p < b ? Math.sin(Math.PI * (p - a) / (b - a)) : 0);  // 0→1→0 over (a, b)
   const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);  // '#rrggbb' → [r, g, b] in 0–1
+  // Smooth value noise in [-1, 1]: one random value per whole t, eased between neighbours.
+  const hash = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return 2 * (v - Math.floor(v)) - 1; };
+  const noise = (t, seed) => { const i = Math.floor(t); return lerp(hash(i, seed), hash(i + 1, seed), smooth(t - i)); };
   const C = { hold: rgb(CONFIG.colors.hold), slip: rgb(CONFIG.colors.slip), skin: rgb(CONFIG.colors.skin) };
   const EMPHASIS = { back: [1, 0, 0], triceps: [0, 1, 0], core: [0, 0, 1], balanced: [0.55, 0.55, 0.55] };
   const PHASES = CONFIG.phases;
@@ -115,6 +119,30 @@ window.LongCatch = window.LongCatch || (() => {
     if (P.rush >= 1) return p;
     const exit = P.exit, early = exit * P.rush;
     return p < early ? p * exit / early : exit + (p - early) * (1 - exit) / (1 - early);
+  }
+
+  // ---- natural motion ---------------------------------------------------------
+  // Visual only: these never touch the phase, the timeline, or the Python metrics.
+  // Variation is keyed to stroke time (cycles + phase), so it holds still while paused.
+
+  // Bilateral breathing every third stroke. The head turns with the roll as the breathing-side
+  // arm pulls through and finishes, and is back down before that hand enters again.
+  // Returns -1..1: negative turns the face to the right (-y), positive to the left.
+  function breathing(P) {
+    const t = S.cycles + S.phase, exit = P.exit;
+    const turnWindow = p => keyed(p, [[exit - 0.36, 0], [exit - 0.16, 1], [exit + 0.03, 1], [exit + 0.18, 0]]);
+    const breathes = n => ((n % 3) + 3) % 3 === 0;  // n counts hand entries: right even, left odd
+    const right = breathes(2 * Math.floor(t)) ? turnWindow(S.phase) : 0;
+    const left = breathes(2 * Math.floor(t - 0.5) + 1) ? turnWindow((S.phase + 0.5) % 1) : 0;
+    return left - right;
+  }
+
+  // No two strokes are identical: nudge the wrist target by a centimetre or so, drifting smoothly.
+  function vary(a, t, seed) {
+    const k = 0.014;
+    a.x += k * noise(t, seed);
+    a.out += k * noise(t, seed + 1);
+    a.height += k * noise(t, seed + 2);
   }
 
   // ---- scene setup and cameras ------------------------------------------------
@@ -511,11 +539,13 @@ window.LongCatch = window.LongCatch || (() => {
   }
 
   // Healthy flutter drives from the hips; a knee kick drops the thighs and bends the knees hard.
-  function poseLegs(m, P, F) {
+  // Each beat varies a little in size and timing (t is stroke time; zero kick stays still).
+  function poseLegs(m, P, F, t) {
     const kick = 2 * Math.PI * 3 * S.phase;
-    const knees = F.kneekick ? 1 : 0, k = knees ? Math.max(P.kick, 0.6) : P.kick;
+    const knees = F.kneekick ? 1 : 0, base = knees ? Math.max(P.kick, 0.6) : P.kick;
     for (const [side, offset] of [['R', 0], ['L', Math.PI]]) {
-      const angle = kick + offset;
+      const k = base * (1 + 0.12 * noise(3 * t, offset ? 52 : 51));
+      const angle = kick + offset + 0.15 * noise(2 * t, offset ? 62 : 61);
       const hip = knees ? -0.12 * k + 0.06 * k * Math.sin(angle) : 0.26 * k * Math.sin(angle);
       const knee = knees ? 0.2 + 1.3 * k * Math.max(0, Math.sin(angle - 0.3)) : 0.45 * k * Math.max(0, Math.sin(angle - 0.7));
       m['leg' + side].rotation.set(0, hip, 0);
@@ -564,32 +594,44 @@ window.LongCatch = window.LongCatch || (() => {
     const P = S.params, m = S.m;
     const scaled = P.playing ? dt * (P.playback || 1) : 0;
     if (P.playing) {
-      S.phase = (S.phase + scaled / (120 / P.rate)) % 1;
+      const next = S.phase + scaled / (120 / P.rate);
+      if (next >= 1) S.cycles++;
+      S.phase = next % 1;
       S.offset += P.speed * scaled;
     }
     // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
     // Flat hips moves the rotation into the shoulders; sinking legs pitches the chest up and the pelvis down.
-    const F = S.faults, w = 2 * Math.PI;
+    // Breathing deepens the roll a few degrees toward the breathing side; roll size also wanders slightly.
+    const F = S.faults, w = 2 * Math.PI, st = S.cycles + S.phase, breath = breathing(P);
     const chestGain = F.overrotation ? 1.65 : F.flathips ? 1.25 : 1;
-    const roll = Math.min(80, P.roll * chestGain) * D;
+    const roll = Math.min(80, P.roll * chestGain * (1 + 0.04 * noise(2 * st, 11))) * D;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
     const hipShare = F.flathips ? 0.06 : F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
-    const bodyRoll = roll * Math.cos(w * (S.phase - ROLL_PEAK));
+    const bodyRoll = roll * Math.cos(w * (S.phase - ROLL_PEAK)) + 6 * D * breath;
     const pitch = F.sinking ? -14 * D : 0, legPitch = F.sinking ? -24 * D : 0;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
-    const yaw = F.snaking ? 7 * D * Math.sin(w * (S.phase - ROLL_PEAK)) : 0;
+    const yaw = (F.snaking ? 7 * D * Math.sin(w * (S.phase - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
     m.pelvis.rotation.set(roll * hipShare * Math.cos(w * (S.phase - ROLL_PEAK + lead)), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
     m.pelvis.position.x = -0.36 * Math.cos(pitch);
-    m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0);
+    // The body rides a little higher as each arm presses back (twice per cycle), with a slight drift.
+    const heave = 0.008 * Math.cos(2 * w * (S.phase - 0.4)) + 0.004 * noise(1.5 * st, 21);
+    m.chest.position.z = heave;
+    m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0) + 0.6 * heave;
+    // The head stays steady while the body rolls beneath it (the neck takes up half the roll),
+    // then turns with the roll to breathe, one goggle staying in the water.
+    const steady = -0.5 * bodyRoll, turn = Math.sign(breath) * 78 * D - bodyRoll;
+    m.head.rotation.x = clamp(lerp(steady, turn, Math.abs(breath)), -70 * D, 70 * D) + 1.5 * D * noise(3 * st, 41);
 
     const right = arm(rushed(S.phase, P), P, F), left = arm(rushed((S.phase + 0.5) % 1, P), P, F);
+    vary(right, st, 1);
+    vary(left, st + 0.5, 5);
     const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
     poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
-    poseLegs(m, P, F);
+    poseLegs(m, P, F, st);
     updateTrails(m, P, scaled);
     updateWater(m, P, scaled);
     fitView();

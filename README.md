@@ -47,6 +47,7 @@ external services or network assets.
 | **Water feedback** | Hands and forearms turn teal when holding water and coral when slipping. Amber shows the selected muscle emphasis. |
 | **Cameras** | Orbit freely, or add a second Top, Side, Front or Below view in split view. |
 | **Pool** | A gently moving water surface with a bow wave at the head, over a tiled floor with drifting caustics. |
+| **Natural motion** | Bilateral breathing every third stroke, a steady head, a slight body heave, and small stroke-to-stroke and kick-to-kick variation. Visual only; the metrics are unaffected. |
 | **Motion trails** | Fading trails for the hands, feet or both, adjustable from 0.5 to 5 seconds. |
 | **Stroke metrics** | Distance per stroke, strokes per 25 m and time per 25 m, updated live. |
 | **Timeline** | Scrub or step through entry, catch, pull, finish and recovery, at ¼×, ½× or 1× speed. |
