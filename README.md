@@ -46,7 +46,7 @@ external services or network assets.
 | **Stroke faults** | Crossover, over-rotation, over-extension, flat hips, sinking legs, snaking, knee kick and spinning arms. Combine them freely; each adds a short coaching cue. |
 | **Water feedback** | Hands and forearms turn teal when holding water and coral when slipping. Amber shows the selected muscle emphasis. |
 | **Cameras** | Orbit freely, or add a second Top, Side, Front or Below view in split view. |
-| **Pool** | A gently moving water surface with a bow wave at the head, over a tiled floor with a lane line and drifting caustics. |
+| **Pool** | A gently moving water surface with a bow wave at the head, over a tiled floor with drifting caustics. |
 | **Motion trails** | Fading trails for the hands, feet or both, adjustable from 0.5 to 5 seconds. |
 | **Stroke metrics** | Distance per stroke, strokes per 25 m and time per 25 m, updated live. |
 | **Timeline** | Scrub or step through entry, catch, pull, finish and recovery, at ¼×, ½× or 1× speed. |

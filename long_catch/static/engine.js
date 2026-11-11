@@ -261,7 +261,7 @@ window.LongCatch = window.LongCatch || (() => {
   // ---- water ------------------------------------------------------------------
 
   // Surface: a fine grid with a gentle travelling swell, a small bow wave at the head, and a soft sheen.
-  // Floor: tiles, a lane line, and two layers of drifting caustics, well below the swimmer.
+  // Floor: tiles and two layers of drifting caustics, well below the swimmer.
   // Every layer fades out at its edges so the pool has no hard slab outline.
   const SURFACE = { w: 10, h: 4, nx: 120, ny: 48, x: -0.5 };
   const FLOOR_Z = -2.1;
@@ -357,7 +357,6 @@ window.LongCatch = window.LongCatch || (() => {
     const flat = { transparent: true, depthWrite: false, alphaMap: edge };
     const tiles = canvasTexture(256, drawTiles, [SURFACE.w, SURFACE.h]);
     layer(SURFACE.w, SURFACE.h, FLOOR_Z, new THREE.MeshBasicMaterial({ ...flat, map: tiles }), -3);
-    layer(SURFACE.w, 0.24, FLOOR_Z + 0.004, new THREE.MeshBasicMaterial({ ...flat, color: CONFIG.colors.laneLine }), -2);
     const glow = canvasTexture(128, drawCaustics);
     const caustics = [[4, 1.6, 0.07], [6.5, 2.6, 0.05]].map(([rx, ry, opacity], i) => {
       const map = glow.clone();

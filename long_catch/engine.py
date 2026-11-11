@@ -23,7 +23,6 @@ def engine_script() -> str:
             'skin': PALETTE.skin,
             'water': PALETTE.water,
             'floor': PALETTE.floor,
-            'laneLine': PALETTE.lane_line,
         },
         'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
