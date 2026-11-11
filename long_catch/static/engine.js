@@ -418,11 +418,13 @@ window.LongCatch = window.LongCatch || (() => {
     return true;
   }
 
-  // Move the swell and bow wave, and scroll the floor back at swim speed (so the pool slides past).
+  // Move the swell, bow wave, wake, kick wash, and splash ripples, and scroll the floor back at
+  // swim speed (so the pool slides past).
   function updateWater(m, P, dt) {
     if (!setupWater(m)) return;
-    const pool = m.pool, t = (pool.time += dt), off = S.offset;
+    const pool = m.pool, t = (pool.time += dt), off = S.offset, fx = m.fx;
     const pos = m.water.geometry.attributes.position, a = pos.array;
+    const pace = Math.min(1, P.speed), ripples = fx ? fx.ripples : [], wash = fx ? fx.wash : 0, footX = fx ? fx.footX : -1.6;
     for (let i = 0; i < pos.count; i++) {
       const x = a[3 * i] + SURFACE.x + off, y = a[3 * i + 1], lx = a[3 * i] + SURFACE.x;
       const swell = 0.009 * Math.sin(2.1 * x + 1.3 * y + 1.7 * t) + 0.006 * Math.sin(3.4 * x - 2.2 * y + 2.6 * t)
@@ -430,7 +432,28 @@ window.LongCatch = window.LongCatch || (() => {
       // Bow wave lifts the water at the head; a shallow trough follows at the shoulders.
       const bow = 0.018 * Math.exp(-((lx - 0.62) ** 2) / 0.02 - y * y / 0.03)
         - 0.012 * Math.exp(-((lx - 0.3) ** 2) / 0.03 - y * y / 0.09);
-      a[3 * i + 2] = swell + bow * Math.min(1, P.speed);
+      let h = swell + bow * pace;
+      // Kelvin-style V wake: crests spread back from the head at about 20° and hold still relative to
+      // the swimmer, fading with distance.
+      const d = 0.55 - lx;
+      if (d > 0) {
+        const wing = Math.abs(y) - 0.36 * d, width = 0.05 + 0.04 * d;
+        h += 0.006 * pace * Math.exp(-d / 2.4 - (wing * wing) / (width * width)) * Math.cos(12 * d);
+      }
+      // Kick wash: choppy water over and behind the feet that is carried back with the water.
+      const behind = footX + 0.15 - lx;
+      if (wash > 0.001 && behind > 0 && behind < 2) {
+        const spread = 0.12 + 0.12 * behind;
+        h += 0.007 * wash * Math.exp(-behind / 0.7 - (y * y) / (spread * spread))
+          * Math.sin(17 * x + 9 * t) * Math.sin(13 * y - 6 * t);
+      }
+      // Ring ripples travel out from each splash and lose height as they spread and age.
+      for (const [rx, ry, age, s] of ripples) {
+        const front = FX.rippleSpeed * age + 0.03, gap = Math.hypot(lx - rx, y - ry) - front;
+        if (gap > 0.3 || gap < -0.3) continue;
+        h += (s * Math.exp(-1.8 * age - (gap * gap) / 0.012) * Math.cos(20 * gap)) / (1 + 4 * front);
+      }
+      a[3 * i + 2] = h;
     }
     pos.needsUpdate = true;
     m.water.geometry.computeVertexNormals();
@@ -439,6 +462,185 @@ window.LongCatch = window.LongCatch || (() => {
       const r = map.repeat.x / SURFACE.w, s = i ? -1 : 1;
       map.offset.set(wrap(off * r + 0.02 * s * t), wrap(0.015 * t * s));
     });
+  }
+
+  // ---- water reaction ---------------------------------------------------------
+
+  // The water answers the swimmer's measured limb motion, so the controls drive it indirectly:
+  // a faster rate or steeper entry hits the surface harder, slip makes the pulling hand churn
+  // bubbles instead of holding still water, and a bigger or knee-led kick breaks the surface more.
+  // Visual only: nothing here feeds back into the phase, the pose, or the metrics.
+  // Positions are in the swimmer's frame, where the still pool water streams back at swim speed.
+  // Particles are [x, y, z, vx, vy, vz, age, life].
+  const FX = { maxRipples: 24, maxBubbles: 420, maxSpray: 160, rippleSpeed: 0.55, gravity: 9.81, rise: 0.28 };
+  const rand = (a, b) => a + (b - a) * Math.random();
+  const spawnCount = rate => Math.floor(rate + Math.random());
+
+  function makeParticles(group, max, size, color) {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(max * 3), col = new Float32Array(max * 4);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.setDrawRange(0, 0);
+    S.puff = S.puff || puffTexture();
+    const points = new THREE.Points(geo, new THREE.PointsMaterial({
+      size, map: S.puff, vertexColors: true, transparent: true, depthWrite: false,
+    }));
+    points.frustumCulled = false;
+    points.renderOrder = 4;
+    group.add(points);
+    return { max, list: [], geo, pos, col, color };
+  }
+
+  // Build the ripple list, particle systems, and per-limb trackers once per scene.
+  function setupSplash(m) {
+    if (m.fx) return m.fx;
+    const scene = S.el.scene, old = scene.getObjectByName('lc-water-fx');
+    if (old) scene.remove(old);
+    const group = new THREE.Group();
+    group.name = 'lc-water-fx';
+    scene.add(group);
+    m.fx = {
+      ripples: [], wash: 0, footX: -1.6,
+      bubbles: makeParticles(group, FX.maxBubbles, 0.05, [0.85, 0.96, 1]),
+      spray: makeParticles(group, FX.maxSpray, 0.045, [1, 1, 1]),
+      limbs: ALL_LIMBS.map(limb => ({
+        limb, hand: limb.key.startsWith('hand'), known: false, air: 0, wet: 0,
+        pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(),
+      })),
+    };
+    return m.fx;
+  }
+
+  function emit(sys, x, y, z, vx, vy, vz, life) {
+    if (sys.list.length < sys.max) sys.list.push([x, y, z, vx, vy, vz, 0, life]);
+  }
+
+  function ripple(fx, x, y, strength) {
+    if (fx.ripples.length >= FX.maxRipples) fx.ripples.shift();
+    fx.ripples.push([x, y, 0, Math.min(strength, 0.014)]);
+  }
+
+  // Surface crossings, carried air, slip churn, and kick wash for one fingertip or toe.
+  // `vel` is the limb's velocity in the swimmer's frame; relative to the water add the swim speed to x.
+  function limbWater(fx, l, P, dt, slipness, flow) {
+    const p = l.pos, v = l.vel, speed = v.length();
+    if (l.prev.z > 0 && p.z <= 0) {
+      // Entry: a harder, more vertical hit throws more spray and a bigger ring, and drags air down.
+      const impact = Math.max(0, -v.z) + 0.25 * speed;
+      ripple(fx, p.x, p.y, 0.004 + 0.005 * impact);
+      const n = Math.round(clamp((l.hand ? 3 : 1) + 5 * impact, 0, 16));
+      for (let i = 0; i < n; i++) {
+        emit(fx.spray, p.x, p.y, 0.01, -0.5 * flow + rand(-0.4, 0.4), rand(-0.45, 0.45), rand(0.35, 0.6 + 0.6 * impact), 0.7);
+      }
+      l.air = clamp(0.3 + 0.5 * impact, 0, 1.2);
+    } else if (l.prev.z <= 0 && p.z > 0) {
+      // Exit: a smaller ring, and water left on the hand drips off during the recovery.
+      ripple(fx, p.x, p.y, 0.003 + 0.002 * speed);
+      l.wet = l.hand ? 1 : 0.4;
+    }
+    if (p.z > 0.02 && l.wet > 0) {
+      // Drips leave with the hand's own velocity and then fall freely.
+      for (let i = spawnCount(30 * l.wet * dt); i > 0; i--) {
+        emit(fx.spray, p.x, p.y + rand(-0.02, 0.02), p.z, v.x, v.y, v.z, 0.9);
+      }
+    }
+    l.wet = Math.max(0, l.wet - 1.6 * dt);
+    if (p.z >= 0) return;
+    let rate = 70 * l.air;
+    if (l.hand) {
+      // A held catch barely disturbs the water; a slipping hand tears through it pushing back.
+      rate += 140 * slipness * clamp(-v.x - 0.4, 0, 2);
+    } else {
+      const near = clamp(1 + p.z / 0.25, 0, 1);
+      fx.washTarget += near * Math.abs(v.z);
+      rate += 40 * P.kick * near * clamp(Math.abs(v.z) - 0.5, 0, 2);
+    }
+    l.air = Math.max(0, l.air - 2.5 * dt);
+    for (let i = spawnCount(rate * dt); i > 0; i--) {
+      // Bubbles start near the water's own velocity and keep a little of the limb's push.
+      emit(fx.bubbles, p.x + rand(-0.03, 0.03), p.y + rand(-0.03, 0.03), p.z + rand(-0.02, 0.02),
+        -flow + 0.3 * (v.x + flow), 0.3 * v.y + rand(-0.1, 0.1), 0.3 * v.z, rand(1.2, 2.2));
+    }
+  }
+
+  // Keep the particles for which `keep` returns true, in place.
+  function compact(list, keep) {
+    let n = 0;
+    for (const q of list) if (keep(q)) list[n++] = q;
+    list.length = n;
+  }
+
+  function stepFx(fx, flow, dt) {
+    const drag = Math.min(1, 4 * dt);
+    // Bubbles: the water drags them back toward its own speed while buoyancy settles them into a
+    // slow wobbling rise; they burst with a tiny ring at the surface.
+    compact(fx.bubbles.list, q => {
+      q[3] += (-flow - q[3]) * drag;
+      q[4] += -q[4] * drag + rand(-0.6, 0.6) * dt;
+      q[5] += (FX.rise - q[5]) * Math.min(1, 3 * dt);
+      q[0] += q[3] * dt; q[1] += q[4] * dt; q[2] += q[5] * dt; q[6] += dt;
+      if (q[2] > -0.005) {
+        if (Math.random() < 0.05) ripple(fx, q[0], q[1], 0.0012);
+        return false;
+      }
+      return q[6] < q[7];
+    });
+    // Spray and drips: ballistic under gravity until they land back in the water.
+    compact(fx.spray.list, q => {
+      q[5] -= FX.gravity * dt;
+      q[0] += q[3] * dt; q[1] += q[4] * dt; q[2] += q[5] * dt; q[6] += dt;
+      if (q[2] < 0) {
+        if (Math.random() < 0.08) ripple(fx, q[0], q[1], 0.0015);
+        return false;
+      }
+      return q[6] < q[7];
+    });
+    // Rings ride back with the water and are dropped once they have faded.
+    for (const r of fx.ripples) { r[0] -= flow * dt; r[2] += dt; }
+    compact(fx.ripples, r => r[2] < 2.2);
+  }
+
+  function drawParticles(sys, alpha) {
+    const [r, g, b] = sys.color, list = sys.list;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i], fade = Math.min(1, 3 * (1 - q[6] / q[7]));
+      sys.pos[3 * i] = q[0]; sys.pos[3 * i + 1] = q[1]; sys.pos[3 * i + 2] = q[2];
+      sys.col[4 * i] = r; sys.col[4 * i + 1] = g; sys.col[4 * i + 2] = b; sys.col[4 * i + 3] = alpha * fade;
+    }
+    sys.geo.attributes.position.needsUpdate = true;
+    sys.geo.attributes.color.needsUpdate = true;
+    sys.geo.setDrawRange(0, list.length);
+  }
+
+  // Measure each limb, react to the water, and advance ripples and particles; frozen while paused.
+  function updateSplash(m, P, dt, slipness) {
+    if (!m.pool) return;
+    const fx = setupSplash(m), flow = P.speed;
+    if (S.trailReset) {
+      fx.ripples.length = fx.bubbles.list.length = fx.spray.list.length = 0;
+      fx.wash = 0;
+      for (const l of fx.limbs) { l.known = false; l.air = l.wet = 0; }
+    }
+    if (dt > 0) {
+      fx.washTarget = 0;
+      let feetX = 0, feet = 0;
+      for (const l of fx.limbs) {
+        m[l.limb.joint].localToWorld(l.pos.set(...l.limb.tip));
+        if (l.known) {
+          l.vel.subVectors(l.pos, l.prev).divideScalar(dt);
+          limbWater(fx, l, P, dt, slipness, flow);
+        }
+        if (!l.hand) { feetX += l.pos.x; feet++; }
+        l.prev.copy(l.pos);
+        l.known = true;
+      }
+      fx.footX = feetX / feet;
+      fx.wash += (clamp(fx.washTarget / 2, 0, 1.5) - fx.wash) * Math.min(1, 3 * dt);
+      stepFx(fx, flow, dt);
+    }
+    drawParticles(fx.bubbles, 0.7);
+    drawParticles(fx.spray, 0.9);
   }
 
   // ---- split view -------------------------------------------------------------
@@ -649,6 +851,7 @@ window.LongCatch = window.LongCatch || (() => {
     poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F, st);
+    updateSplash(m, P, scaled, slipness);
     updateTrails(m, P, scaled);
     updateWater(m, P, scaled);
     fitView();

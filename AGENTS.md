@@ -20,6 +20,9 @@ serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
 - Natural motion in `engine.js` (breathing, heave, small per-stroke noise) is
   visual only. It is keyed to stroke time and must never change the phase,
   timeline, or Python metrics.
+- The water reaction in `engine.js` (ripples, spray, bubbles, wake, kick wash)
+  reads the measured limb motion and is also visual only: it must never feed
+  back into the pose, phase, or metrics.
 
 ### Adding a stroke fault
 
