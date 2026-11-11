@@ -17,6 +17,7 @@ It demonstrates:
 - switchable stroke faults (crossover, over-rotation, over-extension, flat hips,
   sinking legs, snaking, knee kick, spinning arms) with coaching cues;
 - simple estimated back, triceps, and hip/core contribution;
+- split view with a second fixed camera, and ghost motion trails for hands or feet;
 - rough distance-per-stroke and pace estimates.
 
 The swimmer has a tapered torso and limbs, rounded joints, hands, feet, and
@@ -119,6 +120,13 @@ python main.py
   - *Spinning arms*: the arms rush the underwater phase faster than the hand
     can hold the water, so it slips. The timeline squeezes to match.
   *Clear* switches them all off.
+- **View** card:
+  - *Split view* (or V) adds a second, fixed camera beside the orbit view:
+    Top, Side, Front, or Below.
+  - *Ghost trail* leaves a smoke-like path behind the hands, the feet, or
+    both, so you can trace their motion through the water.
+  - *Trail length* runs from a 0.5 s wisp to a 5 s trail. The trail freezes
+    on pause and clears when you step or scrub.
 - **Transport dock** (bottom of the 3D view): play/pause, step ±5% (stepping
   pauses playback), slow motion at ¼× or ½×, and a camera reset.
 - **Phase timeline:** shows the right arm's entry, catch, pull, finish, and
@@ -131,8 +139,8 @@ python main.py
 - **Amber patches** show the estimated muscle emphasis (Back, Triceps,
   Hips/core, or Balanced).
 - Drag to orbit and scroll to zoom.
-- **Keyboard:** Space play/pause · ←/→ step · 1–4 presets · C reset camera
-  (ignored while a slider has focus).
+- **Keyboard:** Space play/pause · ←/→ step · 1–4 presets · C reset camera ·
+  V split view (ignored while a slider has focus).
 
 ## Development
 

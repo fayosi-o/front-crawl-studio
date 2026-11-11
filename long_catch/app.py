@@ -16,6 +16,7 @@ from long_catch.model import (
     PLAYBACK_SPEEDS,
     PRESETS,
     SETTING_RANGES,
+    TRAIL_SECONDS,
     Metrics,
     Phase,
     ViewState,
@@ -68,6 +69,8 @@ SLIDERS: tuple[SliderSpec, ...] = (
 assert {spec.key for spec in SLIDERS} == set(SETTING_RANGES)
 
 EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
+ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below'}
+TRAIL_LABELS = {'off': 'Off', 'hands': 'Hands', 'feet': 'Feet', 'both': 'Both'}
 assert set(EMPHASIS_LABELS) == set(EMPHASES)
 
 PLAYBACK_LABELS = {0.25: '¼×', 0.5: '½×', 1.0: '1×'}
@@ -113,6 +116,8 @@ class LongCatchPage:
         self.segments: list[ui.element] = []
         self._applying_preset = False
         self._segment_layout: tuple[float, ...] = ()
+        self.second_view: ui.scene_view | None = None
+        self._view_layout: tuple | None = None
 
     # ---- layout -------------------------------------------------------------------------------
 
@@ -127,17 +132,22 @@ class LongCatchPage:
 
     def _build_stage(self) -> None:
         with ui.element('div').classes('lc-stage'):
-            self.scene = ui.scene(
-                width=900,
-                height=700,
-                grid=False,
-                background_color=PALETTE.background,
-                fps=60,
-                camera=ui.scene.perspective_camera(fov=42),
-            )
-            with self.scene:
-                self.scene_ids = SwimmerBuilder().build()
-            self.scene.move_camera(0.6, -2.3, 0.3, -0.1, 0, -0.22, duration=0)
+            with ui.element('div').classes('lc-views') as self.views:
+                with ui.element('div').classes('lc-view'):
+                    self.scene = ui.scene(
+                        width=900,
+                        height=700,
+                        grid=False,
+                        background_color=PALETTE.background,
+                        fps=60,
+                        camera=ui.scene.perspective_camera(fov=42),
+                    )
+                    with self.scene:
+                        self.scene_ids = SwimmerBuilder().build()
+                    self.scene.move_camera(0.6, -2.3, 0.3, -0.1, 0, -0.22, duration=0)
+                    ui.label('Orbit view').classes('lc-view-label')
+                with ui.element('div').classes('lc-view lc-view-second') as self.second_pane:
+                    self.angle_label = ui.label().classes('lc-view-label')
 
             with ui.element('div').classes('lc-hud-top'):
                 with ui.element('div').classes('lc-glass lc-brand'):
@@ -210,6 +220,8 @@ class LongCatchPage:
                 )
                 emphasis.props('no-caps spread unelevated').classes('lc-segmented')
 
+            self._build_view()
+
             with ui.element('div').classes('lc-card'):
                 section_title('Estimates')
                 with ui.element('div').classes('lc-stats'):
@@ -223,8 +235,42 @@ class LongCatchPage:
 
             ui.label(
                 'Coaching estimates only — not measured, EMG, or medical data. '
-                'Drag to orbit · scroll to zoom · Space play · ←/→ step · 1–4 presets · C camera.'
+                'Drag to orbit · scroll to zoom · Space play · ←/→ step · 1–4 presets · C camera · V split.'
             ).classes('lc-footnote')
+
+    def _build_view(self) -> None:
+        with ui.element('div').classes('lc-card'):
+            with ui.row().classes('lc-card-head'):
+                section_title('View')
+                ui.switch('Split view', on_change=lambda e: self.update(split=e.value)).classes('lc-split-toggle')
+            self.angle_toggle = ui.toggle(
+                ANGLE_LABELS, value=self.view.angle, on_change=lambda e: self.update(angle=e.value)
+            )
+            self.angle_toggle.props('no-caps spread unelevated').classes('lc-segmented').tooltip('Second camera angle')
+            with ui.element('div').classes('lc-control'):
+                with ui.row().classes('lc-control-head'):
+                    ui.label('Ghost trail').classes('lc-control-label')
+                    ui.icon('info_outline').classes('lc-info').tooltip(
+                        'A fading smoke trail behind the fingertips and toes that drifts back with the water.'
+                    )
+                trail = ui.toggle(TRAIL_LABELS, value=self.view.trail, on_change=lambda e: self.update(trail=e.value))
+                trail.props('no-caps spread unelevated').classes('lc-segmented')
+            with ui.element('div').classes('lc-control'):
+                with ui.row().classes('lc-control-head'):
+                    ui.label('Trail length').classes('lc-control-label')
+                    ui.element('div').classes('lc-spacer')
+                    self.trail_value = ui.label().classes('lc-value')
+                lo, hi = TRAIL_SECONDS
+                self.trail_slider = ui.slider(
+                    min=lo,
+                    max=hi,
+                    step=0.5,
+                    value=self.view.trail_seconds,
+                    on_change=lambda e: self.update(trail_seconds=float(e.value)),
+                ).props('aria-label="Trail length"')
+                with ui.row().classes('lc-control-range'):
+                    ui.label('short wisp')
+                    ui.label('long trail')
 
     def _build_faults(self) -> None:
         with ui.element('div').classes('lc-card'):
@@ -311,7 +357,39 @@ class LongCatchPage:
         self._render_faults()
         self._render_stats(metrics)
         self._render_timeline()
+        self._render_view()
         self.engine.set(self.view.render_params(metrics))
+
+    def _render_view(self) -> None:
+        """Show or hide the second camera; it is created on first use so a single view stays cheap."""
+        v = self.view
+        self.trail_value.text = f'{v.trail_seconds:.1f} s'
+        self._enable(self.trail_slider, v.trail != 'off')
+        layout = (v.split, v.angle)
+        if layout == self._view_layout:
+            return
+        split_changed = self._view_layout is None or self._view_layout[0] != v.split
+        self._view_layout = layout
+        if v.split and self.second_view is None:
+            with self.second_pane:
+                self.second_view = ui.scene_view(self.scene, camera=ui.scene.perspective_camera(fov=42), fps=60)
+        if v.split:
+            self.views.classes(add='lc-split')
+        else:
+            self.views.classes(remove='lc-split')
+        self._enable(self.angle_toggle, v.split)
+        self.angle_label.text = f'{ANGLE_LABELS[v.angle]} view'
+        if self.second_view is not None:
+            self.engine.set_view(self.second_view.id, v.angle)
+        if split_changed:
+            self.engine.fit()
+
+    @staticmethod
+    def _enable(element: ui.element, enabled: bool) -> None:
+        if enabled:
+            element.props(remove='disable')
+        else:
+            element.props('disable')
 
     def _render_transport(self) -> None:
         playing = self.view.playing

@@ -15,6 +15,11 @@ Emphasis = Literal['back', 'triceps', 'core', 'balanced']
 EMPHASES: tuple[Emphasis, ...] = ('back', 'triceps', 'core', 'balanced')
 PLAYBACK_SPEEDS: tuple[float, ...] = (0.25, 0.5, 1.0)
 HOLDING_THRESHOLD = 0.7
+ViewAngle = Literal['top', 'side', 'front', 'below']
+VIEW_ANGLES: tuple[ViewAngle, ...] = ('top', 'side', 'front', 'below')
+Trail = Literal['off', 'hands', 'feet', 'both']
+TRAILS: tuple[Trail, ...] = ('off', 'hands', 'feet', 'both')
+TRAIL_SECONDS = (0.5, 5.0)
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
@@ -258,12 +263,22 @@ class ViewState:
     playing: bool = True
     playback: float = 1.0
     faults: frozenset[str] = frozenset()
+    split: bool = False
+    angle: ViewAngle = 'top'
+    trail: Trail = 'off'
+    trail_seconds: float = 1.5
 
     def __post_init__(self) -> None:
         if self.emphasis not in EMPHASES:
             raise ValueError(f'unknown emphasis {self.emphasis!r}')
         if self.playback not in PLAYBACK_SPEEDS:
             raise ValueError(f'unsupported playback speed {self.playback!r}')
+        if self.angle not in VIEW_ANGLES:
+            raise ValueError(f'unknown view angle {self.angle!r}')
+        if self.trail not in TRAILS:
+            raise ValueError(f'unknown trail {self.trail!r}')
+        if not TRAIL_SECONDS[0] <= self.trail_seconds <= TRAIL_SECONDS[1]:
+            raise ValueError(f'trail_seconds={self.trail_seconds} outside {TRAIL_SECONDS}')
         unknown = set(self.faults) - set(FAULTS)
         if unknown:
             raise ValueError(f'unknown faults {sorted(unknown)}')
@@ -305,6 +320,8 @@ class ViewState:
             'exit': exit_phase(length),
             'faults': sorted(self.faults),
             'rush': RUSH if 'rushing' in self.faults else 1.0,
+            'trail': self.trail,
+            'trailSeconds': self.trail_seconds,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
             'speed': m.distance_per_stroke * s.rate / 60.0,
         }

@@ -3,7 +3,7 @@
 // Configuration arrives as window.LONG_CATCH_CONFIG = {colors, phases, arm}.
 window.LongCatch = window.LongCatch || (() => {
   const CONFIG = window.LONG_CATCH_CONFIG;
-  const S = { sceneId: null, ids: null, params: null, faults: {}, phase: 0, offset: 0, last: null, m: null, running: false, ui: {} };
+  const S = { sceneId: null, ids: null, params: null, faults: {}, phase: 0, offset: 0, last: null, m: null, running: false, ui: {}, trails: {}, trailReset: false };
   const D = Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -147,6 +147,111 @@ window.LongCatch = window.LongCatch || (() => {
     fitCamera();
   }
 
+  // Ghost trails: fading smoke behind the fingertips and toes that drifts back with the water.
+  // THREE comes from NiceGUI's own scene module via the page import map (no CDN).
+  let THREE = null;
+  import('nicegui-scene').then(mod => { THREE = mod.THREE; }).catch(() => {});
+  const MAX_TRAIL = 360;
+  const TRAIL_LIMBS = {
+    hands: ['R', 'L'].map(s => ({ key: 'hand' + s, joint: 'wr' + s, tip: [0.13, 0, 0], color: C.hold })),
+    feet: ['R', 'L'].map(s => ({ key: 'foot' + s, joint: 'ankle' + s, tip: [-0.15, 0, -0.01], color: rgb('#a9d4ff') })),
+  };
+  TRAIL_LIMBS.both = [...TRAIL_LIMBS.hands, ...TRAIL_LIMBS.feet];
+  const ALL_LIMBS = TRAIL_LIMBS.both;
+
+  function puffTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const g = canvas.getContext('2d'), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  function makeTrail(limb) {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(MAX_TRAIL * 3), col = new Float32Array(MAX_TRAIL * 4);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.setDrawRange(0, 0);
+    const common = { vertexColors: true, transparent: true, depthWrite: false };
+    S.puff = S.puff || puffTexture();
+    const points = new THREE.Points(geo, new THREE.PointsMaterial({ ...common, size: 0.09, map: S.puff }));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial(common));
+    for (const obj of [points, line]) { obj.frustumCulled = false; obj.renderOrder = 5; }
+    S.el.scene.add(points, line);
+    return { limb, pts: [], geo, pos, col, points, line, at: new THREE.Vector3() };
+  }
+
+  function updateTrails(m, P, dt) {
+    if (!THREE) return;
+    const wanted = TRAIL_LIMBS[P.trail] || [], seconds = P.trailSeconds || 1.5;
+    for (const limb of ALL_LIMBS) {
+      let t = S.trails[limb.key];
+      const on = wanted.includes(limb);
+      if (!on && !t) continue;
+      if (!t) t = S.trails[limb.key] = makeTrail(limb);
+      if (!on || S.trailReset) t.pts.length = 0;
+      t.points.visible = t.line.visible = on;
+      if (!on) continue;
+      if (dt > 0) {
+        const drift = P.speed * dt;
+        for (const q of t.pts) { q[0] -= drift; q[3] += dt; }
+        m[limb.joint].localToWorld(t.at.set(...limb.tip));
+        t.pts.push([t.at.x, t.at.y, t.at.z, 0]);
+      }
+      while (t.pts.length && (t.pts[0][3] > seconds || t.pts.length > MAX_TRAIL)) t.pts.shift();
+      const n = t.pts.length, [r, g, b] = limb.color;
+      for (let i = 0; i < n; i++) {
+        const q = t.pts[i], fade = Math.max(0, 1 - q[3] / seconds) ** 1.4;
+        t.pos[3 * i] = q[0]; t.pos[3 * i + 1] = q[1]; t.pos[3 * i + 2] = q[2];
+        t.col[4 * i] = r; t.col[4 * i + 1] = g; t.col[4 * i + 2] = b; t.col[4 * i + 3] = 0.85 * fade;
+      }
+      t.geo.attributes.position.needsUpdate = true;
+      t.geo.attributes.color.needsUpdate = true;
+      t.geo.setDrawRange(0, n);
+    }
+    S.trailReset = false;
+  }
+
+  // Extra scene views share the scene; the engine aims their camera from a preset angle and keeps it fitted.
+  const VIEWS = {
+    top: { dir: [0, 0, 1], up: [1, 0, 0], half: [0.62, 1.3] },
+    below: { dir: [0, 0, -1], up: [1, 0, 0], half: [0.62, 1.3] },
+    side: { dir: [0, -1, 0], up: [0, 0, 1], half: [1.3, 0.5] },
+    front: { dir: [1, 0, 0.18], up: [0, 0, 1], half: [0.7, 0.5], min: 3.4 },
+  };
+  function setView(viewId, angle) {
+    const el = typeof getElement === 'function' ? getElement(viewId) : null;
+    if (!el || !el.renderer || !el.camera) { setTimeout(() => setView(viewId, angle), 100); return; }
+    if (!S.view || S.view.el !== el) {
+      el.renderer.setClearColor(CONFIG.background);
+      el.$el.style.width = '100%';
+      el.$el.style.height = '100%';
+      const v = el.camera.position.clone();
+      S.view = { el, dir: v.clone(), target: v.clone().set(-0.25, 0, -0.12) };
+    }
+    S.view.angle = angle;
+  }
+
+  function fitView() {
+    const v = S.view;
+    if (!v) return;
+    const el = v.el, cam = el.camera, spec = VIEWS[v.angle] || VIEWS.top;
+    const w = el.$el.clientWidth, h = el.$el.clientHeight;
+    if (!w || !h) return;
+    if (el.camera_tween) { el.camera_tween.stop(); el.camera_tween = null; }
+    const t = Math.tan(cam.fov * D / 2);
+    const dist = Math.max(spec.min || 0, 1.15 * spec.half[1] / t, 1.15 * spec.half[0] / (t * w / h));
+    v.dir.set(...spec.dir).normalize();
+    cam.up.set(...spec.up);
+    cam.position.copy(v.target).addScaledVector(v.dir, dist);
+    cam.lookAt(v.target);
+  }
+
   function paint(mesh, under, slipness) {
     const col = under ? C.hold.map((v, i) => lerp(v, C.slip[i], slipness)) : C.skin;
     mesh.material.color.setRGB(col[0], col[1], col[2]);
@@ -263,8 +368,8 @@ window.LongCatch = window.LongCatch || (() => {
     S.last = t;
     if (!resolve()) return;
     const P = S.params, m = S.m;
+    const scaled = P.playing ? dt * (P.playback || 1) : 0;
     if (P.playing) {
-      const scaled = dt * (P.playback || 1);
       S.phase = (S.phase + scaled / (120 / P.rate)) % 1;
       S.offset += P.speed * scaled;
     }
@@ -291,6 +396,8 @@ window.LongCatch = window.LongCatch || (() => {
     poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F);
+    updateTrails(m, P, scaled);
+    fitView();
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
@@ -320,6 +427,7 @@ window.LongCatch = window.LongCatch || (() => {
       const rect = node.getBoundingClientRect();
       S.phase = wrap(clamp((event.clientX - rect.left) / rect.width, 0, 0.999));
       S.last = null;
+      S.trailReset = true;
     };
     document.addEventListener('pointerdown', e => {
       if (!e.target.closest || !e.target.closest('.lc-timeline')) return;
@@ -331,7 +439,9 @@ window.LongCatch = window.LongCatch || (() => {
   }
 
   // Shortcuts click the matching buttons so Python stays the single owner of state.
-  const SHORTCUTS = { ' ': '.lc-play', ArrowLeft: '.lc-step-back', ArrowRight: '.lc-step-forward', c: '.lc-reset-camera' };
+  const SHORTCUTS = {
+    ' ': '.lc-play', ArrowLeft: '.lc-step-back', ArrowRight: '.lc-step-forward', c: '.lc-reset-camera', v: '.lc-split-toggle',
+  };
   function bindKeys() {
     document.addEventListener('keydown', e => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -362,7 +472,9 @@ window.LongCatch = window.LongCatch || (() => {
       }
     },
     set(params) { S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params); },
-    step(amount) { S.phase = wrap(S.phase + amount); S.last = null; return S.phase; },
+    step(amount) { S.phase = wrap(S.phase + amount); S.last = null; S.trailReset = true; return S.phase; },
+    fit() { setTimeout(fitCamera, 60); },
+    setView,
     resetCamera,
   };
 })();

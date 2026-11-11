@@ -126,6 +126,14 @@ def test_view_state_rejects_unknown_emphasis_and_playback():
         ViewState(playback=3.0)
 
 
+def test_view_options_validate_and_trail_reaches_the_engine():
+    for bad in ({'angle': 'behind'}, {'trail': 'elbows'}, {'trail_seconds': 9.0}):
+        with pytest.raises(ValueError):
+            ViewState(**bad)
+    params = ViewState(trail='hands', trail_seconds=3.0).render_params()
+    assert (params['trail'], params['trailSeconds']) == ('hands', 3.0)
+
+
 def test_holding_follows_hold_quality_threshold():
     assert PRESETS['Long power'].metrics().holding
     assert not PRESETS['Short slipping'].metrics().holding

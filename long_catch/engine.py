@@ -18,6 +18,7 @@ def engine_script() -> str:
     """Inline <script>: engine configuration followed by the engine source."""
     config = {
         'colors': {'hold': PALETTE.hold, 'slip': PALETTE.slip, 'skin': PALETTE.skin},
+        'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
         'arm': [BODY.upper_arm, BODY.forearm],
     }
@@ -44,6 +45,14 @@ class BrowserEngine:
 
     def reset_camera(self) -> None:
         self._call('resetCamera')
+
+    def fit(self) -> None:
+        if self.started:
+            self._call('fit')
+
+    def set_view(self, view_id: int, angle: str) -> None:
+        if self.started:
+            self._call('setView', view_id, angle)
 
     @staticmethod
     def _call(method: str, *args: Any) -> None:
