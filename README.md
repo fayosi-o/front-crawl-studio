@@ -2,9 +2,8 @@
 
 Long Catch is a rapid local prototype for visualising front-crawl stroke shape.
 
-> **Status:** planning complete; the prototype is not built yet. Run
-> `/build-prototype` in Copilot Chat. See [BUILD_SPEC.md](BUILD_SPEC.md) and
-> [AGENTS.md](AGENTS.md).
+> **Status:** working rapid prototype in `main.py`. See
+> [BUILD_SPEC.md](BUILD_SPEC.md) and [AGENTS.md](AGENTS.md).
 
 It demonstrates:
 
@@ -37,7 +36,7 @@ The application is completely silent and does not use microphone or audio APIs.
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
-└── main.py                                   # Created by /build-prototype
+└── main.py                                   # The whole prototype
 ```
 
 ## Requirements
@@ -53,19 +52,31 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-On Windows PowerShell:
+On Windows, use Git Bash (or WSL with the Linux commands above):
 
-```powershell
+```bash
 py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
+source .venv/Scripts/activate
 python -m pip install -r requirements.txt
 ```
 
 ## Run
 
 ```bash
+source .venv/Scripts/activate   # or .venv/bin/activate on Linux/WSL
 python main.py
 ```
+
+## Using it
+
+- **Presets** load typical stroke shapes: Long power, Long light, Compact
+  connected, Short slipping.
+- **Sliders** adjust stroke rate, catch quality, body roll, slip, and drive
+  balance. The estimates panel updates live.
+- **Forearm and hand colour:** teal means holding water; coral means slipping.
+- **Amber patches** show the estimated muscle emphasis (Back, Triceps,
+  Hips/core, or Balanced).
+- Drag to orbit and scroll to zoom. Use Pause to freeze the stroke at any phase.
 
 Open:
 
