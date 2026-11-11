@@ -1,157 +1,131 @@
 # Long Catch
 
-Long Catch is a rapid local prototype for visualising front-crawl stroke shape.
+Long Catch is a local, visual front-crawl teaching prototype. Adjust the
+stroke, watch a procedural swimmer move, and compare the resulting coaching
+estimates. It runs in a browser but is served locally by Python and NiceGUI.
 
-> **Status:** working prototype. `main.py` is a thin entry point; the app is
-> split into a typed, tested stroke model, a swimmer geometry builder, a
-> browser animation engine, and a page controller under `long_catch/`.
-> See [BUILD_SPEC.md](BUILD_SPEC.md) and [AGENTS.md](AGENTS.md).
+> **Model limitations:** the swimmer and its estimates are illustrative, not a
+> validated biomechanical simulation. Muscle colours are teaching estimates,
+> not measured EMG, force, medical, or diagnostic data. The application is
+> completely silent and does not use microphone or audio APIs.
 
-It demonstrates:
+## What you can explore
 
-- catch quality;
-- body roll;
-- hand slip;
-- arm-driven versus hip-connected timing;
-- adjustable flutter-kick amplitude and arm entry angle;
-- switchable stroke faults (crossover, over-rotation, over-extension, flat hips,
-  sinking legs, snaking, knee kick, spinning arms) with coaching cues;
-- simple estimated back, triceps, and hip/core contribution;
-- split view with a second fixed camera, and ghost motion trails for hands or feet;
-- rough distance-per-stroke and pace estimates.
+- Four stroke presets, plus controls for stroke rate, catch quality, body roll,
+  slip, drive balance, entry angle, and kick amplitude.
+- Eight switchable stroke faults, individually or in combination, with
+  coaching cues: crossover, over-rotation, over-extension, flat hips, sinking
+  legs, snaking, knee kick, and spinning arms.
+- A 3D swimmer with an adjustable muscle-emphasis overlay and estimated
+  distance per stroke, strokes per 25 m, and time per 25 m.
+- An optional second camera (Top, Side, Front, or Below) and fading motion
+  trails for the hands, feet, or both.
 
-The swimmer has a tapered torso and limbs, rounded joints, hands, feet, and
-simple goggles. Fixed-length arm segments follow a two-bone joint solver with
-an outward elbow guide and 8–145° elbow flexion, rather than winding the
-shoulder through a full revolution. The elbow eases into full extension instead
-of snapping straight, stays bent through a high-elbow pull, and leads an
-elbow-high recovery while the body roll peaks at each catch. It is still a
-simplified teaching model, not a validated biomechanical simulation.
+The arm animation uses fixed-length segments and a two-bone joint solver to
+keep the shoulders and elbows within plausible ranges. This improves the
+visual teaching model, but does not make it an anatomical simulation.
 
-All metrics and muscle colours are coaching estimates. They are not measured
-EMG, force, medical, or diagnostic data.
+## Run locally
 
-The application is completely silent and does not use microphone or audio APIs.
+Requirements: Python 3.12.
 
-## Repository layout
-
-```text
-.
-├── .github/
-│   ├── copilot-instructions.md               # Always-on Copilot rules
-│   └── prompts/
-│       ├── build-prototype.prompt.md         # Initial build (done)
-│       └── future-production-refactor.prompt.md  # Stage 1 refactor (done)
-├── long_catch/
-│   ├── __init__.py
-│   ├── app.py                                # Page controller, control specs, rendering
-│   ├── engine.py                             # Python handle for the browser engine
-│   ├── model.py                              # Typed settings, phases, timing, estimates
-│   ├── swimmer.py                            # Procedural swimmer, water, lane ropes
-│   ├── theme.py                              # Palette and stylesheet loading
-│   └── static/
-│       ├── app.css                           # Layout and component styles
-│       └── engine.js                         # Browser animation loop and joint solver
-├── tests/
-│   └── test_model.py                         # pytest unit tests for the model
-├── AGENTS.md                                 # Current objective and hard rules
-├── BUILD_SPEC.md                             # Source-of-truth specification
-├── README.md
-├── pyproject.toml                            # pytest and Ruff configuration
-├── requirements.txt
-├── requirements-dev.txt                      # + pytest, ruff
-├── .gitignore
-└── main.py                                   # Entry point: registers the page and runs NiceGUI
-```
-
-## Requirements
-
-- Python 3.12
-- NiceGUI
-
-## Setup
+### Linux
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+python main.py
 ```
 
-On Windows, use Git Bash (or WSL with the Linux commands above):
+### Windows
+
+Use Git Bash or WSL:
 
 ```bash
 py -3.12 -m venv .venv
 source .venv/Scripts/activate
 python -m pip install -r requirements.txt
-```
-
-## Run
-
-```bash
-source .venv/Scripts/activate   # or .venv/bin/activate on Linux/WSL
 python main.py
 ```
 
-## Using it
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). Keep the terminal running
+while using the app; press Ctrl+C there to stop the server.
 
-- **Presets** load typical stroke shapes: Long power, Long light, Compact
-  connected, Short slipping.
-- **Sliders** adjust stroke rate, catch quality, body roll, slip, and drive
-  balance. The estimates panel updates live.
-- **Entry angle** (0–40°) sets how steeply the arm extends after the hand
-  enters: 0° glides flat just under the surface, and higher values point the
-  arm toward the pool floor. This changes the animation only.
-- **Kick amplitude** runs from still legs (0%) to a stronger six-beat flutter
-  kick (100%), including hip, knee, and ankle movement. This changes the
-  animation only; the arm-stroke pace estimates do not include kicking.
-- **Stroke faults** switch on common errors, alone or combined, on top of any
-  preset or slider setting. Each one shows a coaching cue and costs estimated
-  distance per stroke:
-  - *Crossover*: hands enter past the centre line.
-  - *Over-rotation*: the body rolls far past 45°, and the hips follow.
-  - *Over-extension*: the arm locks straight, the shoulder shrugs, and the
-    wrist brakes at the front before a late catch.
-  - *Flat hips*: the hips stay flat and the shoulders take more of the roll,
-    so the core no longer links the pull.
-  - *Sinking legs*: the head and chest lift up while the hips and legs sink
-    and drag low in the water.
-  - *Snaking*: the hips and legs sway side to side behind the chest.
-  - *Knee kick*: a bicycle-style kick bent from the knees, not the hips.
-  - *Spinning arms*: the arms rush the underwater phase faster than the hand
-    can hold the water, so it slips. The timeline squeezes to match.
-  *Clear* switches them all off.
-- **View** card:
-  - *Split view* (or V) adds a second, fixed camera beside the orbit view:
-    Top, Side, Front, or Below.
-  - *Ghost trail* leaves a smoke-like path behind the hands, the feet, or
-    both, so you can trace their motion through the water.
-  - *Trail length* runs from a 0.5 s wisp to a 5 s trail. The trail freezes
-    on pause and clears when you step or scrub.
-- **Transport dock** (bottom of the 3D view): play/pause, step ±5% (stepping
-  pauses playback), slow motion at ¼× or ½×, and a camera reset.
-- **Phase timeline:** shows the right arm's entry, catch, pull, finish, and
-  recovery (recovery starts later for longer strokes). Click or drag it to
-  scrub to any point in the cycle. The arm cards at the top show both arms'
-  current phases.
-- **Presets** highlight when active; any slider change shows a *Custom* badge.
-  Hover the ⓘ icons for what each control means.
-- **Forearm and hand colour:** teal means holding water; coral means slipping.
-- **Amber patches** show the estimated muscle emphasis (Back, Triceps,
-  Hips/core, or Balanced).
-- Drag to orbit and scroll to zoom.
-- **Keyboard:** Space play/pause · ←/→ step · 1–4 presets · C reset camera ·
-  V split view (ignored while a slider has focus).
+## Using the app
+
+### Adjust the stroke
+
+- Select **Long power**, **Long light**, **Compact connected**, or
+  **Short slipping** to load a starting stroke shape. Editing a control marks
+  the settings as **Custom**.
+- Adjust stroke rate, catch quality, body roll, slip, and drive balance.
+  Estimates update as you change them.
+- Set **Entry angle** from 0° (near the surface) toward 40° (toward the pool
+  floor). Change **Kick amplitude** from still legs to a stronger flutter.
+  These two controls affect the animation, not the estimates.
+- Enable one or more **Stroke faults** to see common form errors and their
+  coaching cues. **Clear** turns all faults off.
+
+### Inspect the motion
+
+- Use the **View** card to enable split view and choose a second camera angle.
+  Choose **Hands**, **Feet**, or **Both** for a fading ghost trail; set its
+  length from 0.5 to 5 seconds.
+- Drag the timeline to scrub through the right arm's entry, catch, pull,
+  finish, and recovery. The cards above the swimmer show both arms' current
+  phases.
+- Use the transport dock to play or pause, step by ±5% of the cycle, change
+  playback speed, or reset the camera. Trails freeze while paused and clear
+  when stepping or scrubbing.
+- Drag the swimmer view to orbit and scroll to zoom. Teal hands and forearms
+  indicate holding water; coral indicates slipping. Amber patches show the
+  selected estimated muscle emphasis.
+
+### Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| Space | Play or pause |
+| ← / → | Step through the stroke |
+| 1–4 | Select a preset |
+| C | Reset the camera |
+| V | Toggle split view |
+
+Shortcuts are ignored while a slider has focus.
 
 ## Development
+
+Install the optional development tools and run the checks:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
-ruff check . && ruff format --check .
+ruff check .
+ruff format --check .
 ```
 
-Open:
+## Project structure
 
 ```text
-http://127.0.0.1:8080
+.
+├── .github/
+│   ├── copilot-instructions.md
+│   └── prompts/
+├── long_catch/
+│   ├── app.py              # NiceGUI page and controls
+│   ├── engine.py           # Browser-engine setup
+│   ├── model.py            # Stroke settings, timing, and estimates
+│   ├── swimmer.py          # Procedural swimmer and pool geometry
+│   ├── theme.py            # Palette and stylesheet loading
+│   └── static/
+│       ├── app.css         # Layout and component styles
+│       └── engine.js       # Animation, camera, trails, and joint solver
+├── tests/
+│   └── test_model.py
+├── main.py                 # Application entry point
+├── BUILD_SPEC.md
+├── AGENTS.md
+├── requirements.txt
+└── requirements-dev.txt
 ```

@@ -51,10 +51,10 @@ body {
 .lc-dot-slip { background: var(--lc-slip); }
 .lc-dot-patch { background: var(--lc-patch); }
 
-.lc-arms { display: flex; gap: 2px; padding: 6px; }
-.lc-arm { padding: 4px 10px; min-width: 96px; }
+.lc-arms { display: flex; flex: 0 0 246px; width: 246px; box-sizing: border-box; gap: 2px; padding: 6px; }
+.lc-arm { flex: 0 0 115px; width: 115px; box-sizing: border-box; padding: 4px 6px; }
 .lc-arm-side { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--lc-muted); }
-.lc-arm-phase { font-size: 0.9rem; font-weight: 600; }
+.lc-arm-phase { display: block; font-size: 0.9rem; font-weight: 600; white-space: nowrap; }
 .lc-arm + .lc-arm { border-left: 1px solid rgba(231, 240, 234, 0.08); }
 
 /* ---- transport dock -------------------------------------------------------------------- */
@@ -189,6 +189,7 @@ body {
   .lc-hud-top { top: 10px; left: 10px; right: 10px; }
   .lc-brand { padding: 8px 12px; }
   .lc-title { font-size: 1.1rem; }
-  .lc-arm { min-width: 0; padding: 3px 8px; }
+  .lc-arms { flex-basis: 220px; width: 220px; }
+  .lc-arm { flex: 1 1 0; width: auto; min-width: 0; padding: 3px 5px; }
   .lc-dock { bottom: 10px; width: calc(100% - 20px); padding: 8px 8px 4px; }
 }
