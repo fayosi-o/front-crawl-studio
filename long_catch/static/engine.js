@@ -320,6 +320,25 @@ window.LongCatch = window.LongCatch || (() => {
     }
   }
 
+  // Fine, broken streaks that reveal the water sliding past the swimmer.
+  function drawFlow(g, n) {
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 38; i++) {
+      const base = (i * 67.7) % n, phase = i * 1.91;
+      g.beginPath();
+      for (let x = 0; x <= n; x += 8) {
+        const u = x / n * Math.PI * 2;
+        const y = base + 2.2 * Math.sin(u + phase) + 0.8 * Math.sin(3 * u - phase);
+        if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      const alpha = 0.08 + 0.12 * ((i * 17) % 7) / 6;
+      g.strokeStyle = `rgba(177, 231, 241, ${alpha})`;
+      g.lineWidth = i % 9 === 0 ? 2 : 1;
+      g.stroke();
+    }
+  }
+
   // One metre of floor: 4 × 4 tiles with slight shade variation and pale grout.
   function drawTiles(g, n) {
     const base = rgb(CONFIG.colors.floor).map(v => v * 255), tile = n / 4;
@@ -378,6 +397,7 @@ window.LongCatch = window.LongCatch || (() => {
     if (m.pool) return true;
     if (!THREE) return false;
     const scene = S.el.scene, edge = canvasTexture(128, drawEdgeFade);
+    const flow = canvasTexture(256, drawFlow, [4, 2]);
     const old = scene.getObjectByName('lc-pool');
     if (old) scene.remove(old);
 
@@ -385,7 +405,7 @@ window.LongCatch = window.LongCatch || (() => {
     m.water.geometry = new THREE.PlaneGeometry(SURFACE.w, SURFACE.h, SURFACE.nx, SURFACE.ny);
     m.water.material = new THREE.MeshPhongMaterial({
       color: CONFIG.colors.water, specular: 0x6fa9b8, shininess: 90, transparent: true, opacity: 0.17,
-      side: THREE.DoubleSide, depthWrite: false, alphaMap: edge,
+      side: THREE.DoubleSide, depthWrite: false, alphaMap: edge, map: flow,
     });
     m.water.renderOrder = 2;
 
@@ -414,7 +434,7 @@ window.LongCatch = window.LongCatch || (() => {
     });
     scene.add(pool);
     setupLighting(pool);
-    m.pool = { tiles, caustics, time: 0 };
+    m.pool = { tiles, caustics, flow, time: 0 };
     return true;
   }
 
@@ -458,6 +478,8 @@ window.LongCatch = window.LongCatch || (() => {
     pos.needsUpdate = true;
     m.water.geometry.computeVertexNormals();
     pool.tiles.offset.x = wrap(off);
+    // Positive UV offset moves the streaks back across the swimmer-relative surface.
+    pool.flow.offset.x = wrap(off * pool.flow.repeat.x / SURFACE.w);
     pool.caustics.forEach((map, i) => {
       const r = map.repeat.x / SURFACE.w, s = i ? -1 : 1;
       map.offset.set(wrap(off * r + 0.02 * s * t), wrap(0.015 * t * s));

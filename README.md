@@ -53,7 +53,7 @@ external services or network assets.
 | **Stroke faults** | Crossover, over-rotation, over-extension, flat hips, sinking legs, snaking, knee kick and spinning arms. Combine them freely; each adds a short coaching cue. |
 | **Water feedback** | Hands and forearms turn teal when holding water and coral when slipping. Amber shows the selected muscle emphasis. |
 | **Cameras** | Orbit freely, or add a second Top, Side, Front or Below view in split view. |
-| **Pool** | A gently moving water surface with a bow wave at the head, over a tiled floor with drifting caustics. |
+| **Pool** | A gently moving water surface with subtle streaks that flow backward at swim speed, a bow wave at the head, and a tiled floor with drifting caustics. |
 | **Water reaction** | The water responds to the swimmer's measured motion. Hand entries throw spray and send out ripples, the recovering hand drips, entry air and a slipping hand release bubbles, the kick churns the surface by the feet, and a V-shaped wake trails the body. It follows the controls: a faster rate or steeper entry splashes harder, slip adds bubbles and a bigger kick adds wash. Visual only; the metrics are unaffected. |
 | **Lighting** | Neutral white light with a strong main light from above and a faint cool rim light from behind, for strong colours and clear shading against the dark water. No shadows, so it stays light to render. |
 | **Natural motion** | Breathing every third stroke on alternating sides: the head turns as that arm starts its recovery and is back down before the hand enters. Also a steady head, a slight body heave, and small stroke-to-stroke and kick-to-kick variation. Visual only; the metrics are unaffected. |
