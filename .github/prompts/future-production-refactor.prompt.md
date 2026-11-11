@@ -1,11 +1,16 @@
 ---
 agent: agent
-description: Stage 1 only - typed models, stroke phases, cycle timing, formatting, and pytest tests. No UI.
+description: DEFERRED. Typed models, phase maths, timing, formatting, pytest, and Ruff. Only after the visual prototype passes its checklist and only on explicit request.
 ---
+
+> **Deferred.** This belongs to a possible future production refactor. It is
+> not part of the initial build. Do not run it unless the user explicitly asks,
+> after `main.py` passes the BUILD_SPEC.md section 15 checklist.
 
 Read these files completely before editing:
 
-- docs/BUILD_SPEC.md
+- BUILD_SPEC.md
+- main.py
 - .github/copilot-instructions.md
 - AGENTS.md
 

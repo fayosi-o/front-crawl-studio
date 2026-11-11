@@ -1,7 +1,8 @@
 # Long Catch prototype instructions
 
 This is a 30–60 minute visual prototype built with Python 3.12 and NiceGUI.
-The full specification is `docs/BUILD_SPEC.md`.
+The full specification is `BUILD_SPEC.md`. Current scope is set by
+`AGENTS.md` and `.github/prompts/build-prototype.prompt.md`.
 
 Keep the implementation in one `main.py` file until it works.
 

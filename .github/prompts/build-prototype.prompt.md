@@ -1,9 +1,14 @@
 ---
 agent: agent
-description: Build the Long Catch single-file NiceGUI visual prototype (BUILD_SPEC section 8). Run with Copilot Fusion High.
+description: Step 1 (~30–45 min). Build the single-file Long Catch NiceGUI prototype.
 ---
 
-Read `.github/copilot-instructions.md` before editing.
+Read `AGENTS.md`, `.github/copilot-instructions.md`, and
+`BUILD_SPEC.md` sections 9–15 before editing.
+
+Use the rapid-prototype plan only. Do not run
+`future-production-refactor.prompt.md`, and do not create a package hierarchy,
+tests, Ruff configuration, or typed domain modules.
 
 Create a rapid visual prototype named Long Catch.
 
@@ -253,6 +258,15 @@ Produce a working prototype that starts with:
 
 python main.py
 
+Code hooks (keep them in main.py):
+
+- Define `clamp`, `cycle_duration(stroke_rate)`, and
+  `estimate_metrics(catch_quality, slip, drive_balance, stroke_rate)` as
+  plain top-level functions, exactly as in BUILD_SPEC.md section 12.
+- Call `ui.run(...)` only inside
+  `if __name__ in {"__main__", "__mp_main__"}:` so tests can import main.py.
+- `requirements.txt` already lists `nicegui`; do not add other packages.
+
 Before stopping:
 
 1. Run the application.
@@ -262,3 +276,12 @@ Before stopping:
 5. Confirm the app contains no sound or microphone features.
 
 Do not spend time on production architecture or visual perfection.
+
+Then report:
+
+- files changed;
+- commands executed, with their output;
+- which items of the BUILD_SPEC.md section 15 checklist you verified;
+- any remaining issue.
+
+Do not claim success without command output.

@@ -1,45 +1,50 @@
-# AGENTS.md
+# Long Catch agent instructions
 
-Long Catch: a silent, local visual prototype for front-crawl stroke shape,
-built with Python 3.12 and NiceGUI. No application code exists yet.
+## Current objective
 
-## Read first
+The current objective is the 30–60 minute visual prototype described in
+`BUILD_SPEC.md`.
 
-1. `docs/BUILD_SPEC.md` — source of truth for scope, model behaviour,
-   presets, estimate formulas, style, and the acceptance checklist.
-2. `.github/copilot-instructions.md` — always-on coding rules.
-3. `.github/instructions/*.instructions.md` — path-scoped rules
-   (for example, browser JavaScript under `long_catch/static/js/`).
+Use `.github/prompts/build-prototype.prompt.md` for the initial build.
 
-## Task prompts
+The prototype must remain in one `main.py` file until the manual acceptance
+checklist passes.
 
-Prompts live in `.github/prompts/`. Run exactly one at a time:
+## Deferred work
 
-- `build-prototype.prompt.md` — the single-file `main.py` visual spike
-  (BUILD_SPEC §8).
-- `stage-1-core-models.prompt.md` — typed models, phase maths, timing,
-  formatting, and pytest tests only. No UI.
+`.github/prompts/future-production-refactor.prompt.md` is not part of the
+initial build. Do not use it unless explicitly requested after the visual
+prototype works.
 
-These two paths take different routes. The Stage 1 prompt asks for typed
-models, pytest, and Ruff. BUILD_SPEC instead calls for one `main.py` and no
-extensive test suite. Let the active prompt decide that task's scope. For
-anything else, follow BUILD_SPEC.
+Do not introduce typed domain modules, a package hierarchy, Ruff, pytest,
+browser-runtime files, persistence, multiple pages, or production architecture
+during the prototype build.
 
-## Non-negotiables
+## Hard rules
 
-- The app is completely silent: no audio, speech, microphone, or media APIs.
-- No Node.js, npm, CDNs, databases, cloud services, or external assets.
-- All metrics and muscle colours are labelled as estimates, never EMG or
-  medical data.
-- Do not add features that the active prompt does not request.
+- Python 3.12 and NiceGUI.
+- Run on `127.0.0.1:8080`.
+- No Node.js or npm.
+- No external models or CDNs.
+- No sound, voice, microphone, AudioContext, mute, or volume features.
+- Build a basic volumetric human, not a stick figure and not realistic anatomy.
+- Count every hand entry as one stroke.
+- A complete arm cycle contains two strokes.
+- Cycle duration is `120 / stroke_rate`.
+- More slip must reduce estimated distance per stroke.
+- More drive must not compensate for poor catch or severe slip.
+- Muscle highlighting is an estimated teaching overlay, not EMG or medical data.
 
-## Validation
+## Completion
 
-- Run the app with `python main.py` (serves on `127.0.0.1:8080`).
-- If tests exist, run `python -m pytest -q`.
-- If Ruff is configured, run `python -m ruff check .`.
-- Never claim success without command output.
+The prototype is complete when:
 
-## Repository
+- `python main.py` starts;
+- the swimmer animates;
+- Play/Pause works;
+- all controls visibly affect the swimmer;
+- all four presets visibly differ;
+- estimates update;
+- no placeholder controls remain.
 
-The repository is local git only, with no remote. Do not push.
+Run the application before claiming completion.

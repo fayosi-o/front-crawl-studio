@@ -2,8 +2,9 @@
 
 Long Catch is a rapid local prototype for visualising front-crawl stroke shape.
 
-> **Status:** planning only. No application code exists yet. See
-> [docs/BUILD_SPEC.md](docs/BUILD_SPEC.md).
+> **Status:** planning complete; the prototype is not built yet. Run
+> `/build-prototype` in Copilot Chat. See [BUILD_SPEC.md](BUILD_SPEC.md) and
+> [AGENTS.md](AGENTS.md).
 
 It demonstrates:
 
@@ -26,17 +27,17 @@ The application is completely silent and does not use microphone or audio APIs.
 
 ```text
 .
-├── AGENTS.md                        # Agent orientation and precedence
+├── .github/
+│   ├── copilot-instructions.md               # Always-on Copilot rules
+│   └── prompts/
+│       ├── build-prototype.prompt.md         # Current build: /build-prototype
+│       └── future-production-refactor.prompt.md  # Deferred; do not run yet
+├── AGENTS.md                                 # Current objective and hard rules
+├── BUILD_SPEC.md                             # Source-of-truth specification
 ├── README.md
-├── docs/
-│   └── BUILD_SPEC.md                # Source-of-truth specification
-└── .github/
-    ├── copilot-instructions.md      # Always-on Copilot rules
-    ├── instructions/
-    │   └── browser-runtime.instructions.md
-    └── prompts/
-        ├── build-prototype.prompt.md
-        └── stage-1-core-models.prompt.md
+├── requirements.txt
+├── .gitignore
+└── main.py                                   # Created by /build-prototype
 ```
 
 ## Requirements
