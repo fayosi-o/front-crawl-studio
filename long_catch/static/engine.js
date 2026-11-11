@@ -125,12 +125,13 @@ window.LongCatch = window.LongCatch || (() => {
   // Visual only: these never touch the phase, the timeline, or the Python metrics.
   // Variation is keyed to stroke time (cycles + phase), so it holds still while paused.
 
-  // Bilateral breathing every third stroke. The head turns with the roll as the breathing-side
-  // arm pulls through and finishes, and is back down before that hand enters again.
+  // Bilateral breathing every third stroke (one breath per 1.5 cycles, alternating sides). The head
+  // turns toward the arm as it finishes and starts its recovery, then rotates back down by the end
+  // of the recovery, before that hand enters again.
   // Returns -1..1: negative turns the face to the right (-y), positive to the left.
   function breathing(P) {
     const t = S.cycles + S.phase, exit = P.exit;
-    const turnWindow = p => keyed(p, [[exit - 0.36, 0], [exit - 0.16, 1], [exit + 0.03, 1], [exit + 0.18, 0]]);
+    const turnWindow = p => keyed(p, [[exit - 0.22, 0], [exit - 0.04, 1], [exit + 0.08, 1], [exit + 0.2, 0]]);
     const breathes = n => ((n % 3) + 3) % 3 === 0;  // n counts hand entries: right even, left odd
     const right = breathes(2 * Math.floor(t)) ? turnWindow(S.phase) : 0;
     const left = breathes(2 * Math.floor(t - 0.5) + 1) ? turnWindow((S.phase + 0.5) % 1) : 0;
@@ -286,7 +287,7 @@ window.LongCatch = window.LongCatch || (() => {
     S.trailReset = false;
   }
 
-  // ---- water ------------------------------------------------------------------
+  // ---- water and lighting -----------------------------------------------------
 
   // Surface: a fine grid with a gentle travelling swell, a small bow wave at the head, and a soft sheen.
   // Floor: tiles and two layers of drifting caustics, well below the swimmer.
@@ -357,7 +358,21 @@ window.LongCatch = window.LongCatch || (() => {
     g.putImageData(img, 0, 0);
   }
 
-  // Build the surface waves and the pool floor once per scene; returns false until THREE has loaded.
+  // Replace NiceGUI's flat default lights (strong ambient + one overhead light) with a simple pool rig:
+  // a sky/pool hemisphere fill, a warm key light from above, and a cool rim light from behind
+  // that separates the swimmer from the dark background. No shadows, so rendering cost is unchanged.
+  function setupLighting(group) {
+    for (const light of S.el.scene.children.filter(o => o.isAmbientLight || o.isDirectionalLight)) {
+      S.el.scene.remove(light);
+    }
+    const key = new THREE.DirectionalLight(0xfff1dc, 1.7);
+    key.position.set(3, -2.5, 6);
+    const rim = new THREE.DirectionalLight(0x86dcff, 0.6);
+    rim.position.set(-4, 3, -1.5);
+    group.add(new THREE.HemisphereLight(0xfff6ea, 0x5a8f96, 1.7), key, rim);
+  }
+
+  // Build the surface waves, pool floor, and lights once per scene; returns false until THREE has loaded.
   function setupWater(m) {
     if (m.pool) return true;
     if (!THREE) return false;
@@ -397,6 +412,7 @@ window.LongCatch = window.LongCatch || (() => {
       return map;
     });
     scene.add(pool);
+    setupLighting(pool);
     m.pool = { tiles, caustics, time: 0 };
     return true;
   }
