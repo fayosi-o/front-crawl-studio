@@ -111,13 +111,14 @@ def estimate_metrics(
     slip: float,
     drive_balance: float,
     stroke_rate: float,
+    drag: float = 0.0,
 ) -> Metrics:
-    """BUILD_SPEC section 12. Drive cannot rescue a poor catch or heavy slip."""
+    """BUILD_SPEC section 12. Drive cannot rescue a poor catch or heavy slip; faults add drag."""
     hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
     connection = 0.7 + 0.3 * drive_balance
     rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
     distance_per_stroke = clamp(
-        0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty,
+        (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty) * (1.0 - drag),
         0.45,
         1.40,
     )
@@ -128,6 +129,74 @@ def estimate_metrics(
         strokes_per_25=strokes_per_25,
         seconds_per_25=strokes_per_25 * 60.0 / stroke_rate,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Fault:
+    """A common stroke error that can be switched on to show its shape and cost."""
+
+    label: str
+    hint: str
+    cue: str
+    drag: float = 0.0
+    slip: float = 0.0
+    catch: float = 0.0
+
+
+FAULTS: dict[str, Fault] = {
+    'crossover': Fault(
+        'Crossover',
+        'Hands enter past the centre line, pushing the body off line.',
+        'Enter in line with your shoulder, not your nose.',
+        drag=0.05,
+    ),
+    'overrotation': Fault(
+        'Over-rotation',
+        'The body rolls far past 45°, wasting time and balance.',
+        'Roll to about 45° and keep the head still.',
+        drag=0.05,
+    ),
+    'overreach': Fault(
+        'Over-extension',
+        'The arm locks straight, shoulder shrugs, and the hand pauses up at the front.',
+        'Reach long but soft, then tip the fingertips down straight away.',
+        drag=0.06,
+    ),
+    'snaking': Fault(
+        'Snaking',
+        'Hips and legs sway side to side behind the chest.',
+        'Keep the hips under the chest and kick straight down the lane.',
+        drag=0.07,
+    ),
+    'kneekick': Fault(
+        'Knee kick',
+        'Bicycle-style kick bent from the knees instead of driven from the hips.',
+        'Kick from the hips with long, loose legs.',
+        drag=0.05,
+    ),
+    'rushing': Fault(
+        'Spinning arms',
+        'Arms rush through the pull faster than the hand can hold water, so it slips.',
+        'Slow the hand down until you feel the water, then accelerate.',
+        slip=0.35,
+        catch=0.25,
+    ),
+}
+RUSH = 0.72
+
+
+def fault_drag(faults: frozenset[str]) -> float:
+    """Combined fractional distance loss from drag-type faults."""
+    keep = 1.0
+    for key in faults:
+        keep *= 1.0 - FAULTS[key].drag
+    return 1.0 - keep
+
+
+def timeline_boundaries(length: float, rushed: bool = False) -> tuple[float, float, float, float]:
+    """Phase boundaries as seen on screen; a rushed stroke squeezes the underwater part."""
+    bounds = phase_boundaries(length)
+    return tuple(b * RUSH for b in bounds) if rushed else bounds
 
 
 def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
@@ -174,22 +243,43 @@ class ViewState:
     emphasis: Emphasis = 'back'
     playing: bool = True
     playback: float = 1.0
+    faults: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if self.emphasis not in EMPHASES:
             raise ValueError(f'unknown emphasis {self.emphasis!r}')
         if self.playback not in PLAYBACK_SPEEDS:
             raise ValueError(f'unsupported playback speed {self.playback!r}')
+        unknown = set(self.faults) - set(FAULTS)
+        if unknown:
+            raise ValueError(f'unknown faults {sorted(unknown)}')
 
-    def render_params(self, metrics: Metrics | None = None) -> dict[str, float | str | bool]:
+    def with_fault(self, key: str, active: bool) -> ViewState:
+        faults = self.faults | {key} if active else self.faults - {key}
+        return replace(self, faults=frozenset(faults))
+
+    def effective_hold(self) -> tuple[float, float]:
+        """Catch quality and slip as fractions after hold-type faults."""
+        s = self.settings
+        catch = s.catch / 100 - sum(FAULTS[k].catch for k in self.faults)
+        slip = s.slip / 100 + sum(FAULTS[k].slip for k in self.faults)
+        return clamp(catch, 0.0, 1.0), clamp(slip, 0.0, 1.0)
+
+    def metrics(self) -> Metrics:
+        s = self.settings
+        catch, slip = self.effective_hold()
+        return estimate_metrics(catch, slip, s.drive / 100, s.rate, fault_drag(self.faults))
+
+    def render_params(self, metrics: Metrics | None = None) -> dict[str, float | str | bool | list[str]]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
         s = self.settings
-        m = metrics if metrics is not None else s.metrics()
+        m = metrics if metrics is not None else self.metrics()
         length = path_length(s.rate)
+        catch, slip = self.effective_hold()
         return {
             'rate': s.rate,
-            'catch': s.catch / 100,
-            'slip': s.slip / 100,
+            'catch': catch,
+            'slip': slip,
             'drive': s.drive / 100,
             'kick': s.kick / 100,
             'roll': s.roll,
@@ -198,6 +288,8 @@ class ViewState:
             'playback': self.playback,
             'length': length,
             'exit': exit_phase(length),
+            'faults': sorted(self.faults),
+            'rush': RUSH if 'rushing' in self.faults else 1.0,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
             'speed': m.distance_per_stroke * s.rate / 60.0,
         }

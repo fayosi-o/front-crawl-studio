@@ -116,6 +116,29 @@ body {
   background: rgba(61, 190, 165, 0.2); border-color: var(--lc-hold); color: #fff; font-weight: 600;
 }
 
+.lc-faults { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.lc-fault.q-btn {
+  border: 1px dashed rgba(231, 240, 234, 0.16); border-radius: 10px; color: var(--lc-muted) !important;
+  font-size: 0.78rem; min-height: 32px; justify-content: flex-start;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.lc-fault.q-btn .q-icon { font-size: 16px; margin-right: 6px; }
+.lc-fault.q-btn:hover { border-color: rgba(227, 107, 79, 0.6); color: var(--lc-text) !important; }
+.lc-fault.lc-active.q-btn {
+  background: rgba(227, 107, 79, 0.16); border: 1px solid var(--lc-slip); color: #fff !important; font-weight: 600;
+}
+.lc-fault.lc-active.q-btn .q-icon { color: var(--lc-slip); }
+.lc-badge-fault { background: rgba(227, 107, 79, 0.16); color: var(--lc-slip); }
+.lc-clear.q-btn { font-size: 0.7rem; color: var(--lc-muted) !important; min-height: 22px; padding: 0 6px; }
+.lc-cues { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.lc-cue {
+  font-size: 0.76rem; line-height: 1.35; padding: 6px 10px; border-radius: 8px;
+  border-left: 3px solid var(--lc-slip); background: rgba(227, 107, 79, 0.08); color: var(--lc-text);
+}
+.lc-cue .lc-cue-name { display: inline; color: var(--lc-slip); font-weight: 600; }
+.lc-cue .inline { display: inline; }
+.lc-cue-empty { border-left-color: var(--lc-hold); background: rgba(61, 190, 165, 0.08); color: var(--lc-muted); }
+
 .lc-control { margin: 2px 0 6px; }
 .lc-control-head { align-items: center; gap: 4px; flex-wrap: nowrap; }
 .lc-control-label { font-size: 0.86rem; }

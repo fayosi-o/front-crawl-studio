@@ -14,6 +14,8 @@ It demonstrates:
 - hand slip;
 - arm-driven versus hip-connected timing;
 - adjustable flutter-kick amplitude;
+- switchable stroke faults (crossover, over-rotation, over-extension, snaking,
+  knee kick, spinning arms) with coaching cues;
 - simple estimated back, triceps, and hip/core contribution;
 - rough distance-per-stroke and pace estimates.
 
@@ -98,6 +100,18 @@ python main.py
 - **Kick amplitude** runs from still legs (0%) to a stronger six-beat flutter
   kick (100%), including hip, knee, and ankle movement. This changes the
   animation only; the arm-stroke pace estimates do not include kicking.
+- **Stroke faults** switch on common errors, alone or combined, on top of any
+  preset or slider setting. Each one shows a coaching cue and costs estimated
+  distance per stroke:
+  - *Crossover*: hands enter past the centre line.
+  - *Over-rotation*: the body rolls far past 45°, and the hips follow.
+  - *Over-extension*: the arm locks straight, the shoulder shrugs, and the
+    wrist brakes at the front before a late catch.
+  - *Snaking*: the hips and legs sway side to side behind the chest.
+  - *Knee kick*: a bicycle-style kick bent from the knees, not the hips.
+  - *Spinning arms*: the arms rush the underwater phase faster than the hand
+    can hold the water, so it slips. The timeline squeezes to match.
+  *Clear* switches them all off.
 - **Transport dock** (bottom of the 3D view): play/pause, step ±5% (stepping
   pauses playback), slow motion at ¼× or ½×, and a camera reset.
 - **Phase timeline:** shows the right arm's entry, catch, pull, finish, and

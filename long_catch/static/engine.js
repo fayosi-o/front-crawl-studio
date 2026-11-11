@@ -3,7 +3,7 @@
 // Configuration arrives as window.LONG_CATCH_CONFIG = {colors, phases, arm}.
 window.LongCatch = window.LongCatch || (() => {
   const CONFIG = window.LONG_CATCH_CONFIG;
-  const S = { sceneId: null, ids: null, params: null, phase: 0, offset: 0, last: null, m: null, running: false, ui: {} };
+  const S = { sceneId: null, ids: null, params: null, faults: {}, phase: 0, offset: 0, last: null, m: null, running: false, ui: {} };
   const D = Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -36,23 +36,26 @@ window.LongCatch = window.LongCatch || (() => {
   }
 
   // Wrist target path for one arm at phase p, plus overlay and colouring values.
-  function arm(p, P) {
+  // F holds active stroke faults; each one bends the healthy path toward a typical error.
+  function arm(p, P, F) {
     const c = P.catch, s = P.slip, L = P.length;
     const exit = P.exit;
     const midRec = exit + (1 - exit) * 0.4, lateRec = exit + (1 - exit) * 0.72;
+    const over = F.overreach ? 1 : 0, cross = F.crossover ? 1 : 0;
     const x = keyed(p, [
-      [0, 0.56], [0.12, 0.55], [0.30, lerp(0.10, 0.30, c) - 0.12 * s],
+      [0, 0.56 + 0.08 * over], [0.12, 0.55 + 0.08 * over], [0.30, lerp(0.10, 0.30, c) - 0.12 * s + 0.10 * over],
       [0.48, -0.04 - 0.08 * s], [0.62, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
-      [midRec, -0.10], [lateRec, 0.22], [1, 0.56],
+      [midRec, -0.10], [lateRec, 0.22], [1, 0.56 + 0.08 * over],
     ]);
+    // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
     const out = keyed(p, [
       [0, 0.025], [0.12, 0.035], [0.30, 0.07 + 0.08 * (1 - c)], [0.48, 0.10],
       [0.62, 0.08], [exit, 0.10], [midRec, 0.30], [lateRec, 0.22], [1, 0.025],
-    ]);
+    ]) - cross * keyed(p, [[0, 0.33], [0.12, 0.31], [0.30, 0.15], [0.48, 0.02], [exit, 0], [lateRec, 0.08], [1, 0.33]]);
     // Mid-pull hand sits about a forearm below the shoulder, so the elbow stays bent near 90-110 deg.
     const height = keyed(p, [
-      [0, -0.045], [0.12, -0.07], [0.30, lerp(-0.26, -0.32, c)], [0.48, -0.37],
-      [0.62, -0.26], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12], [1, -0.045],
+      [0, -0.045 + 0.03 * over], [0.12, -0.07 + 0.05 * over], [0.30, lerp(-0.26, -0.32, c)], [0.48, -0.37],
+      [0.62, -0.26], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12], [1, -0.045 + 0.03 * over],
     ]);
     // Recovery is elbow-led: the elbow arcs highest while the relaxed hand swings below and outside it.
     const elbow = [
@@ -62,13 +65,22 @@ window.LongCatch = window.LongCatch || (() => {
     ];
     const recovery = p < exit ? 0 : smooth(clamp((p - exit) / 0.05, 0, 1)) * smooth(clamp((1 - p) / 0.07, 0, 1));
     const under = p < exit;
-    const wrist = under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15;
+    // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
+    const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
+    const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
     const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < 0.62 ? 2 : p < exit ? 3 : 4;
     return {
-      x, out, height, elbow, recovery, pole: lerp(-0.35, 1, c),
+      x, out, height, elbow, recovery, pole: lerp(-0.35, 1, c), shrug: front,
       wrist: wrist * D, under, stage,
       back: bump(p, 0.10, 0.64), triceps: bump(p, 0.50, exit + 0.04),
     };
+  }
+
+  // Spinning arms race through the underwater part, leaving more of the cycle for recovery.
+  function rushed(p, P) {
+    if (P.rush >= 1) return p;
+    const exit = P.exit, early = exit * P.rush;
+    return p < early ? p * exit / early : exit + (p - early) * (1 - exit) / (1 - early);
   }
 
   function resolve() {
@@ -92,13 +104,16 @@ window.LongCatch = window.LongCatch || (() => {
       m[k].renderOrder = 10;
     }
     m.basePos = m.buoys.map(b => b.position.x);
+    // Roll about the body axis first, then yaw it (snaking) in the water plane.
+    m.chest.rotation.order = 'ZYX';
+    m.pelvis.rotation.order = 'ZYX';
     m.rigs = {};
     for (const side of ['R', 'L']) {
       const shoulder = m['sh' + side], vector = () => shoulder.position.clone();
       m.rigs[side] = {
         target: vector(), axis: vector(), pole: vector(), hint: vector(), elbow: vector(),
         upper: vector(), lower: vector(), normal: vector(), z: vector(),
-        matrix: shoulder.matrix.clone(), quaternion: shoulder.quaternion.clone(),
+        matrix: shoulder.matrix.clone(), quaternion: shoulder.quaternion.clone(), baseX: shoulder.position.x,
       };
     }
     el.$el.style.width = '100%';
@@ -143,6 +158,7 @@ window.LongCatch = window.LongCatch || (() => {
   function poseArm(m, side, a, P, slipness, bodyRoll) {
     const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
     const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll), lateral = sgn * 0.8;
+    sh.position.x = r.baseX + 0.04 * a.shrug;
     // Convert a shoulder-relative point with a world height into the rolled chest frame.
     const chestZ = (height, out) => (height + 0.06 - sin * (sh.position.y + sgn * out)) / cos;
     r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out));
@@ -196,13 +212,17 @@ window.LongCatch = window.LongCatch || (() => {
     paint(m['thumb' + side], a.under, slipness);
   }
 
-  function poseLegs(m, P) {
+  // Healthy flutter drives from the hips; a knee kick drops the thighs and bends the knees hard.
+  function poseLegs(m, P, F) {
     const kick = 2 * Math.PI * 3 * S.phase;
+    const knees = F.kneekick ? 1 : 0, k = knees ? Math.max(P.kick, 0.6) : P.kick;
     for (const [side, offset] of [['R', 0], ['L', Math.PI]]) {
       const angle = kick + offset;
-      m['leg' + side].rotation.set(0, P.kick * 0.26 * Math.sin(angle), 0);
-      m['knee' + side].rotation.set(0, P.kick * 0.45 * Math.max(0, Math.sin(angle - 0.7)), 0);
-      m['ankle' + side].rotation.set(0, -0.12 + P.kick * 0.10 * Math.sin(angle - 0.5), 0);
+      const hip = knees ? -0.12 * k + 0.06 * k * Math.sin(angle) : 0.26 * k * Math.sin(angle);
+      const knee = knees ? 0.2 + 1.3 * k * Math.max(0, Math.sin(angle - 0.3)) : 0.45 * k * Math.max(0, Math.sin(angle - 0.7));
+      m['leg' + side].rotation.set(0, hip, 0);
+      m['knee' + side].rotation.set(0, knee, 0);
+      m['ankle' + side].rotation.set(0, -0.12 + k * (knees ? 0.25 : 0.10) * Math.sin(angle - 0.5), 0);
     }
   }
 
@@ -244,17 +264,22 @@ window.LongCatch = window.LongCatch || (() => {
       S.offset += P.speed * scaled;
     }
     // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
-    const roll = P.roll * D, w = 2 * Math.PI;
+    const F = S.faults, w = 2 * Math.PI;
+    const roll = (F.overrotation ? Math.min(80, P.roll * 1.65) : P.roll) * D;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
+    const hipShare = F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
     const bodyRoll = roll * Math.cos(w * (S.phase - ROLL_PEAK));
-    m.chest.rotation.set(bodyRoll, 0, 0);
-    m.pelvis.rotation.set(roll * (0.3 + 0.6 * P.drive) * Math.cos(w * (S.phase - ROLL_PEAK + lead)), 0, 0);
+    // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
+    const yaw = F.snaking ? 7 * D * Math.sin(w * (S.phase - ROLL_PEAK)) : 0;
+    m.chest.rotation.set(bodyRoll, 0, yaw);
+    m.pelvis.rotation.set(roll * hipShare * Math.cos(w * (S.phase - ROLL_PEAK + lead)), 0, -1.8 * yaw);
+    m.pelvis.position.y = -0.36 * Math.sin(yaw);
 
-    const right = arm(S.phase, P), left = arm((S.phase + 0.5) % 1, P);
+    const right = arm(rushed(S.phase, P), P, F), left = arm(rushed((S.phase + 0.5) % 1, P), P, F);
     const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
     poseArm(m, 'R', right, P, slipness, bodyRoll);
     poseArm(m, 'L', left, P, slipness, bodyRoll);
-    poseLegs(m, P);
+    poseLegs(m, P, F);
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
@@ -311,9 +336,12 @@ window.LongCatch = window.LongCatch || (() => {
     });
   }
 
+  const faultFlags = params => Object.fromEntries((params.faults || []).map(key => [key, true]));
+
   return {
     start(sceneId, ids, params) {
-      S.sceneId = sceneId; S.ids = ids; S.params = params; S.m = null; S.last = null; S.ui = {};
+      S.sceneId = sceneId; S.ids = ids; S.params = params; S.faults = faultFlags(params);
+      S.m = null; S.last = null; S.ui = {};
       if (!S.running) {
         S.running = true;
         requestAnimationFrame(frame);
@@ -322,7 +350,7 @@ window.LongCatch = window.LongCatch || (() => {
         bindKeys();
       }
     },
-    set(params) { S.params = Object.assign({}, S.params, params); },
+    set(params) { S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params); },
     step(amount) { S.phase = wrap(S.phase + amount); S.last = null; return S.phase; },
     resetCamera,
   };

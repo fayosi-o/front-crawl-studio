@@ -23,6 +23,11 @@ entry point; `long_catch/app.py` (page controller), `swimmer.py` (geometry),
 `engine.py` + `static/engine.js` (browser animation), and `theme.py` +
 `static/app.css` (palette and styles).
 
+Stroke faults are data in `model.FAULTS` (label, hint, cue, metric cost) and
+travel to the browser as `render_params()['faults']`; each fault's visual
+lives in `static/engine.js`. Add a new fault in both places plus
+`app.FAULT_ICONS`.
+
 Still deferred: persistence, multiple pages, and any further production
 architecture.
 

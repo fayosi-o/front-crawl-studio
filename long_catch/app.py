@@ -11,6 +11,7 @@ from nicegui import ui
 from long_catch.engine import BrowserEngine, engine_script
 from long_catch.model import (
     EMPHASES,
+    FAULTS,
     PHASE_LABELS,
     PLAYBACK_SPEEDS,
     PRESETS,
@@ -21,7 +22,7 @@ from long_catch.model import (
     format_duration,
     matching_preset,
     path_length,
-    phase_boundaries,
+    timeline_boundaries,
 )
 from long_catch.swimmer import SwimmerBuilder
 from long_catch.theme import PALETTE, stylesheet
@@ -64,6 +65,16 @@ assert set(EMPHASIS_LABELS) == set(EMPHASES)
 PLAYBACK_LABELS = {0.25: '¼×', 0.5: '½×', 1.0: '1×'}
 assert set(PLAYBACK_LABELS) == set(PLAYBACK_SPEEDS)
 
+FAULT_ICONS = {
+    'crossover': 'compare_arrows',
+    'overrotation': 'rotate_right',
+    'overreach': 'front_hand',
+    'snaking': 'gesture',
+    'kneekick': 'directions_bike',
+    'rushing': 'fast_forward',
+}
+assert set(FAULT_ICONS) == set(FAULTS)
+
 STATS: tuple[tuple[str, str], ...] = (
     ('rate', 'Stroke rate'),
     ('dps', 'Distance / stroke'),
@@ -87,6 +98,8 @@ class LongCatchPage:
         self.slider_values: dict[str, ui.label] = {}
         self.stats: dict[str, ui.label] = {}
         self.preset_buttons: dict[str, ui.button] = {}
+        self.fault_buttons: dict[str, ui.button] = {}
+        self._fault_layout: frozenset[str] | None = None
         self.segments: list[ui.element] = []
         self._applying_preset = False
         self._segment_layout: tuple[float, ...] = ()
@@ -178,6 +191,8 @@ class LongCatchPage:
                 for spec in SLIDERS:
                     self._build_slider(spec)
 
+            self._build_faults()
+
             with ui.element('div').classes('lc-card'):
                 section_title('Muscle emphasis')
                 emphasis = ui.toggle(
@@ -200,6 +215,24 @@ class LongCatchPage:
                 'Coaching estimates only — not measured, EMG, or medical data. '
                 'Drag to orbit · scroll to zoom · Space play · ←/→ step · 1–4 presets · C camera.'
             ).classes('lc-footnote')
+
+    def _build_faults(self) -> None:
+        with ui.element('div').classes('lc-card'):
+            with ui.row().classes('lc-card-head'):
+                section_title('Stroke faults')
+                with ui.row().classes('items-center gap-1'):
+                    self.fault_badge = ui.label().classes('lc-badge')
+                    self.clear_faults = ui.button('Clear', on_click=lambda: self.update(faults=frozenset()), color=None)
+                    self.clear_faults.props('flat dense no-caps').classes('lc-clear')
+            with ui.element('div').classes('lc-faults'):
+                for key, fault in FAULTS.items():
+                    button = ui.button(
+                        fault.label, icon=FAULT_ICONS[key], on_click=lambda k=key: self.toggle_fault(k), color=None
+                    )
+                    button.props(f'flat no-caps aria-pressed=false aria-label="{fault.label}"')
+                    button.classes(f'lc-fault lc-fault-{key}').tooltip(fault.hint)
+                    self.fault_buttons[key] = button
+            self.cues = ui.element('div').classes('lc-cues')
 
     def _build_slider(self, spec: SliderSpec) -> None:
         lo, hi = SETTING_RANGES[spec.key]
@@ -248,6 +281,9 @@ class LongCatchPage:
     def toggle_play(self) -> None:
         self.update(playing=not self.view.playing)
 
+    def toggle_fault(self, key: str) -> None:
+        self.update(faults=self.view.with_fault(key, key not in self.view.faults).faults)
+
     def step(self, amount: float) -> None:
         self.update(playing=False)
         self.engine.step(amount)
@@ -259,9 +295,10 @@ class LongCatchPage:
     # ---- rendering -----------------------------------------------------------------------------
 
     def _render(self) -> None:
-        metrics = self.view.settings.metrics()
+        metrics = self.view.metrics()
         self._render_transport()
         self._render_presets()
+        self._render_faults()
         self._render_stats(metrics)
         self._render_timeline()
         self.engine.set(self.view.render_params(metrics))
@@ -281,6 +318,34 @@ class LongCatchPage:
             else:
                 button.classes(remove='lc-active')
 
+    def _render_faults(self) -> None:
+        active = self.view.faults
+        if active == self._fault_layout:
+            return
+        self._fault_layout = active
+        count = len(active)
+        self.fault_badge.text = f'{count} on' if count else 'Clean'
+        self.fault_badge.classes(replace='lc-badge lc-badge-fault' if count else 'lc-badge')
+        self.clear_faults.set_visibility(bool(count))
+        for key, button in self.fault_buttons.items():
+            on = key in active
+            if on:
+                button.classes(add='lc-active')
+            else:
+                button.classes(remove='lc-active')
+            button.props(f'aria-pressed={str(on).lower()}')
+        self.cues.clear()
+        with self.cues:
+            if not active:
+                ui.label('Switch on a fault to see how it changes the stroke and the estimates.').classes(
+                    'lc-cue lc-cue-empty'
+                )
+            for key, fault in FAULTS.items():
+                if key in active:
+                    with ui.element('div').classes('lc-cue'):
+                        ui.label(f'{fault.label}: ').classes('lc-cue-name')
+                        ui.label(fault.cue).classes('inline')
+
     def _render_stats(self, metrics: Metrics) -> None:
         tone = 'lc-good' if metrics.holding else 'lc-bad'
         self.stats['rate'].text = f'{self.view.settings.rate} spm'
@@ -293,8 +358,9 @@ class LongCatchPage:
         self.hold_text.text = 'Hand holding water' if metrics.holding else 'Hand slipping — catch is losing grip'
 
     def _render_timeline(self) -> None:
-        """Size the phase segments; the recovery start moves with stroke rate."""
-        starts = (0.0, *phase_boundaries(path_length(self.view.settings.rate)), 1.0)
+        """Size the phase segments; recovery moves with stroke rate and spinning arms squeeze the pull."""
+        length = path_length(self.view.settings.rate)
+        starts = (0.0, *timeline_boundaries(length, 'rushing' in self.view.faults), 1.0)
         if starts == self._segment_layout:
             return
         self._segment_layout = starts

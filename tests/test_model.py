@@ -4,7 +4,9 @@ from dataclasses import astuple
 import pytest
 
 from long_catch.model import (
+    FAULTS,
     PRESETS,
+    RUSH,
     Phase,
     StrokeSettings,
     ViewState,
@@ -16,7 +18,9 @@ from long_catch.model import (
     highlight_intensity,
     matching_preset,
     path_length,
+    phase_boundaries,
     phase_to_step,
+    timeline_boundaries,
 )
 
 
@@ -151,3 +155,27 @@ def test_kick_control_is_visual_only_and_normalized():
     assert still.metrics() == strong.metrics()
     assert ViewState(settings=still).render_params()['kick'] == 0
     assert ViewState(settings=strong).render_params()['kick'] == 1
+
+
+def test_every_fault_costs_distance_and_unknown_faults_are_rejected():
+    clean = ViewState().metrics().distance_per_stroke
+    for key in FAULTS:
+        assert ViewState(faults=frozenset({key})).metrics().distance_per_stroke < clean
+    with pytest.raises(ValueError):
+        ViewState(faults=frozenset({'flailing'}))
+
+
+def test_faults_stack_and_clear():
+    view = ViewState().with_fault('crossover', True).with_fault('snaking', True)
+    both = view.metrics().distance_per_stroke
+    assert both < ViewState(faults=frozenset({'crossover'})).metrics().distance_per_stroke
+    assert view.with_fault('crossover', False).with_fault('snaking', False) == ViewState()
+
+
+def test_spinning_arms_slip_and_rush_the_underwater_phase():
+    view = ViewState(faults=frozenset({'rushing'}))
+    assert not view.metrics().holding
+    params = view.render_params()
+    assert params['slip'] > ViewState().render_params()['slip']
+    assert params['rush'] == RUSH and params['faults'] == ['rushing']
+    assert timeline_boundaries(0.5, rushed=True) == pytest.approx([b * RUSH for b in phase_boundaries(0.5)])
