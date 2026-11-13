@@ -211,15 +211,14 @@ ruff format --check .      # formatting
 
 ### Focused test scope
 
-The model suite has **33 cases**, down from 49 (**32.7% fewer**, rounded to the
-requested one-third reduction). Cases were ranked by regression value, rather
-than combined simply to reduce the reported count:
+The model suite has **32 cases**, down from 49 (**about one-third fewer**).
+Cases were ranked by regression value:
 
 | Priority | Decision |
 | --- | --- |
-| **Keep: domain rules and regressions** | Stroke/cycle timing, Push boundaries, slip/catch/drive relationships, fault costs and stacking, race finish math and ties, visual-only controls, bounded buoyancy and settings validation. |
-| **Trim: equivalent inputs** | Extra linear race distances, repeated invalid values reaching the same guard, ordinary phase samples and basic duration formatting. Retain boundary, wrap, minute-rollover and invalid-input representatives. |
-| **Remove: low-signal checks** | A duplicate fixed cycle duration, preset-count/ranking assumptions, simple overlay/holding accessor checks, enum-membership checks and broad fraction checks already covered by meaningful control/race cases. |
+| **Keep: domain rules and regressions** | Stroke/cycle timing, Push boundaries, slip/catch/drive relationships, fault costs and stacking, preset ranking, race finish math and ties, visual-only controls, bounded buoyancy, render-parameter bounds and input validation (settings, emphasis, playback, race distance and swimmer count). |
+| **Trim: equivalent inputs** | Extra linear race distances, ordinary phase samples and basic duration formatting. Retain boundary, wrap, minute-rollover and invalid-input representatives; related invalid inputs are checked inside one case. |
+| **Remove: low-signal checks** | A duplicate fixed cycle duration and simple overlay/holding accessor checks. |
 
 These are model tests, not browser automation. For UI changes, also exercise
 both tabs, all eight controls, lane isolation, pause/reset, scrubbing, split

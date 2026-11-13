@@ -97,6 +97,9 @@ def test_outputs_are_finite_and_consistent():
     assert all(math.isfinite(value) for value in astuple(result))
     assert result.strokes_per_25 == pytest.approx(25 / result.distance_per_stroke)
     assert result.seconds_per_25 == pytest.approx(result.strokes_per_25 * 60 / 40)
+    params = ViewState().render_params()
+    assert all(0 <= params[key] <= 1 for key in ('catch', 'slip', 'drive', 'kick', 'length', 'exit', 'intensity'))
+    assert params['exit'] == exit_phase(params['length'])
 
 
 def test_settings_validate_ranges():
@@ -111,7 +114,13 @@ def test_settings_validate_ranges():
 
 
 def test_view_options_validate_and_trail_reaches_the_engine():
-    for bad in ({'angle': 'behind'}, {'trail': 'elbows'}, {'trail_seconds': 9.0}):
+    for bad in (
+        {'angle': 'behind'},
+        {'trail': 'elbows'},
+        {'trail_seconds': 9.0},
+        {'emphasis': 'legs'},
+        {'playback': 3.0},
+    ):
         with pytest.raises(ValueError):
             ViewState(**bad)
     params = ViewState(trail='hands', trail_seconds=3.0).render_params()
@@ -121,6 +130,9 @@ def test_view_options_validate_and_trail_reaches_the_engine():
 def test_matching_preset_identifies_unchanged_presets_only():
     assert all(matching_preset(settings) == name for name, settings in PRESETS.items())
     assert matching_preset(PRESETS['Long power'].with_values(kick=0)) is None
+    metrics = {name: s.metrics().distance_per_stroke for name, s in PRESETS.items()}
+    assert len(set(PRESETS.values())) == 4
+    assert metrics['Long power'] > metrics['Compact connected'] > metrics['Short slipping']
 
 
 def test_kick_control_is_visual_only_and_normalized():
@@ -196,10 +208,10 @@ def test_solo_race_and_equal_setups():
     assert pair.swimmers[1].faults == frozenset()
 
 
-@pytest.mark.parametrize(('count', 'distance'), [(0, 25), (3, 25), (2, 75)])
-def test_race_rejects_unsupported_setup(count, distance):
-    with pytest.raises(ValueError):
-        RaceConfig((ViewState(),) * count, distance)
+def test_race_rejects_unsupported_setup():
+    for count, distance in ((0, 25), (3, 25), (1, 0), (1, 101), (2, 75)):
+        with pytest.raises(ValueError):
+            RaceConfig((ViewState(),) * count, distance)
 
 
 def test_pace_support_raises_body_and_reduces_hip_drop_with_bounded_travel():
@@ -223,7 +235,7 @@ def test_buoyancy_follows_fault_adjusted_pace_without_changing_metrics():
     assert slow.render_params()['rideHeight'] < clean.render_params()['rideHeight']
 
 
-@pytest.mark.parametrize('speed', [-1, math.nan])
+@pytest.mark.parametrize('speed', [-1, math.inf, math.nan])
 def test_buoyancy_rejects_invalid_speed(speed):
     with pytest.raises(ValueError):
         waterline_pose(speed)
