@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import Any
 
 from nicegui import ui
 
-from long_catch.engine import BrowserEngine, engine_script
+from long_catch.engine import BrowserEngine, RaceEngine, engine_script
 from long_catch.model import (
     EMPHASES,
     FAULTS,
     PHASE_LABELS,
     PLAYBACK_SPEEDS,
     PRESETS,
+    RACE_DISTANCES,
+    RACE_PLAYBACK_SPEEDS,
     SETTING_RANGES,
     TRAIL_SECONDS,
     Metrics,
     Phase,
+    RaceConfig,
     ViewState,
     format_duration,
     matching_preset,
@@ -112,6 +116,27 @@ def section_title(text: str) -> ui.label:
     return ui.label(text).classes('lc-section-title')
 
 
+def stroke_slider(
+    spec: SliderSpec, value: int, on_change: Callable[[float], None], prefix: str = ''
+) -> tuple[ui.slider, ui.label]:
+    """Shared stroke control for the studio and the selected race swimmer."""
+    lo, hi = SETTING_RANGES[spec.key]
+    with ui.element('div').classes('lc-control'):
+        with ui.row().classes('lc-control-head'):
+            ui.label(spec.label).classes('lc-control-label')
+            ui.icon('info_outline').classes('lc-info').tooltip(spec.hint)
+            ui.element('div').classes('lc-spacer')
+            value_label = ui.label(f'{value}{spec.unit}').classes('lc-value')
+        slider = ui.slider(min=lo, max=hi, step=1, value=value, on_change=lambda e: on_change(e.value)).props(
+            f'aria-label="{prefix}{spec.label}"'
+        )
+        if spec.low:
+            with ui.row().classes('lc-control-range'):
+                ui.label(spec.low)
+                ui.label(spec.high)
+    return slider, value_label
+
+
 class LongCatchPage:
     """One client's page. Python owns the settings; the browser engine owns the live phase."""
 
@@ -131,6 +156,7 @@ class LongCatchPage:
         self.second_view: ui.scene_view | None = None
         # Last-rendered layouts; renderers skip DOM work when nothing changed.
         self._view_layout: tuple | None = None
+        self.race: RaceMode | None = None
 
     # ---- layout -------------------------------------------------------------------------------
 
@@ -139,10 +165,32 @@ class LongCatchPage:
         ui.add_head_html(stylesheet())
         ui.add_body_html(engine_script())
         ui.colors(primary=PALETTE.hold)
-        with ui.element('div').classes('lc-root'):
+        with ui.tabs(value='studio', on_change=lambda e: self.switch_mode(e.value)).classes('lc-mode-tabs'):
+            ui.tab('studio', label='Stroke studio', icon='accessibility_new')
+            ui.tab('race', label='Race', icon='sports_score')
+        with ui.element('div').classes('lc-root lc-studio') as self.studio:
             self._build_stage()
             self._build_panel()
+        self.race_space = ui.element('div').classes('lc-root lc-race')
+        self.race_space.set_visibility(False)
         self._render()
+
+    def switch_mode(self, mode: str) -> None:
+        """Retain the studio intact; build the two race scenes only on first use."""
+        racing = mode == 'race'
+        self.studio.set_visibility(not racing)
+        self.race_space.set_visibility(racing)
+        self.scene.props(f'fps={1 if racing else 60}')
+        if self.second_view is not None:
+            self.second_view.props(f'fps={60 if not racing and self.view.split else 1}')
+        self.engine.set_active(not racing)
+        if racing and self.race is None:
+            with self.race_space:
+                self.race = RaceMode(lambda: self.view)
+                self.race.build()
+            self.race.start()
+        elif self.race is not None:
+            self.race.set_active(racing)
 
     def _build_stage(self) -> None:
         """3D scene (plus a hidden second pane for split view) and the HUD overlays."""
@@ -312,25 +360,10 @@ class LongCatchPage:
 
     def _build_slider(self, spec: SliderSpec) -> None:
         """One labelled stroke slider with a live value pill and optional range captions."""
-        lo, hi = SETTING_RANGES[spec.key]
         value = getattr(self.view.settings, spec.key)
-        with ui.element('div').classes('lc-control'):
-            with ui.row().classes('lc-control-head'):
-                ui.label(spec.label).classes('lc-control-label')
-                ui.icon('info_outline').classes('lc-info').tooltip(spec.hint)
-                ui.element('div').classes('lc-spacer')
-                self.slider_values[spec.key] = ui.label(f'{value}{spec.unit}').classes('lc-value')
-            self.sliders[spec.key] = ui.slider(
-                min=lo,
-                max=hi,
-                step=1,
-                value=value,
-                on_change=lambda e, s=spec: self.on_slider(s, e.value),
-            ).props(f'aria-label="{spec.label}"')
-            if spec.low:
-                with ui.row().classes('lc-control-range'):
-                    ui.label(spec.low)
-                    ui.label(spec.high)
+        self.sliders[spec.key], self.slider_values[spec.key] = stroke_slider(
+            spec, value, lambda value: self.on_slider(spec, value)
+        )
 
     # ---- state ---------------------------------------------------------------------------------
 
@@ -488,6 +521,240 @@ class LongCatchPage:
         self._segment_layout = starts
         for segment, (start, end) in zip(self.segments, pairwise(starts), strict=True):
             segment.style(f'left:{start * 100:.2f}%; width:{(end - start) * 100:.2f}%')
+
+
+class RaceMode:
+    """Independent lane settings and a browser-owned race clock, on the same page."""
+
+    def __init__(self, studio_view: Callable[[], ViewState]) -> None:
+        self.studio_view = studio_view
+        self.engine = RaceEngine()
+        self.swimmers = [ViewState(settings=PRESETS[name]) for name in ('Long power', 'Short slipping')]
+        self.distance = 50
+        self.count = 2
+        self.selected = 0
+        self.applying = False
+        self.scenes: list[dict[str, Any]] = []
+        self.scene_elements: list[ui.scene] = []
+        self.names: list[ui.label] = []
+        self.estimates: list[ui.label] = []
+        self.sliders: dict[str, ui.slider] = {}
+        self.values: dict[str, ui.label] = {}
+
+    def config(self) -> RaceConfig:
+        return RaceConfig(tuple(self.swimmers[: self.count]), self.distance)
+
+    def build(self) -> None:
+        with ui.element('div').classes('lc-race-stage'):
+            with ui.element('div').classes('lc-race-heading'):
+                with ui.column().classes('gap-0'):
+                    ui.label('Race lab').classes('lc-title')
+                    ui.label('Estimated race / continuous swim').classes('lc-subtitle')
+                with ui.column().classes('items-end gap-0'):
+                    ui.label('Ready').classes('lc-race-status')
+                    ui.label('0.00 s').classes('lc-race-clock')
+            with ui.element('div').classes('lc-race-lanes') as self.lanes:
+                for i, key in enumerate(('a', 'b')):
+                    with ui.element('div').classes(f'lc-race-lane lc-race-lane-{key}') as lane:
+                        if i == 1:
+                            self.second_lane = lane
+                        with ui.element('div').classes('lc-race-lane-title'):
+                            ui.label(f'Swimmer {key.upper()}').classes(f'lc-lane-tag lc-lane-{key}')
+                            self.names.append(ui.label().classes('lc-race-setup-name'))
+                            self.estimates.append(ui.label().classes('lc-subtitle'))
+                        scene = ui.scene(
+                            width=600,
+                            height=550,
+                            grid=False,
+                            background_color=PALETTE.background,
+                            fps=60,
+                            camera=ui.scene.perspective_camera(fov=42),
+                        )
+                        with scene:
+                            palette = replace(PALETTE, cap=PALETTE.hold if i == 0 else PALETTE.patch)
+                            ids = SwimmerBuilder(palette=palette).build()
+                        scene.move_camera(0.3, -2.5, 1.8, -0.3, 0, -0.15, duration=0)
+                        self.scenes.append({'id': scene.id, 'ids': ids})
+                        self.scene_elements.append(scene)
+            self._build_board()
+        self._build_panel()
+        self._render()
+
+    def _build_board(self) -> None:
+        with ui.element('div').classes('lc-race-board'):
+            for i, key in enumerate(('a', 'b')):
+                with ui.element('div').classes('lc-race-result') as row:
+                    if i == 1:
+                        self.second_result = row
+                    ui.label(key.upper()).classes(f'lc-lane-tag lc-lane-{key}')
+                    with (
+                        ui.element('div')
+                        .classes(f'lc-race-track lc-race-track-{key}')
+                        .props(f'role=progressbar aria-label="Swimmer {key.upper()} distance" aria-valuemin=0')
+                    ):
+                        ui.element('div').classes(f'lc-race-fill lc-race-fill-{key}')
+                    ui.label().classes(f'lc-race-metres lc-race-metres-{key}')
+                    ui.label().classes(f'lc-race-time lc-race-time-{key}')
+                    ui.label().classes(f'lc-race-place lc-race-place-{key}')
+            with ui.row().classes('lc-race-transport'):
+                with (
+                    ui.button(on_click=lambda: self.engine.call('toggle'))
+                    .props('no-caps unelevated')
+                    .classes('lc-race-play')
+                ):
+                    ui.label('Start race').classes('lc-race-play-label')
+                ui.button('Reset race', icon='restart_alt', on_click=lambda: self.engine.call('reset')).props(
+                    'flat no-caps'
+                )
+                ui.element('div').classes('lc-spacer')
+                ui.toggle(
+                    {speed: f'{speed:g}x' for speed in RACE_PLAYBACK_SPEEDS},
+                    value=1.0,
+                    on_change=lambda e: self.engine.call('setSpeed', e.value),
+                ).props('no-caps').tooltip('Race playback speed; finish times stay in simulated seconds')
+                LongCatchPage._icon_button(
+                    'center_focus_strong', 'Reset race cameras', lambda: self.engine.call('resetCamera')
+                )
+            ui.label().classes('lc-race-summary').props('aria-live=polite')
+
+    def _build_panel(self) -> None:
+        with ui.element('div').classes('lc-panel'):
+            with ui.element('div').classes('lc-card'):
+                section_title('Race setup')
+                ui.toggle(
+                    {d: f'{d} m' for d in RACE_DISTANCES},
+                    value=self.distance,
+                    on_change=lambda e: self.change_distance(e.value),
+                ).props('no-caps spread').classes('lc-segmented').tooltip('Race distance')
+                ui.toggle(
+                    {1: 'Solo', 2: 'Two swimmers'},
+                    value=self.count,
+                    on_change=lambda e: self.change_count(e.value),
+                ).props('no-caps spread').classes('lc-segmented q-mt-sm')
+                ui.label('Changing a setup resets the race. Leaving this tab pauses it.').classes('lc-race-help')
+            with ui.element('div').classes('lc-card'):
+                section_title('Configure swimmer')
+                self.lane_toggle = (
+                    ui.toggle({0: 'Swimmer A', 1: 'Swimmer B'}, value=0, on_change=lambda e: self.select_lane(e.value))
+                    .props('no-caps spread')
+                    .classes('lc-segmented')
+                )
+                self.preset = (
+                    ui.select(
+                        list(PRESETS),
+                        label='Race preset',
+                        value='Long power',
+                        on_change=lambda e: self.preset_changed(e.value),
+                    )
+                    .props('outlined dense options-dense')
+                    .classes('w-full q-mt-md')
+                )
+                with ui.row().classes('lc-race-copy'):
+                    ui.button('Use studio setup', on_click=self.copy_studio).props('flat dense no-caps')
+                    self.copy_button = ui.button('Copy A to B', on_click=self.copy_lane).props('flat dense no-caps')
+                for spec in SLIDERS:
+                    self.sliders[spec.key], self.values[spec.key] = stroke_slider(
+                        spec,
+                        getattr(self.swimmers[0].settings, spec.key),
+                        lambda value, s=spec: self.slider_changed(s, value),
+                        prefix='Race ',
+                    )
+                self.fault_select = (
+                    ui.select(
+                        {key: fault.label for key, fault in FAULTS.items()},
+                        multiple=True,
+                        value=[],
+                        label='Race stroke faults',
+                        on_change=lambda e: self.faults_changed(e.value),
+                    )
+                    .props('outlined dense use-chips options-dense')
+                    .classes('w-full q-mt-md')
+                )
+
+    def start(self) -> None:
+        self.engine.start(self.scenes, self.config().render_params())
+
+    def set_active(self, active: bool) -> None:
+        for i, scene in enumerate(self.scene_elements):
+            scene.props(f'fps={60 if active and i < self.count else 1}')
+        self.engine.call('setActive', active)
+
+    def change_distance(self, value: int) -> None:
+        self.distance = value
+        self._render()
+
+    def change_count(self, value: int) -> None:
+        self.count = value
+        if value == 1:
+            self.selected = 0
+        self.second_lane.set_visibility(value == 2)
+        self.second_result.set_visibility(value == 2)
+        self.scene_elements[1].props(f'fps={60 if value == 2 else 1}')
+        self.lanes.classes(add='lc-race-solo' if value == 1 else '', remove='lc-race-solo' if value == 2 else '')
+        LongCatchPage._enable(self.lane_toggle, value == 2)
+        LongCatchPage._enable(self.copy_button, value == 2)
+        self._render()
+
+    def select_lane(self, value: int) -> None:
+        if not self.applying:
+            self.selected = value
+            self._render_editor()
+
+    def preset_changed(self, name: str | None) -> None:
+        if not self.applying and name is not None:
+            self.swimmers[self.selected] = replace(self.swimmers[self.selected], settings=PRESETS[name])
+            self._render()
+
+    def slider_changed(self, spec: SliderSpec, value: float) -> None:
+        if not self.applying:
+            view = self.swimmers[self.selected]
+            self.swimmers[self.selected] = replace(view, settings=view.settings.with_values(**{spec.key: int(value)}))
+            self._render()
+
+    def faults_changed(self, values: list[str]) -> None:
+        if not self.applying:
+            self.swimmers[self.selected] = replace(self.swimmers[self.selected], faults=frozenset(values))
+            self._render()
+
+    def copy_studio(self) -> None:
+        source = self.studio_view()
+        self.swimmers[self.selected] = replace(
+            self.swimmers[self.selected], settings=source.settings, faults=source.faults
+        )
+        self._render()
+
+    def copy_lane(self) -> None:
+        self.swimmers[1 - self.selected] = replace(self.swimmers[self.selected])
+        self._render()
+
+    def _render_editor(self) -> None:
+        view = self.swimmers[self.selected]
+        self.applying = True
+        try:
+            self.lane_toggle.value = self.selected
+            self.preset.value = matching_preset(view.settings)
+            self.fault_select.value = sorted(view.faults)
+            for spec in SLIDERS:
+                value = getattr(view.settings, spec.key)
+                self.sliders[spec.key].value = value
+                self.values[spec.key].text = f'{value}{spec.unit}'
+        finally:
+            self.applying = False
+        self.copy_button.text = 'Copy B to A' if self.selected else 'Copy A to B'
+
+    def _render(self) -> None:
+        for i, view in enumerate(self.swimmers):
+            self.names[i].text = matching_preset(view.settings) or 'Custom'
+            metrics = view.metrics()
+            finish = metrics.seconds_per_25 * self.distance / 25
+            speed = 25 / metrics.seconds_per_25
+            self.estimates[
+                i
+            ].text = (
+                f'{speed:.2f} m/s / {metrics.distance_per_stroke:.2f} m per stroke / Est. {format_duration(finish)}'
+            )
+        self._render_editor()
+        self.engine.set(self.config().render_params())
 
 
 @ui.page('/')

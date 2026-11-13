@@ -7,9 +7,17 @@ body {
   font-family: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-.nicegui-content { padding: 0 !important; }
+.nicegui-content { padding: 0 !important; gap: 0 !important; }
 
-.lc-root { display: flex; width: 100%; height: 100vh; }
+.lc-mode-tabs {
+  height: 52px; width: 100%; flex: none; background: var(--lc-panel);
+  border-bottom: 1px solid rgba(231, 240, 234, 0.1); color: var(--lc-text);
+}
+.lc-mode-tabs .q-tabs__content { justify-content: flex-start; padding-left: 12px; }
+.lc-mode-tabs .q-tab { text-transform: none; min-height: 52px; }
+.lc-mode-tabs .q-tab__content { flex-direction: row; gap: 8px; }
+.lc-mode-tabs .q-tab__icon { font-size: 19px; }
+.lc-root { display: flex; width: 100%; height: calc(100dvh - 52px); }
 .lc-root [role="slider"]:focus-visible {
   outline: 2px solid var(--lc-hold); outline-offset: 3px;
 }
@@ -77,13 +85,15 @@ body {
 .lc-seg-0 { background: rgba(61, 190, 165, 0.10); }
 .lc-seg-1 { background: rgba(61, 190, 165, 0.18); }
 .lc-seg-2 { background: rgba(61, 190, 165, 0.26); }
-.lc-seg-3 { background: rgba(61, 190, 165, 0.18); }
-.lc-seg-4 { background: rgba(231, 240, 234, 0.06); border-right: 0; }
+.lc-seg-3 { background: rgba(61, 190, 165, 0.34); }
+.lc-seg-4 { background: rgba(61, 190, 165, 0.18); }
+.lc-seg-5 { background: rgba(231, 240, 234, 0.06); border-right: 0; }
 .lc-timeline[data-stage="0"] .lc-seg-0,
 .lc-timeline[data-stage="1"] .lc-seg-1,
 .lc-timeline[data-stage="2"] .lc-seg-2,
 .lc-timeline[data-stage="3"] .lc-seg-3,
-.lc-timeline[data-stage="4"] .lc-seg-4 { color: var(--lc-text); background: rgba(61, 190, 165, 0.42); }
+.lc-timeline[data-stage="4"] .lc-seg-4,
+.lc-timeline[data-stage="5"] .lc-seg-5 { color: var(--lc-text); background: rgba(61, 190, 165, 0.42); }
 .lc-timeline-marker {
   position: absolute; top: 2px; bottom: 2px; width: 3px; margin-left: -1.5px; border-radius: 2px;
   background: var(--lc-text); pointer-events: none;
@@ -105,7 +115,7 @@ body {
 
 /* ---- panel ----------------------------------------------------------------------------- */
 .lc-panel {
-  flex: 0 0 360px; width: 360px; height: 100vh; overflow-y: auto; box-sizing: border-box;
+  flex: 0 0 360px; width: 360px; height: 100%; overflow-y: auto; box-sizing: border-box;
   padding: 16px; display: flex; flex-direction: column; gap: 14px;
   background: var(--lc-panel); border-left: 1px solid rgba(231, 240, 234, 0.08);
   scrollbar-width: thin; scrollbar-color: #37515a var(--lc-panel);
@@ -213,7 +223,52 @@ body {
   .lc-root .q-btn, .lc-seg, .lc-stat-value, .lc-hold { transition: none; }
 }
 
+/* ---- race mode ------------------------------------------------------------------------- */
+.lc-race-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.lc-race-heading { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; }
+.lc-race-status { color: var(--lc-hold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; }
+.lc-race-clock { font-size: 1.7rem; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lc-race-lanes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.lc-race-solo { grid-template-columns: 1fr; }
+.lc-race-lane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.lc-race-lane-title {
+  position: absolute; z-index: 1; top: 10px; left: 12px; right: 12px; pointer-events: none;
+  padding: 10px 12px; border-radius: 12px; background: rgba(9, 25, 33, 0.85);
+  border: 1px solid rgba(231, 240, 234, 0.08);
+}
+.lc-lane-tag { font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+.lc-lane-a { color: var(--lc-hold); }
+.lc-lane-b { color: var(--lc-patch); }
+.lc-race-setup-name { font-size: 1rem; font-weight: 600; margin-top: 2px; }
+.lc-race-board { flex: none; padding: 14px 20px 12px; background: var(--lc-panel); }
+.lc-race-result { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.lc-race-result > .lc-lane-tag { width: 18px; }
+.lc-race-track {
+  flex: 1; height: 16px; border-radius: 8px; overflow: hidden;
+  background: repeating-linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), #37515a 25%), #162f39;
+}
+.lc-race-fill { height: 100%; width: 0; border-radius: 8px; min-width: 3px; }
+.lc-race-fill-a { background: var(--lc-hold); }
+.lc-race-fill-b { background: var(--lc-patch); }
+.lc-race-metres, .lc-race-time { font-variant-numeric: tabular-nums; font-size: 0.78rem; text-align: right; }
+.lc-race-metres { width: 90px; }
+.lc-race-time { width: 66px; }
+.lc-race-place { width: 24px; color: var(--lc-hold); font-size: 0.75rem; font-weight: 700; }
+.lc-race-transport { align-items: center; gap: 6px; flex-wrap: wrap; }
+.lc-race-transport .q-btn { font-size: 0.78rem; }
+.lc-race-play { color: #06201b !important; min-width: 112px; }
+.lc-race-transport .q-btn-group { box-shadow: none; --q-primary: #23504e; }
+.lc-race-summary, .lc-race-help { font-size: 0.72rem; color: var(--lc-muted); line-height: 1.5; margin-top: 10px; }
+.lc-race-copy { gap: 8px; margin: 8px 0; }
+.lc-race-copy .q-btn { font-size: 0.72rem; }
+.lc-race [role="progressbar"]:focus-visible, .lc-mode-tabs .q-tab:focus-visible { outline: 2px solid var(--lc-hold); }
+
 /* ---- narrow screens -------------------------------------------------------------------- */
+@media (max-width: 1000px) {
+  .lc-race { flex-direction: column; height: auto; }
+  .lc-race-stage { flex: none; height: 720px; }
+  .lc-race .lc-panel { flex: none; width: 100%; height: auto; border-left: 0; }
+}
 @media (max-width: 760px) {
   .lc-root { flex-direction: column; height: auto; }
   .lc-stage { flex: none; height: 68vh; min-height: 420px; }
@@ -224,4 +279,12 @@ body {
   .lc-arms { flex-basis: 220px; width: 220px; }
   .lc-arm { flex: 1 1 0; width: auto; min-width: 0; padding: 3px 5px; }
   .lc-dock { bottom: 10px; width: calc(100% - 20px); padding: 8px 8px 4px; }
+  .lc-race-stage { flex: none; height: 900px; }
+  .lc-race-lanes:not(.lc-race-solo) { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .lc-race-heading { padding: 12px; }
+  .lc-race-board { padding: 12px; }
+  .lc-race-result { gap: 6px; }
+  .lc-race-metres { width: 82px; }
+  .lc-race-time { width: 60px; }
+  .lc-race-transport .lc-spacer { display: none; }
 }

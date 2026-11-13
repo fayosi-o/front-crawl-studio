@@ -59,7 +59,9 @@ external services or network assets.
 | **Natural motion** | Breathing every third stroke on alternating sides: the head turns as that arm starts its recovery and is back down before the hand enters. Also a steady head, a slight body heave, and small stroke-to-stroke and kick-to-kick variation. Visual only; the metrics are unaffected. |
 | **Motion trails** | Fading trails for the hands, feet or both, adjustable from 0.5 to 5 seconds. |
 | **Stroke metrics** | Distance per stroke, strokes per 25 m and time per 25 m, updated live. |
-| **Timeline** | Scrub or step through entry, catch, pull, finish and recovery, at ¼×, ½× or 1× speed. |
+| **Race lab** | A separate tab for 25, 50 or 100 m races with one or two independently configured swimmers. Compare strokes in colour-coded follow cameras and distance tracks, then see finish times and the winning margin. |
+| **Pace and waterline** | Slower swimmers settle a little deeper, especially at the hips; faster swimmers ride slightly higher. A bounded, smoothly damped buoyancy effect follows the estimated pace in both modes without changing the speed calculations. |
+| **Timeline** | Scrub or step through entry, catch, pull, push, finish and recovery, at ¼×, ½× or 1× speed. The underwater sweep flows from pulling beneath the chest into a rearward push toward the hip before release. |
 
 ## Quick start
 
@@ -104,6 +106,9 @@ catch.
 - Drag the scene to orbit and scroll to zoom.
 - Drag the timeline to scrub through the right arm's phases. The cards at the
   top show the current phase of each arm.
+- **Pull** brings the hand under the chest; **Push** extends the arm back toward
+  the hip while the hand remains submerged. **Finish** releases the hand before
+  recovery. They share the original cycle duration rather than adding a stroke.
 - In the **View** card, turn on split view, choose a second camera, and pick
   a trail type and trail length.
 - Trails pause with the animation and clear when you step or scrub.
@@ -119,6 +124,34 @@ catch.
 | <kbd>V</kbd> | Toggle split view |
 
 Shortcuts don't work while a slider has focus.
+
+### Race two setups
+
+1. Open the **Race** tab and choose **25 m**, **50 m**, or **100 m**.
+   Choose **Solo** for a single-swimmer trial or **Two swimmers** to compare.
+2. Select **Swimmer A** or **Swimmer B** in the panel. Each has independent
+   presets, all eight stroke controls, and stroke faults. Caps and distance
+   tracks are teal for A and amber for B.
+3. Use **Use studio setup** to copy the original studio's stroke and faults to
+   the selected swimmer, or **Copy A to B** (and vice versa) for a like-for-like
+   baseline before adjusting one setting.
+4. **Start race**, pause/resume with the button or Space, and **Reset race** to
+   return to the start. Playback at **1x**, **2x**, or **4x** changes how quickly
+   you watch, not the simulated finish times.
+5. Both lanes start together. The cameras follow each swimmer so the stroke
+   stays visible; the shared distance tracks show who is ahead. Each swimmer
+   stops at the selected distance, with finish order, time and winning margin.
+
+Editing a setup or changing distance/swimmer count resets the race. Selecting
+which swimmer to edit does not. Leaving the Race tab pauses the race; returning
+lets you resume it. Studio settings, playback state and cycle position are
+preserved independently.
+
+Race times use the same steady-speed estimates as the studio, including fault
+penalties. These are continuous swims: no dive, wall turns or fatigue model.
+Stroke depth, entry angle and kick amplitude still change motion rather than
+the estimated speed. Waterline support is a lightweight visual approximation,
+not a fluid simulation; water effects never change the race result.
 
 ## Development
 
@@ -136,7 +169,10 @@ ruff format --check .      # formatting
 - **`long_catch/app.py`**: the NiceGUI page. It owns the settings and sends
   the render parameters to the browser.
 - **`long_catch/static/engine.js`**: the browser animation loop. It owns the
-  live phase, joint solving, cameras, trails, water and lighting.
+  live phase, joint solving, cameras, trails, water and lighting. The race reuses
+  independent instances of this engine rather than duplicating the animation.
+- **`long_catch/static/race.js`**: one shared race clock drives both lanes,
+  clamps each swimmer at the finish, and updates distance tracks and results.
 - **`long_catch/swimmer.py`**: builds the procedural swimmer and pool from
   NiceGUI scene primitives.
 
@@ -150,12 +186,13 @@ cost), `app.FAULT_ICONS`, and its visual in `engine.js`.
 ├── long_catch/
 │   ├── app.py              # NiceGUI page and controls
 │   ├── engine.py           # Browser-engine setup
-│   ├── model.py            # Stroke settings, timing and metrics
+│   ├── model.py            # Stroke settings, metrics, race inputs and buoyancy targets
 │   ├── swimmer.py          # Procedural swimmer and pool geometry
 │   ├── theme.py            # Palette and stylesheet loading
 │   └── static/
 │       ├── app.css         # Layout and component styles
-│       └── engine.js       # Animation, camera, trails and joint solver
+│       ├── engine.js       # Animation, camera, trails and joint solver
+│       └── race.js         # Shared race clock and results
 ├── tests/
 │   └── test_model.py
 ├── docs/

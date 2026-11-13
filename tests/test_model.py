@@ -10,6 +10,7 @@ from long_catch.model import (
     PRESETS,
     RUSH,
     Phase,
+    RaceConfig,
     StrokeSettings,
     ViewState,
     arm_phases,
@@ -23,6 +24,7 @@ from long_catch.model import (
     phase_boundaries,
     phase_to_step,
     timeline_boundaries,
+    waterline_pose,
 )
 
 
@@ -63,6 +65,15 @@ def test_longer_stroke_stays_underwater_longer():
     assert exit_phase(1.0) > exit_phase(0.0)
     assert phase_to_step(0.76, length=1.0) == Phase.FINISH
     assert phase_to_step(0.76, length=0.0) == Phase.RECOVERY
+
+
+def test_push_is_distinct_from_pull_and_finish_without_extending_the_cycle():
+    assert phase_to_step(0.49).label == 'Pull'
+    assert phase_to_step(0.50).label == 'Push'
+    assert phase_to_step(0.6599).label == 'Push'
+    assert phase_to_step(0.66).label == 'Finish'
+    assert timeline_boundaries(0.5) == pytest.approx((0.12, 0.30, 0.50, 0.66, 0.74))
+    assert cycle_duration(40) == 3.0
 
 
 def test_path_length_shortens_with_rate():
@@ -207,3 +218,59 @@ def test_spinning_arms_slip_and_rush_the_underwater_phase():
     assert params['slip'] > ViewState().render_params()['slip']
     assert params['rush'] == RUSH and params['faults'] == ['rushing']
     assert timeline_boundaries(0.5, rushed=True) == pytest.approx([b * RUSH for b in phase_boundaries(0.5)])
+
+
+@pytest.mark.parametrize('distance', [25, 50, 100])
+def test_race_finish_matches_distance_and_existing_estimates(distance):
+    swimmers = (ViewState(), ViewState(settings=PRESETS['Short slipping'], faults=frozenset({'sinking'})))
+    race = RaceConfig(swimmers, distance)
+    for view, lane, finish in zip(swimmers, race.render_params()['lanes'], race.finish_times(), strict=True):
+        assert finish == pytest.approx(view.metrics().seconds_per_25 * distance / 25)
+        assert lane['params']['speed'] * lane['finishTime'] == pytest.approx(distance)
+        assert lane['params'] == view.render_params()
+    assert race.finish_times()[0] < race.finish_times()[1]
+
+
+def test_solo_race_and_equal_setups():
+    view = ViewState(settings=PRESETS['Compact connected'])
+    solo = RaceConfig((view,), 100)
+    pair = RaceConfig((view, view), 100)
+    assert len(solo.render_params()['lanes']) == 1
+    assert pair.finish_times() == (solo.finish_times()[0],) * 2
+    slower = view.with_fault('rushing', True)
+    changed = RaceConfig((view, slower), 100)
+    assert changed.finish_times()[1] > changed.finish_times()[0]
+    assert pair.swimmers[1].faults == frozenset()
+
+
+@pytest.mark.parametrize(('count', 'distance'), [(0, 25), (3, 25), (1, 0), (1, 101), (2, 75)])
+def test_race_rejects_unsupported_setup(count, distance):
+    with pytest.raises(ValueError):
+        RaceConfig((ViewState(),) * count, distance)
+
+
+def test_pace_support_raises_body_and_reduces_hip_drop_with_bounded_travel():
+    slow, middle, fast = (waterline_pose(speed) for speed in (0.24, 0.62, 1.0))
+    assert slow[0] < middle[0] < fast[0]
+    assert slow[1] > middle[1] > fast[1]
+    assert slow == pytest.approx((-0.045, 0.025))
+    assert fast == pytest.approx((0.030, 0.0))
+    assert waterline_pose(0) == slow
+    assert waterline_pose(100) == fast
+
+
+def test_buoyancy_follows_fault_adjusted_pace_without_changing_metrics():
+    clean = ViewState()
+    slow = clean.with_fault('sinking', True).with_fault('rushing', True)
+    for view in (clean, slow):
+        before = view.metrics()
+        params = view.render_params()
+        assert (params['rideHeight'], params['hipDrop']) == waterline_pose(params['speed'])
+        assert view.metrics() == before
+    assert slow.render_params()['rideHeight'] < clean.render_params()['rideHeight']
+
+
+@pytest.mark.parametrize('speed', [-1, math.inf, math.nan])
+def test_buoyancy_rejects_invalid_speed(speed):
+    with pytest.raises(ValueError):
+        waterline_pose(speed)

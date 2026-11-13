@@ -21,6 +21,8 @@ TRAILS: tuple[Trail, ...] = ('off', 'hands', 'feet', 'both')
 
 PLAYBACK_SPEEDS: tuple[float, ...] = (0.25, 0.5, 1.0)
 TRAIL_SECONDS = (0.5, 5.0)  # min and max ghost-trail length
+RACE_DISTANCES = (25, 50, 100)
+RACE_PLAYBACK_SPEEDS = (1.0, 2.0, 4.0)
 
 # Hold quality at or above this reads as "holding water" in the UI.
 HOLDING_THRESHOLD = 0.7
@@ -37,8 +39,9 @@ class Phase(IntEnum):
     ENTRY = 0
     CATCH = 1
     PULL = 2
-    FINISH = 3
-    RECOVERY = 4
+    PUSH = 3
+    FINISH = 4
+    RECOVERY = 5
 
     @property
     def label(self) -> str:
@@ -50,6 +53,7 @@ PHASE_LABELS: dict[Phase, str] = {
     Phase.ENTRY: 'Entry & reach',
     Phase.CATCH: 'Catch',
     Phase.PULL: 'Pull',
+    Phase.PUSH: 'Push',
     Phase.FINISH: 'Finish',
     Phase.RECOVERY: 'Recovery',
 }
@@ -58,6 +62,7 @@ PHASE_LABELS: dict[Phase, str] = {
 # (hand exit) depends on path length; see `exit_phase`.
 CATCH_START = 0.12
 PULL_START = 0.30
+PUSH_START = 0.50
 FINISH_START = 0.66
 
 
@@ -71,16 +76,16 @@ def exit_phase(length: float) -> float:
     return 0.70 + 0.08 * clamp(length, 0.0, 1.0)
 
 
-def phase_boundaries(length: float) -> tuple[float, float, float, float]:
-    """Start of catch, pull, finish, and recovery for a given path length."""
-    return CATCH_START, PULL_START, FINISH_START, exit_phase(length)
+def phase_boundaries(length: float) -> tuple[float, ...]:
+    """Start of catch, pull, push, finish, and recovery for a given path length."""
+    return CATCH_START, PULL_START, PUSH_START, FINISH_START, exit_phase(length)
 
 
 def phase_to_step(phase: float, length: float = 0.5) -> Phase:
     """Map an arm phase (wrapped into [0, 1)) to its broad stroke step."""
     p = phase % 1.0
     step = Phase.ENTRY
-    later_steps = (Phase.CATCH, Phase.PULL, Phase.FINISH, Phase.RECOVERY)
+    later_steps = (Phase.CATCH, Phase.PULL, Phase.PUSH, Phase.FINISH, Phase.RECOVERY)
     for next_step, start in zip(later_steps, phase_boundaries(length), strict=True):
         if p < start:
             break
@@ -233,7 +238,7 @@ def fault_drag(faults: frozenset[str]) -> float:
     return 1.0 - keep
 
 
-def timeline_boundaries(length: float, rushed: bool = False) -> tuple[float, float, float, float]:
+def timeline_boundaries(length: float, rushed: bool = False) -> tuple[float, ...]:
     """Phase boundaries as seen on screen; a rushed stroke squeezes the underwater part."""
     bounds = phase_boundaries(length)
     return tuple(b * RUSH for b in bounds) if rushed else bounds
@@ -242,6 +247,19 @@ def timeline_boundaries(length: float, rushed: bool = False) -> tuple[float, flo
 def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
     """Muscle-overlay strength (0.15–1.0); a strong glow needs both hold and drive."""
     return 0.15 + 0.85 * (clamp(hold_quality, 0.0, 1.0) * clamp(drive_balance, 0.0, 1.0)) ** 1.5
+
+
+def waterline_pose(speed: float) -> tuple[float, float]:
+    """Visual buoyancy targets in metres: body lift and extra hip drop.
+
+    Pace provides a little dynamic support, not enough to lift the body out of
+    the water. This illustrative response never feeds back into the estimates.
+    """
+    if not math.isfinite(speed) or speed < 0:
+        raise ValueError('speed must be finite and non-negative')
+    support = clamp((speed - 0.24) / 0.76, 0.0, 1.0)
+    support = support * support * (3 - 2 * support)
+    return -0.045 + 0.075 * support, 0.025 * (1 - support)
 
 
 # Inclusive slider ranges; StrokeSettings rejects anything outside them.
@@ -342,6 +360,8 @@ class ViewState:
         m = metrics if metrics is not None else self.metrics()
         length = path_length(s.rate)
         catch, slip = self.effective_hold()
+        speed = m.distance_per_stroke * s.rate / 60.0
+        ride_height, hip_drop = waterline_pose(speed)
         return {
             'rate': s.rate,
             'catch': catch,
@@ -361,7 +381,9 @@ class ViewState:
             'trail': self.trail,
             'trailSeconds': self.trail_seconds,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
-            'speed': m.distance_per_stroke * s.rate / 60.0,  # metres per second
+            'speed': speed,  # metres per second
+            'rideHeight': ride_height,
+            'hipDrop': hip_drop,
         }
 
 
@@ -377,3 +399,31 @@ PRESETS: dict[str, StrokeSettings] = {
 def matching_preset(settings: StrokeSettings) -> str | None:
     """Name of the preset these settings equal, or None for a custom stroke."""
     return next((name for name, preset in PRESETS.items() if preset == settings), None)
+
+
+@dataclass(frozen=True, slots=True)
+class RaceConfig:
+    """One or two independent setups for a continuous swim, without starts or turns."""
+
+    swimmers: tuple[ViewState, ...]
+    distance: int = 50
+
+    def __post_init__(self) -> None:
+        if self.distance not in RACE_DISTANCES:
+            raise ValueError(f'unsupported race distance {self.distance!r}')
+        if not 1 <= len(self.swimmers) <= 2:
+            raise ValueError('a race needs one or two swimmers')
+
+    def finish_times(self) -> tuple[float, ...]:
+        """Exact estimated finish seconds, including each swimmer's stroke faults."""
+        return tuple(v.metrics().seconds_per_25 * self.distance / 25 for v in self.swimmers)
+
+    def render_params(self) -> dict:
+        """Immutable race inputs; the browser owns elapsed time, not the settings."""
+        return {
+            'distance': self.distance,
+            'lanes': [
+                {'params': v.render_params(), 'finishTime': finish}
+                for v, finish in zip(self.swimmers, self.finish_times(), strict=True)
+            ],
+        }

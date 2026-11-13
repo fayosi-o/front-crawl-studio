@@ -2,9 +2,9 @@
 //
 // Python owns the settings and sends them through window.LongCatch.set();
 // this loop owns the live cycle phase and poses the swimmer every frame.
-// Configuration arrives as window.LONG_CATCH_CONFIG = {colors, background, phases, finish, arm}.
+// Configuration arrives as window.LONG_CATCH_CONFIG (colours, phase boundaries, arm lengths).
 // Coordinates: head towards +x, z up, right side towards -y, water surface at z = 0.
-window.LongCatch = window.LongCatch || (() => {
+window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = false} = {}) {
   const CONFIG = window.LONG_CATCH_CONFIG;
   // Engine state. `el`, `m`, `home`, `view`, and `puff` are filled in lazily.
   const S = {
@@ -18,6 +18,7 @@ window.LongCatch = window.LongCatch || (() => {
     running: false,             // animation loop and listeners installed
     ui: {},                     // cached DOM nodes and last-written values
     trails: {}, trailReset: false,
+    active: true, ride: null,
   };
 
   // ---- maths helpers --------------------------------------------------------
@@ -64,7 +65,7 @@ window.LongCatch = window.LongCatch || (() => {
   // F holds active stroke faults; each one bends the healthy path toward a typical error.
   function arm(p, P, F) {
     const c = P.catch, s = P.slip, L = P.length;
-    const exit = P.exit, fin = CONFIG.finish;
+    const exit = P.exit, fin = CONFIG.finish, pull = CONFIG.pull, push = CONFIG.push;
     // Stroke depth: -1 keeps the hand tucked close to the body, +1 pulls deep with a straighter arm.
     const d = 2 * P.depth - 1;
     const midRec = exit + (1 - exit) * 0.4, lateRec = exit + (1 - exit) * 0.72;
@@ -72,12 +73,16 @@ window.LongCatch = window.LongCatch || (() => {
     // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
     const tilt = deg => [0.56 * Math.cos(deg * D), -0.56 * Math.sin(deg * D)];
     const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
-    const x = keyed(p, [
+    const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over;
+    const finishX = -lerp(0.40, 0.50, L);
+    let x = keyed(p, [
       [0, enterX + 0.08 * over], [0.12, glideX - 0.01 + 0.08 * over], [0.21, lerp(0.30, 0.40, c) + 0.08 * over],
-      [0.30, lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over],
-      [0.50, -0.04 - 0.08 * s], [fin, -0.29 - 0.05 * L], [exit, -lerp(0.34, 0.48, L)],
+      [pull, pullX], [fin, finishX], [exit, -lerp(0.42, 0.52, L)],
       [midRec, -0.10], [lateRec, 0.22], [1, enterX + 0.08 * over],
     ]);
+    // One uninterrupted sweep: pull under the chest, then extend back toward the hip.
+    // The slight timing bias puts peak rearward hand speed in the push, not at a stop under the shoulder.
+    if (p >= pull && p < fin) x = lerp(pullX, finishX, smooth(((p - pull) / (fin - pull)) ** 1.25));
     // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
     const out = keyed(p, [
       [0, 0.025], [0.12, 0.035], [0.21, 0.06], [0.30, 0.12 + 0.04 * (1 - c)], [0.50, 0.12],
@@ -88,7 +93,7 @@ window.LongCatch = window.LongCatch || (() => {
     const height = keyed(p, [
       [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.21, lerp(-0.16, -0.22, c) + 0.03 * over],
       [0.30, lerp(-0.26, -0.40, c) - 0.05 * d],
-      [0.50, -0.37 - 0.09 * d], [fin, -0.26 - 0.05 * d], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12],
+      [push, -0.32 - 0.08 * d], [fin, -0.06 - 0.02 * d], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12],
       [1, enterH + 0.03 * over],
     ]);
     // Recovery is elbow-led: the elbow arcs highest while the relaxed hand swings below and outside it.
@@ -102,7 +107,7 @@ window.LongCatch = window.LongCatch || (() => {
     // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
     const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
-    const stage = p < 0.12 ? 0 : p < 0.30 ? 1 : p < fin ? 2 : p < exit ? 3 : 4;
+    const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
     // Through the catch the upper arm rotates inward: the elbow guide swings forward and out
     // (dipping slightly from straight up), so a good catch keeps the elbow ahead of the hand.
     const catching = bump(p, 0.14, 0.46);
@@ -110,7 +115,7 @@ window.LongCatch = window.LongCatch || (() => {
     return {
       x, out, height, elbow, recovery, pole, lead: 0.7 * c * catching, shrug: front,
       wrist: wrist * D, under, stage,
-      back: bump(p, 0.10, fin + 0.02), triceps: bump(p, fin - 0.12, exit + 0.04),
+      back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),
     };
   }
 
@@ -196,7 +201,9 @@ window.LongCatch = window.LongCatch || (() => {
     const el = S.el;
     if (!el || !el.camera || !el.controls) return;
     const cam = el.camera, target = el.controls.target;
-    const aspect = el.$el.clientWidth / Math.max(1, el.$el.clientHeight);
+    const width = el.$el.clientWidth, height = el.$el.clientHeight;
+    if (!width || !height) return;
+    const aspect = width / height;
     const needed = 1.45 / (Math.tan(cam.fov * D / 2) * aspect);
     const dir = cam.position.clone().sub(target).normalize();
     cam.position.copy(target).addScaledVector(dir, Math.max(2.3, needed));
@@ -727,7 +734,7 @@ window.LongCatch = window.LongCatch || (() => {
     sh.position.x = r.baseX + 0.04 * a.shrug;
     // Convert a shoulder-relative point with a world height into the rolled (then pitched) chest frame.
     const chestZ = (height, out, x) =>
-      ((height + 0.06 + (sh.position.x + x) * sp) / cp - sin * (sh.position.y + sgn * out)) / cos;
+      ((height + 0.06 - m.chest.position.z + (sh.position.x + x) * sp) / cp - sin * (sh.position.y + sgn * out)) / cos;
     r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out, a.x));
     const reach = softReach(r.target.length());
     r.axis.copy(r.target).normalize();
@@ -801,7 +808,7 @@ window.LongCatch = window.LongCatch || (() => {
   function find(key, selector) {
     const cached = S.ui[key];
     if (cached && cached.isConnected) return cached;
-    S.ui[key] = document.querySelector(selector);
+    S.ui[key] = document.querySelector(root)?.querySelector(selector);
     return S.ui[key];
   }
 
@@ -828,18 +835,28 @@ window.LongCatch = window.LongCatch || (() => {
   // Advance the phase, then pose body, arms, legs, overlays, trails, and lane ropes.
   function frame(t) {
     requestAnimationFrame(frame);
-    if (document.hidden || !S.params) { S.last = null; return; }
+    if (document.hidden || !S.active || !S.params) { S.last = null; return; }
     const dt = S.last === null ? 0 : Math.min(0.1, (t - S.last) / 1000);
     S.last = t;
-    if (!resolve()) return;
-    const P = S.params, m = S.m;
+    const P = S.params;
     const scaled = P.playing ? dt * (P.playback || 1) : 0;
-    if (P.playing) {
+    advance(scaled);
+  }
+
+  function advance(scaled) {
+    if (!S.params || !resolve()) return;
+    const P = S.params, m = S.m;
+    if (scaled > 0) {
       const next = S.phase + scaled / (120 / P.rate);
-      if (next >= 1) S.cycles++;
+      S.cycles += Math.floor(next);
       S.phase = next % 1;
       S.offset += P.speed * scaled;
     }
+    // Exponential settling is stable at any frame rate and freezes with the stroke clock.
+    if (!S.ride) S.ride = {height: P.rideHeight, hips: P.hipDrop};
+    const settle = 1 - Math.exp(-4 * scaled);
+    S.ride.height = lerp(S.ride.height, P.rideHeight, settle);
+    S.ride.hips = lerp(S.ride.hips, P.hipDrop, settle);
     // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
     // Flat hips moves the rotation into the shoulders; sinking legs pitches the chest up and the pelvis down.
     // Breathing deepens the roll a few degrees toward the breathing side; roll size also wanders slightly.
@@ -859,8 +876,9 @@ window.LongCatch = window.LongCatch || (() => {
     m.pelvis.position.x = -0.36 * Math.cos(pitch);
     // The body rides a little higher as each arm presses back (twice per cycle), with a slight drift.
     const heave = 0.008 * Math.cos(2 * w * (S.phase - 0.4)) + 0.004 * noise(1.5 * st, 21);
-    m.chest.position.z = heave;
-    m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0) + 0.6 * heave;
+    m.chest.position.z = heave + S.ride.height;
+    m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0)
+      + 0.6 * heave + S.ride.height - S.ride.hips;
     // The head stays steady while the body rolls beneath it (the neck takes up half the roll),
     // then turns with the roll to breathe, one goggle staying in the water.
     const steady = -0.5 * bodyRoll, turn = Math.sign(breath) * 78 * D - bodyRoll;
@@ -894,13 +912,14 @@ window.LongCatch = window.LongCatch || (() => {
     m.buoys.forEach((b, i) => {
       b.position.x = wrap((m.basePos[i] - S.offset + 4.5) / span) * span - 4.5;
     });
-    updateHud(right, left);
+    if (!externalClock) updateHud(right, left);
   }
 
   // Scrubbing the timeline seeks the right-arm phase directly.
   function bindTimeline() {
     let dragging = false;
     const seekFrom = event => {
+      if (!S.active) return;
       const bar = event.target.closest && event.target.closest('.lc-timeline');
       const node = bar || find('timeline', '.lc-timeline');
       if (!node) return;
@@ -910,6 +929,7 @@ window.LongCatch = window.LongCatch || (() => {
       S.trailReset = true;
     };
     document.addEventListener('pointerdown', e => {
+      if (!S.active) return;
       if (!e.target.closest || !e.target.closest('.lc-timeline')) return;
       dragging = true;
       seekFrom(e);
@@ -924,13 +944,14 @@ window.LongCatch = window.LongCatch || (() => {
   };
   function bindKeys() {
     document.addEventListener('keydown', e => {
+      if (!S.active) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const focus = document.activeElement;
-      if (focus && focus.closest && focus.closest('input, textarea, [role="slider"], [contenteditable]')) return;
+      if (focus && focus.closest && focus.closest('input, textarea, [role="slider"], [role="tab"], [role="combobox"], [contenteditable]')) return;
       // A focused button already handles Space natively.
       if (e.key === ' ' && focus && focus.closest && focus.closest('button')) return;
       const selector = /^[1-9]$/.test(e.key) ? `.lc-preset-${e.key}` : SHORTCUTS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-      const button = selector && document.querySelector(selector);
+      const button = selector && document.querySelector(root)?.querySelector(selector);
       if (!button) return;
       e.preventDefault();
       button.click();
@@ -946,16 +967,27 @@ window.LongCatch = window.LongCatch || (() => {
       S.m = null; S.last = null; S.ui = {};
       if (!S.running) {
         S.running = true;
-        requestAnimationFrame(frame);
+        if (!externalClock) requestAnimationFrame(frame);
         window.addEventListener('resize', () => setTimeout(fitCamera, 50));
-        bindTimeline();
-        bindKeys();
+        if (!externalClock) { bindTimeline(); bindKeys(); }
       }
     },
-    set(params) { S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params); },
+    set(params) {
+      if (!params.playing && params.speed !== S.params?.speed) S.ride = null;
+      S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params);
+    },
     step(amount) { S.phase = wrap(S.phase + amount); S.last = null; S.trailReset = true; return S.phase; },
     fit() { setTimeout(fitCamera, 60); },
+    setActive(active) { S.active = active; S.last = null; if (active) setTimeout(fitCamera, 60); },
+    ready() { return resolve() && setupWater(S.m); },
+    advance,
+    reset() {
+      S.phase = 0; S.cycles = 0; S.offset = 0; S.last = null; S.ride = null; S.trailReset = true;
+      if (S.m?.pool) S.m.pool.time = 0;
+      advance(0);
+    },
     setView,
     resetCamera,
   };
-})();
+};
+window.LongCatch = window.LongCatch || window.createLongCatchEngine();

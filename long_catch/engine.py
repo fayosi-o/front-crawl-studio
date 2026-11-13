@@ -8,7 +8,7 @@ from typing import Any
 
 from nicegui import ui
 
-from long_catch.model import FINISH_START, PHASE_LABELS
+from long_catch.model import FINISH_START, PHASE_LABELS, PULL_START, PUSH_START
 from long_catch.swimmer import BODY, SceneIds
 from long_catch.theme import PALETTE, STATIC_DIR
 
@@ -27,10 +27,13 @@ def engine_script() -> str:
         'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
         'finish': FINISH_START,
+        'pull': PULL_START,
+        'push': PUSH_START,
         'arm': [BODY.upper_arm, BODY.forearm],
     }
     source = (STATIC_DIR / 'engine.js').read_text(encoding='utf-8')
-    return f'<script>window.LONG_CATCH_CONFIG = {json.dumps(config)};\n{source}</script>'
+    race = (STATIC_DIR / 'race.js').read_text(encoding='utf-8')
+    return f'<script>window.LONG_CATCH_CONFIG = {json.dumps(config)};\n{source}\n{race}</script>'
 
 
 class BrowserEngine:
@@ -62,6 +65,10 @@ class BrowserEngine:
         if self.started:
             self._call('fit')
 
+    def set_active(self, active: bool) -> None:
+        """Suspend the studio clock while another mode is visible."""
+        self._call('setActive', active)
+
     def set_view(self, view_id: int, angle: str) -> None:
         """Point the second (split) view's camera at a named angle."""
         if self.started:
@@ -72,3 +79,23 @@ class BrowserEngine:
         # json.dumps makes every argument a JS literal, so nothing is spliced in raw.
         arguments = ', '.join(json.dumps(arg) for arg in args)
         ui.run_javascript(f'window.LongCatch && window.LongCatch.{method}({arguments})')
+
+
+class RaceEngine:
+    """Commands for the separate race clock; no browser state is sent to Python."""
+
+    def __init__(self) -> None:
+        self.started = False
+
+    def start(self, scenes: list[dict[str, Any]], config: dict) -> None:
+        self.call('start', scenes, config)
+        self.started = True
+
+    def set(self, config: dict) -> None:
+        if self.started:
+            self.call('set', config)
+
+    @staticmethod
+    def call(method: str, *args: Any) -> None:
+        arguments = ', '.join(json.dumps(arg) for arg in args)
+        ui.run_javascript(f'window.LongCatchRace.{method}({arguments})')
