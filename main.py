@@ -3,9 +3,21 @@
 Run with ``python main.py`` and open http://127.0.0.1:8080.
 """
 
+import os
+from collections.abc import Mapping
+
 from nicegui import ui
 
 import long_catch.app  # noqa: F401  (registers the page)
 
+
+def server_address(environ: Mapping[str, str] = os.environ) -> tuple[str, int]:
+    port = environ.get('PORT')
+    if port:
+        return '0.0.0.0', int(port)
+    return '127.0.0.1', 8080
+
+
 if __name__ in {'__main__', '__mp_main__'}:
-    ui.run(host='127.0.0.1', port=8080, title='Long Catch', reload=False, show=False, dark=True)
+    host, port = server_address()
+    ui.run(host=host, port=port, title='Long Catch', reload=False, show=False, dark=True)

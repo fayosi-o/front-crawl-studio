@@ -46,7 +46,8 @@ browser as `render_params()['faults']`. A new fault needs:
 ## Hard constraints
 
 - Python 3.12 and NiceGUI with `ui.scene`; no Node.js, npm, React, databases,
-  cloud services, CDNs, or downloaded models.
+  CDNs, or downloaded models. Render hosting is configured by `render.yaml`;
+  don't add other cloud services unless asked.
 - No sound, voice, speech, microphone, AudioContext, mute, or volume features.
 - The swimmer is a simple volumetric human built from primitives: not a stick
   figure and not realistic anatomy.
@@ -65,7 +66,8 @@ python -m pytest -q
 ## Running the server
 
 `python main.py` never exits. Never run it in a synchronous or attached shell;
-that blocks the agent session.
+that blocks the agent session. Without `PORT`, it binds to `127.0.0.1:8080`;
+when Render sets `PORT`, it binds to `0.0.0.0` on that port.
 
 - Start it detached, check it with one HTTP request to
   `http://127.0.0.1:8080/`, then move on. Don't poll it.

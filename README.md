@@ -81,6 +81,14 @@ Open <http://127.0.0.1:8080>. Keep the terminal running; press
 <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop. For later launches, reactivate the
 environment and run `python main.py`.
 
+### Deploy to Render
+
+The repository includes a Render Blueprint in `render.yaml`. In Render, choose
+**New → Blueprint**, connect this GitHub repository, then deploy. Render uses
+Python 3.12, installs `requirements.txt`, and runs `python main.py`. The public
+`.onrender.com` link works in Safari or Chrome on iPhone; free services may take
+about a minute to wake after inactivity.
+
 ## Usage
 
 ### Stroke studio
