@@ -130,7 +130,7 @@ Home/End seek to the cycle's start/end.
 
 ### Try it
 
-<details>
+<details open>
 <summary><b>Compare two strokes over 50 m</b></summary>
 
 Race **Long power** against **Short slipping**. For a controlled comparison,
@@ -140,7 +140,7 @@ copy A to B, then change only B's slip.
 
 </details>
 
-<details>
+<details open>
 <summary><b>Inspect the underwater push</b></summary>
 
 Choose **Long power**, scrub to **Push** (about 60%) and select **Triceps**.
@@ -150,7 +150,7 @@ Orbit around the hand pushing toward the hip; step forward to inspect release.
 
 </details>
 
-<details>
+<details open>
 <summary><b>Check the catch from below</b></summary>
 
 Enable **Split view → Below** and **Hands** trails. Scrub to **Catch** to
