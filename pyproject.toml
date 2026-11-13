@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "Local 3D front-crawl stroke explorer."
 requires-python = ">=3.12"
 readme = "README.md"
-dependencies = ["nicegui>=4.0,<5"]
+dependencies = ["nicegui>=4.0,<5", "argon2-cffi>=23.1,<26"]
 
 [project.optional-dependencies]
 dev = ["pytest>=9", "ruff>=0.17"]

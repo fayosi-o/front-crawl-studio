@@ -1,1 +1,2 @@
 nicegui>=4.0,<5
+argon2-cffi>=23.1,<26

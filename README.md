@@ -83,11 +83,45 @@ environment and run `python main.py`.
 
 ### Deploy to Render
 
-The repository includes a Render Blueprint in `render.yaml`. In Render, choose
-**New → Blueprint**, connect this GitHub repository, then deploy. Render uses
-Python 3.12, installs `requirements.txt`, and runs `python main.py`. The public
-`.onrender.com` link works in Safari or Chrome on iPhone; free services may take
-about a minute to wake after inactivity.
+Local use stays unchanged: `python main.py` opens `127.0.0.1:8080` without a login.
+Setting `PORT` or `RENDER` enables private hosted mode and requires authentication.
+
+1. Install the requirements locally, then generate an **Argon2 password hash**
+   (the password prompt is hidden):
+   ```bash
+   python -c "from getpass import getpass; from argon2 import PasswordHasher; print(PasswordHasher().hash(getpass('New password: ')))"
+   ```
+2. Generate a separate **session secret**:
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(48))"
+   ```
+3. In Render, choose **New → Blueprint**, connect this repository and select
+   `main`. The root `render.yaml` configures the free `long-catch` web service.
+4. Enter these values only in Render's secret environment-variable fields:
+   - `APP_USERNAME`: your chosen username.
+   - `APP_PASSWORD_HASH`: the complete generated hash, not the password.
+   - `SESSION_SECRET`: the generated secret (at least 32 characters).
+5. Deploy. Python 3.12 runs `python main.py`, listening on `0.0.0.0:$PORT`.
+   `/health` is public and returns only `{"status":"ok"}`. Open the HTTPS
+   `.onrender.com` URL in Safari or Chrome and sign in.
+
+Render supplies the trusted HTTPS certificate; don't configure a self-signed
+certificate or bypass browser warnings. Normal local use remains HTTP.
+
+Hosted mode refuses to start without valid authentication settings. Other pages,
+assets and NiceGUI's live connections require login. Sessions expire after 12
+hours; **Sign out → Sign out** revokes the session and its open connections.
+Cookies are Secure, HttpOnly and SameSite=Lax. Login attempts are rate-limited.
+Use one service instance/process: sessions and limits are in memory, and a
+restart signs everyone out. Changing credentials requires a restart.
+
+Free services can take about a minute to wake after inactivity. This app stores
+no permanent swimmer settings, race history or user files; reloads/restarts reset
+them. It is a swimming visualizer, **not a web crawler**: there are no submitted
+URLs, crawl jobs, exports, or server-side Chromium/Playwright dependencies.
+Keep generated credentials out of Git, logs and screenshots. `.env` files are
+ignored, but local startup does not require one. Real Render/iPhone testing
+should include login, both tabs, logout, and reopening the URL in a private tab.
 
 ## Usage
 

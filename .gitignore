@@ -10,6 +10,8 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .nicegui/
+.env
+.env.*
 .playwright-cli/
 
 # Local server logs

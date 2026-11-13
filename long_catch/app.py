@@ -9,6 +9,7 @@ from typing import Any
 
 from nicegui import ui
 
+from long_catch.auth import hosted
 from long_catch.engine import BrowserEngine, RaceEngine, engine_script
 from long_catch.model import (
     EMPHASES,
@@ -788,6 +789,8 @@ class RaceMode:
 @ui.page('/')
 async def index() -> None:
     """Build a fresh page, with its own state, for each browser tab."""
+    if hosted():
+        ui.link('Sign out', '/logout').classes('self-end')
     page = LongCatchPage()
     page.build()
     await page.start()
