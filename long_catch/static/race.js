@@ -50,6 +50,11 @@ window.LongCatchRace = (() => {
         summary = gap < 0.005 ? 'Dead heat: both setups finish together.'
           : `Swimmer ${lanes[0].finishTime < lanes[1].finishTime ? 'A' : 'B'} wins by ${duration(gap)}.`;
       }
+    } else if (R.elapsed > 0 && lanes.length === 2) {
+      const positions = lanes.map(lane => Math.min(R.config.distance, R.elapsed * lane.params.speed));
+      const gap = Math.abs(positions[0] - positions[1]);
+      summary = gap < 0.05 ? 'Level: both swimmers are together.'
+        : `Swimmer ${positions[0] > positions[1] ? 'A' : 'B'} leads by ${gap.toFixed(1)} m.`;
     }
     text('.lc-race-summary', summary);
   }

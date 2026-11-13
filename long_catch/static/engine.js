@@ -18,7 +18,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     running: false,             // animation loop and listeners installed
     ui: {},                     // cached DOM nodes and last-written values
     trails: {}, trailReset: false,
-    active: true, ride: null,
+    active: true, ride: null, seekPausePending: false,
   };
 
   // ---- maths helpers --------------------------------------------------------
@@ -223,7 +223,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Ghost trails: fading smoke behind the fingertips and toes that drifts back with the water.
   // THREE comes from NiceGUI's own scene module via the page import map (no CDN).
   let THREE = null;
-  import('nicegui-scene').then(mod => { THREE = mod.THREE; }).catch(() => {});
+  import('nicegui-scene').then(mod => { THREE = mod.THREE; }).catch(error => {
+    console.error('Long Catch could not load its scene effects.', error);
+  });
   const MAX_TRAIL = 360;  // samples per trail (~6 s at 60 fps)
   const TRAIL_LIMBS = {
     hands: ['R', 'L'].map(s => ({ key: 'hand' + s, joint: 'wr' + s, tip: [0.13, 0, 0], color: C.hold })),
@@ -828,6 +830,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (marker && S.ui.markerAt !== position) { marker.style.left = position; S.ui.markerAt = position; }
     const timeline = find('timeline', '.lc-timeline');
     if (timeline && timeline.dataset.stage !== String(right.stage)) timeline.dataset.stage = right.stage;
+    const percent = String(Math.floor(S.phase * 100));
+    if (timeline && timeline.getAttribute('aria-valuenow') !== percent) {
+      timeline.setAttribute('aria-valuenow', percent);
+      timeline.setAttribute('aria-valuetext', `${PHASES[right.stage]}, ${percent}% of right-arm cycle`);
+    }
   }
 
   // ---- frame loop -------------------------------------------------------------
@@ -839,7 +846,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const dt = S.last === null ? 0 : Math.min(0.1, (t - S.last) / 1000);
     S.last = t;
     const P = S.params;
-    const scaled = P.playing ? dt * (P.playback || 1) : 0;
+    const scaled = P.playing && !S.seekPausePending ? dt * (P.playback || 1) : 0;
     advance(scaled);
   }
 
@@ -918,6 +925,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Scrubbing the timeline seeks the right-arm phase directly.
   function bindTimeline() {
     let dragging = false;
+    const pause = () => {
+      const button = find('play', '.lc-play');
+      if (S.params?.playing && !S.seekPausePending && button) {
+        S.seekPausePending = true;
+        button.click();
+      }
+    };
     const seekFrom = event => {
       if (!S.active) return;
       const bar = event.target.closest && event.target.closest('.lc-timeline');
@@ -931,11 +945,26 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     document.addEventListener('pointerdown', e => {
       if (!S.active) return;
       if (!e.target.closest || !e.target.closest('.lc-timeline')) return;
+      pause();
       dragging = true;
       seekFrom(e);
     });
     document.addEventListener('pointermove', e => { if (dragging) seekFrom(e); });
     document.addEventListener('pointerup', () => { dragging = false; });
+    document.addEventListener('pointercancel', () => { dragging = false; });
+    document.addEventListener('keydown', e => {
+      if (!S.active || !e.target.closest?.('.lc-timeline') || e.ctrlKey || e.metaKey || e.altKey) return;
+      const step = {ArrowLeft: '.lc-step-back', ArrowDown: '.lc-step-back',
+        ArrowRight: '.lc-step-forward', ArrowUp: '.lc-step-forward'}[e.key];
+      if (!step && e.key !== 'Home' && e.key !== 'End') return;
+      e.preventDefault();
+      if (step) document.querySelector(root)?.querySelector(step)?.click();
+      else {
+        pause();
+        S.phase = e.key === 'Home' ? 0 : 0.999;
+        S.last = null; S.trailReset = true;
+      }
+    });
   }
 
   // Shortcuts click the matching buttons so Python stays the single owner of state.
@@ -973,6 +1002,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
     },
     set(params) {
+      if (!params.playing) S.seekPausePending = false;
       if (!params.playing && params.speed !== S.params?.speed) S.ride = null;
       S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params);
     },

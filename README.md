@@ -22,7 +22,8 @@
 Long Catch is a local web app built with Python and
 [NiceGUI](https://nicegui.io). A procedural swimmer animates a full stroke
 cycle in real time. Every control changes the motion, and the stroke metrics
-update as you go. It runs entirely on your machine. There are no accounts,
+update when you change the pace or efficiency. Switch to **Race** to compare
+two independent setups over 25–100 m. It runs entirely on your machine. There are no accounts,
 external services or network assets.
 
 ## Gallery
@@ -48,7 +49,7 @@ external services or network assets.
 
 | Area | What it does |
 | --- | --- |
-| **Stroke controls** | Stroke rate, catch quality, body roll, slip, stroke depth, entry angle, drive balance and kick amplitude. |
+| **Stroke controls** | Rate, catch, slip and drive stay visible, with estimates just above them. Expand **Motion details** for roll, depth, entry and kick. Both modes use the same controls. |
 | **Presets** | Long power, Long light, Compact connected and Short slipping. Each one is a distinct starting point. |
 | **Stroke faults** | Crossover, over-rotation, over-extension, flat hips, sinking legs, snaking, knee kick and spinning arms. Combine them freely; each adds a short coaching cue. |
 | **Water feedback** | Hands and forearms turn teal when holding water and coral when slipping. Amber shows the selected muscle emphasis. |
@@ -59,7 +60,7 @@ external services or network assets.
 | **Natural motion** | Breathing every third stroke on alternating sides: the head turns as that arm starts its recovery and is back down before the hand enters. Also a steady head, a slight body heave, and small stroke-to-stroke and kick-to-kick variation. Visual only; the metrics are unaffected. |
 | **Motion trails** | Fading trails for the hands, feet or both, adjustable from 0.5 to 5 seconds. |
 | **Stroke metrics** | Distance per stroke, strokes per 25 m and time per 25 m, updated live. |
-| **Race lab** | A separate tab for 25, 50 or 100 m races with one or two independently configured swimmers. Compare strokes in colour-coded follow cameras and distance tracks, then see finish times and the winning margin. |
+| **Race lab** | A separate tab for 25, 50 or 100 m races with one or two independently configured swimmers. Compare strokes in colour-coded follow cameras and distance tracks, see the live distance lead, then finish times and the winning margin. |
 | **Pace and waterline** | Slower swimmers settle a little deeper, especially at the hips; faster swimmers ride slightly higher. A bounded, smoothly damped buoyancy effect follows the estimated pace in both modes without changing the speed calculations. |
 | **Timeline** | Scrub or step through entry, catch, pull, push, finish and recovery, at ¼×, ½× or 1× speed. The underwater sweep flows from pulling beneath the chest into a rearward push toward the hip before release. |
 
@@ -89,11 +90,11 @@ app, then press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server.
 
 1. Pick a **preset** to load a starting stroke. Editing any control after that
    switches the label to **Custom**.
-2. Tune **stroke rate**, **catch quality**, **body roll**, **slip** and
-   **drive balance**. Each one changes the stroke metrics.
-3. Use **stroke depth** (close to the body or deep), **entry angle** (from
-   0° near the surface to 40° toward the pool floor) and **kick amplitude** to
-   change the shape of the motion.
+2. Tune **stroke rate**, **catch quality**, **slip** and **drive balance**.
+   The estimates above the controls update immediately.
+3. Expand **Motion details** for **body roll**, **stroke depth** (close to the
+   body or deep), **entry angle** (0° near the surface to 40° toward the pool
+   floor) and **kick amplitude**. These change motion, not estimated speed.
 4. Turn on one or more **stroke faults** to see them on the swimmer.
    **Clear** turns them all off.
 
@@ -104,8 +105,10 @@ catch.
 ### Inspect the motion
 
 - Drag the scene to orbit and scroll to zoom.
-- Drag the timeline to scrub through the right arm's phases. The cards at the
-  top show the current phase of each arm.
+- Drag the timeline to pause and inspect the right arm's phases. The cards at
+  the top show the current phase of each arm. With the timeline focused,
+  arrow keys step 5%; Home/End seek to the beginning/end of the cycle.
+  Press **Play** to resume.
 - **Pull** brings the hand under the chest; **Push** extends the arm back toward
   the hip while the hand remains submerged. **Finish** releases the hand before
   recovery. They share the original cycle duration rather than adding a stroke.
@@ -123,7 +126,8 @@ catch.
 | <kbd>C</kbd> | Reset the camera |
 | <kbd>V</kbd> | Toggle split view |
 
-Shortcuts don't work while a slider has focus.
+Global shortcuts leave sliders, tabs and text fields alone. The timeline has
+its own arrow-key and Home/End controls.
 
 ### Race two setups
 
@@ -142,8 +146,10 @@ Shortcuts don't work while a slider has focus.
    stays visible; the shared distance tracks show who is ahead. Each swimmer
    stops at the selected distance, with finish order, time and winning margin.
 
-Editing a setup or changing distance/swimmer count resets the race. Selecting
-which swimmer to edit does not. Leaving the Race tab pauses the race; returning
+Changing a setup or distance/swimmer count resets the race. Reapplying an
+identical setup, or selecting which swimmer to edit, does not. The editor heading
+identifies A or B in its lane colour; edited presets are labelled **Custom**.
+Leaving the Race tab pauses the race; returning
 lets you resume it. Studio settings, playback state and cycle position are
 preserved independently.
 
@@ -153,6 +159,47 @@ Stroke depth, entry angle and kick amplitude still change motion rather than
 the estimated speed. Waterline support is a lightweight visual approximation,
 not a fluid simulation; water effects never change the race result.
 
+### Three quick experiments
+
+Open a walkthrough below. The pictures are captured from the running app;
+the existing gallery above shows more stroke and fault examples.
+
+<details>
+<summary><b>Compare two strokes over 50 m</b></summary>
+
+In **Race**, leave A on **Long power** and B on **Short slipping**. Start at
+**1x** to watch the difference, or use **4x** to reach the result sooner.
+The distance lead and finish margin compare the same start and distance.
+For a controlled experiment, copy A to B, then change just B's slip.
+
+<img src="docs/screenshots/race-comparison.png" alt="Race lab's teal and amber follow cameras comparing Long power with Short slipping" width="700">
+
+</details>
+
+<details>
+<summary><b>Inspect the underwater push</b></summary>
+
+In **Stroke studio**, choose **Long power**, drag the timeline to **Push**
+(about 60%), and select **Triceps**. Scrubbing pauses the swimmer so you can
+orbit around the hand moving back toward the hip. Use the arrow keys to step
+through its release, then press **Play**.
+
+<img src="docs/screenshots/push-inspection.png" alt="Paused swimmer during the underwater push with the Push timeline segment selected" width="700">
+
+</details>
+
+<details>
+<summary><b>Check the catch from below</b></summary>
+
+Enable **Split view**, choose **Below**, and turn on **Hands** trails.
+Play a cycle, then pause or scrub to **Catch**. The second camera makes the
+forearm's position easier to compare with the orbit view. Try **Crossover**
+to see how the entry moves across the centre line.
+
+<img src="docs/screenshots/below-catch.png" alt="Split orbit and below-water views of the catch with hand trails enabled" width="700">
+
+</details>
+
 ## Development
 
 ```bash
@@ -161,6 +208,22 @@ python -m pytest -q        # model tests
 ruff check .               # lint
 ruff format --check .      # formatting
 ```
+
+### Focused test scope
+
+The model suite has **33 cases**, down from 49 (**32.7% fewer**, rounded to the
+requested one-third reduction). Cases were ranked by regression value, rather
+than combined simply to reduce the reported count:
+
+| Priority | Decision |
+| --- | --- |
+| **Keep: domain rules and regressions** | Stroke/cycle timing, Push boundaries, slip/catch/drive relationships, fault costs and stacking, race finish math and ties, visual-only controls, bounded buoyancy and settings validation. |
+| **Trim: equivalent inputs** | Extra linear race distances, repeated invalid values reaching the same guard, ordinary phase samples and basic duration formatting. Retain boundary, wrap, minute-rollover and invalid-input representatives. |
+| **Remove: low-signal checks** | A duplicate fixed cycle duration, preset-count/ranking assumptions, simple overlay/holding accessor checks, enum-membership checks and broad fraction checks already covered by meaningful control/race cases. |
+
+These are model tests, not browser automation. For UI changes, also exercise
+both tabs, all eight controls, lane isolation, pause/reset, scrubbing, split
+cameras and narrow layouts. Hidden scenes are throttled to 1 fps.
 
 ### Architecture
 

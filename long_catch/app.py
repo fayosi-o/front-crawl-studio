@@ -23,6 +23,7 @@ from long_catch.model import (
     Metrics,
     Phase,
     RaceConfig,
+    StrokeSettings,
     ViewState,
     format_duration,
     matching_preset,
@@ -104,7 +105,6 @@ FAULT_ICONS = {
 assert set(FAULT_ICONS) == set(FAULTS)
 
 STATS: tuple[tuple[str, str], ...] = (
-    ('rate', 'Stroke rate'),
     ('dps', 'Distance / stroke'),
     ('spl', 'Strokes / 25 m'),
     ('t25', 'Time / 25 m'),
@@ -135,6 +135,27 @@ def stroke_slider(
                 ui.label(spec.low)
                 ui.label(spec.high)
     return slider, value_label
+
+
+def stroke_controls(
+    settings: StrokeSettings, on_change: Callable[[SliderSpec, float], None], prefix: str = ''
+) -> tuple[dict[str, ui.slider], dict[str, ui.label]]:
+    """Keep the main pace controls visible and group the visual motion details."""
+    sliders, values = {}, {}
+
+    def build(spec: SliderSpec) -> None:
+        sliders[spec.key], values[spec.key] = stroke_slider(
+            spec, getattr(settings, spec.key), lambda value: on_change(spec, value), prefix
+        )
+
+    for spec in SLIDERS:
+        if spec.key in ('rate', 'catch', 'slip', 'drive'):
+            build(spec)
+    with ui.expansion('Motion details', caption='Roll, depth, entry and kick').classes('lc-motion-details w-full'):
+        for spec in SLIDERS:
+            if spec.key not in ('rate', 'catch', 'slip', 'drive'):
+                build(spec)
+    return sliders, values
 
 
 class LongCatchPage:
@@ -227,6 +248,7 @@ class LongCatchPage:
                             ui.label(f'{side.title()} arm').classes('lc-arm-side')
                             # The engine rewrites this text every frame.
                             ui.label(Phase.ENTRY.label).classes(f'lc-arm-phase lc-arm-{side}')
+            ui.label('Drag to orbit / scroll to zoom').classes('lc-camera-hint')
             self._build_transport()
 
     def _build_transport(self) -> None:
@@ -236,7 +258,14 @@ class LongCatchPage:
         timeline marker and cycle percentage, and to wire up shortcuts.
         """
         with ui.element('div').classes('lc-glass lc-dock'):
-            with ui.element('div').classes('lc-timeline').props('title="Drag to scrub the right-arm cycle"'):
+            with (
+                ui.element('div')
+                .classes('lc-timeline')
+                .props(
+                    'role=slider tabindex=0 aria-label="Right-arm cycle" aria-valuemin=0 aria-valuemax=100 '
+                    'aria-valuenow=0 title="Drag to inspect; arrow keys step, Home/End seek"'
+                )
+            ):
                 for index, label in enumerate(PHASE_LABELS.values()):
                     with ui.element('div').classes(f'lc-seg lc-seg-{index}') as segment:
                         ui.label(label.split(' ')[0])
@@ -276,10 +305,20 @@ class LongCatchPage:
                         button.tooltip(f'Shortcut: {number}')
                         self.preset_buttons[name] = button
 
+            with ui.element('div').classes('lc-card lc-metrics-card'):
+                section_title('Stroke estimates')
+                with ui.element('div').classes('lc-stats'):
+                    for key, caption in STATS:
+                        with ui.element('div').classes('lc-stat'):
+                            self.stats[key] = ui.label().classes('lc-stat-value')
+                            ui.label(caption).classes('lc-stat-caption')
+                with ui.element('div').classes('lc-hold') as self.hold_banner:
+                    self.hold_icon = ui.icon('check_circle')
+                    self.hold_text = ui.label()
+
             with ui.element('div').classes('lc-card'):
                 section_title('Stroke')
-                for spec in SLIDERS:
-                    self._build_slider(spec)
+                self.sliders, self.slider_values = stroke_controls(self.view.settings, self.on_slider)
 
             self._build_faults()
 
@@ -291,17 +330,6 @@ class LongCatchPage:
                 emphasis.props('no-caps spread unelevated').classes('lc-segmented')
 
             self._build_view()
-
-            with ui.element('div').classes('lc-card'):
-                section_title('Stroke metrics')
-                with ui.element('div').classes('lc-stats'):
-                    for key, caption in STATS:
-                        with ui.element('div').classes('lc-stat'):
-                            self.stats[key] = ui.label().classes('lc-stat-value')
-                            ui.label(caption).classes('lc-stat-caption')
-                with ui.element('div').classes('lc-hold') as self.hold_banner:
-                    self.hold_icon = ui.icon('check_circle')
-                    self.hold_text = ui.label()
 
     def _build_view(self) -> None:
         """View card: split-view switch, second camera angle, and ghost-trail controls."""
@@ -357,13 +385,6 @@ class LongCatchPage:
                     button.classes(f'lc-fault lc-fault-{key}').tooltip(fault.hint)
                     self.fault_buttons[key] = button
             self.cues = ui.element('div').classes('lc-cues')
-
-    def _build_slider(self, spec: SliderSpec) -> None:
-        """One labelled stroke slider with a live value pill and optional range captions."""
-        value = getattr(self.view.settings, spec.key)
-        self.sliders[spec.key], self.slider_values[spec.key] = stroke_slider(
-            spec, value, lambda value: self.on_slider(spec, value)
-        )
 
     # ---- state ---------------------------------------------------------------------------------
 
@@ -443,6 +464,7 @@ class LongCatchPage:
         self._enable(self.angle_toggle, v.split)
         self.angle_label.text = f'{ANGLE_LABELS[v.angle]} view'
         if self.second_view is not None:
+            self.second_view.props(f'fps={60 if v.split else 1}')
             self.engine.set_view(self.second_view.id, v.angle)
         if split_changed:
             self.engine.fit()
@@ -467,6 +489,7 @@ class LongCatchPage:
         self.preset_badge.text = 'Custom' if active is None else 'Preset'
         self.preset_badge.classes(replace='lc-badge lc-badge-custom' if active is None else 'lc-badge')
         for name, button in self.preset_buttons.items():
+            button.props(f'aria-pressed={str(name == active).lower()}')
             if name == active:
                 button.classes(add='lc-active')
             else:
@@ -503,7 +526,6 @@ class LongCatchPage:
     def _render_stats(self, metrics: Metrics) -> None:
         """Fill in the estimate tiles and colour the hold banner."""
         tone = 'lc-good' if metrics.holding else 'lc-bad'
-        self.stats['rate'].text = f'{self.view.settings.rate} spm'
         self.stats['dps'].text = f'{metrics.distance_per_stroke:.2f} m'
         self.stats['spl'].text = f'{metrics.strokes_per_25:.1f}'
         self.stats['t25'].text = format_duration(metrics.seconds_per_25)
@@ -540,6 +562,7 @@ class RaceMode:
         self.estimates: list[ui.label] = []
         self.sliders: dict[str, ui.slider] = {}
         self.values: dict[str, ui.label] = {}
+        self._last_config: RaceConfig | None = None
 
     def config(self) -> RaceConfig:
         return RaceConfig(tuple(self.swimmers[: self.count]), self.distance)
@@ -633,7 +656,7 @@ class RaceMode:
                 ).props('no-caps spread').classes('lc-segmented q-mt-sm')
                 ui.label('Changing a setup resets the race. Leaving this tab pauses it.').classes('lc-race-help')
             with ui.element('div').classes('lc-card'):
-                section_title('Configure swimmer')
+                self.editor_title = section_title('Configure swimmer A')
                 self.lane_toggle = (
                     ui.toggle({0: 'Swimmer A', 1: 'Swimmer B'}, value=0, on_change=lambda e: self.select_lane(e.value))
                     .props('no-caps spread')
@@ -650,15 +673,14 @@ class RaceMode:
                     .classes('w-full q-mt-md')
                 )
                 with ui.row().classes('lc-race-copy'):
-                    ui.button('Use studio setup', on_click=self.copy_studio).props('flat dense no-caps')
-                    self.copy_button = ui.button('Copy A to B', on_click=self.copy_lane).props('flat dense no-caps')
-                for spec in SLIDERS:
-                    self.sliders[spec.key], self.values[spec.key] = stroke_slider(
-                        spec,
-                        getattr(self.swimmers[0].settings, spec.key),
-                        lambda value, s=spec: self.slider_changed(s, value),
-                        prefix='Race ',
+                    ui.button('Use studio setup', on_click=self.copy_studio).props('flat dense no-caps').tooltip(
+                        'Replace the selected swimmer with the studio stroke and faults'
                     )
+                    self.copy_button = ui.button('Copy A to B', on_click=self.copy_lane).props('flat dense no-caps')
+                    self.copy_button.tooltip('Copy the selected swimmer to the other lane')
+                self.sliders, self.values = stroke_controls(
+                    self.swimmers[0].settings, self.slider_changed, prefix='Race '
+                )
                 self.fault_select = (
                     ui.select(
                         {key: fault.label for key, fault in FAULTS.items()},
@@ -740,6 +762,9 @@ class RaceMode:
                 self.values[spec.key].text = f'{value}{spec.unit}'
         finally:
             self.applying = False
+        self.editor_title.text = f'Configure swimmer {"B" if self.selected else "A"}'
+        self.editor_title.classes(replace=f'lc-section-title lc-lane-{"b" if self.selected else "a"}')
+        self.preset.props(f'display-value="{matching_preset(view.settings) or "Custom"}"')
         self.copy_button.text = 'Copy B to A' if self.selected else 'Copy A to B'
 
     def _render(self) -> None:
@@ -754,7 +779,10 @@ class RaceMode:
                 f'{speed:.2f} m/s / {metrics.distance_per_stroke:.2f} m per stroke / Est. {format_duration(finish)}'
             )
         self._render_editor()
-        self.engine.set(self.config().render_params())
+        config = self.config()
+        if config != self._last_config:
+            self._last_config = config
+            self.engine.set(config.render_params())
 
 
 @ui.page('/')
