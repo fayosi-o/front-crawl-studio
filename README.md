@@ -42,7 +42,8 @@ setups in **Race**. No accounts, cloud services or downloaded models are needed.
 - **Stroke controls:** ten adjustable settings, four presets and eight
   combinable faults with coaching cues. The default is a distance stroke: a
   two-beat kick whose downbeat drives the hip roll, a short glide, and a
-  high-elbow "power diamond" pull whose width you can set.
+  high-elbow "power diamond" pull whose width you can set. It starts with all
+  faults off; Crossover is an optional comparison, not the normal hand path.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
   a simulated **water pressure** view, slow playback and a scrubbable six-phase
   timeline.

@@ -131,15 +131,13 @@ class SwimmerBuilder:
         self._register('water', ui.scene.plane(10, 4).material(self.colors.water, 0.16, 'both').move(-0.5, 0, 0.0))
 
     def _torso(self) -> None:
-        """Tapered trunk, chest and waist volumes, and the two back-muscle patches."""
+        """Smooth tapered trunk, chest and waist volumes, and back-muscle overlays."""
         skin = self.colors.skin
         trunk = ui.scene.cylinder(0.20, 0.125, 0.55, 32).material(skin)
         trunk.rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62).move(-0.025, 0, 0)
         ui.scene.sphere(1, 24, 16).material(skin).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
         ui.scene.sphere(1, 24, 16).material(skin).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
         for side, sign in SIDES:
-            # Latissimus dorsi: the swimmer's V-taper from the armpit down the flank.
-            ellipsoid(0.19, 0.05, 0.085, skin).move(0.04, sign * 0.165, -0.005)
             self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
     def _head(self) -> None:

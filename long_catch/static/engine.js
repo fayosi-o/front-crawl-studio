@@ -66,8 +66,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Wrist target path for one arm at phase p, plus overlay and colouring values.
   // F holds active stroke faults; each one bends the healthy path toward a typical error.
-  // Vectors below are [forward, outward (away from the midline), up] in the unrolled body frame.
-  // `out` is the wrist's offset from its own shoulder, so out = -SHOULDER_Y is the body's midline.
+  // Path coordinates are forward reach, lane-relative outward offset, and water-relative height.
+  // `out` is measured from the rolled shoulder's lane position; elbow and palm guides are body-relative.
   function arm(p, P, F) {
     const c = P.catch, s = P.slip, L = P.length, w = P.width ?? 0.35;
     const exit = P.exit, fin = CONFIG.finish, pull = CONFIG.pull, push = CONFIG.push;
@@ -855,10 +855,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll);
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
     sh.position.x = r.baseX + 0.04 * a.shrug;
-    // Convert a shoulder-relative point with a world height into the rolled (then pitched) chest frame.
-    const chestZ = (height, out, x) =>
-      ((height + 0.06 - m.chest.position.z + (sh.position.x + x) * sp) / cp - sin * (sh.position.y + sgn * out)) / cos;
-    r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out, a.x));
+    // Keep the hand's lane-relative width and water-relative depth independent of body roll.
+    // Transform both together: correcting depth alone lets a deep pull cross the centre line.
+    const toChestPoint = (v, x, out, height) => {
+      const y = sh.position.y * cos + sgn * out;
+      const z = (height + 0.06 - m.chest.position.z + (sh.position.x + x) * sp) / cp;
+      return v.set(x, y * cos + z * sin - sh.position.y, -y * sin + z * cos);
+    };
+    toChestPoint(r.target, a.x, a.out, a.height);
     const reach = softReach(r.target.length(), lerp(PULL_REACH, MIN_REACH, a.recovery));
     r.axis.copy(r.target).normalize();
     r.target.copy(r.axis).multiplyScalar(reach);
@@ -881,7 +885,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     r.pole.addScaledVector(r.hint, kept - share).normalize();
     if (a.recovery > 0) {
       const [ex, eo, eh] = a.elbow;
-      r.hint.set(ex, sgn * eo, chestZ(eh, eo, ex));
+      toChestPoint(r.hint, ex, eo, eh);
       r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis));
       // A guide lying on the shoulder-wrist line has no direction; keep the world-up guide then.
       const weight = a.recovery * smooth(clamp(r.hint.length() / 0.08, 0, 1));
