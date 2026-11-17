@@ -14,9 +14,9 @@
   <img src="docs/screenshots/hero.png" alt="Long Catch showing a swimmer mid-pull with hand trails and the stroke controls panel" width="900">
 </p>
 
-Long Catch runs locally with Python and [NiceGUI](https://nicegui.io).
-Explore a procedural 3D swimmer in **Stroke studio**, or compare independent
-setups in **Race**. No accounts, cloud services or downloaded models are needed.
+Explore a procedural swimmer in **Stroke studio** or compare setups in **Race**.
+Runs locally with Python and [NiceGUI](https://nicegui.io), without accounts,
+cloud services or downloaded models.
 
 ## Gallery
 
@@ -39,17 +39,15 @@ setups in **Race**. No accounts, cloud services or downloaded models are needed.
 
 ## Features
 
-- **Stroke controls:** ten adjustable settings, four presets and eight
-  combinable faults with coaching cues. The default is a distance stroke: a
-  two-beat kick whose downbeat drives the hip roll, a short glide, and a
-  high-elbow "power diamond" pull whose width you can set. It starts with all
-  faults off; Crossover is an optional comparison, not the normal hand path.
+- **Stroke controls:** ten settings, four presets and eight combinable faults
+  with coaching cues. The default distance stroke combines kick-led hip roll,
+  a two-beat kick, short glide and adjustable-width high-elbow "power diamond"
+  pull. All faults start off; Crossover is optional.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
-  a simulated **water pressure** view, slow playback and a scrubbable six-phase
-  timeline.
+  simulated **water pressure**, slow playback and a six-phase timeline.
 - **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
   estimates. Hands turn teal when holding water and coral when slipping; amber
-  highlights the selected muscle emphasis.
+  highlights muscle emphasis.
 - **Water and motion:** stroke-driven ripples, spray, bubbles and wake, with
   natural breathing and subtle pace-dependent buoyancy.
 - **Race:** solo or two-swimmer comparisons over 25, 50 or 100 m, with distance
@@ -57,8 +55,8 @@ setups in **Race**. No accounts, cloud services or downloaded models are needed.
 
 ## Quick start
 
-**Requires Python 3.12.** Download or clone this repository, open a terminal in
-its folder, then create and activate a virtual environment for your platform.
+**Requires Python 3.12.** Open the cloned/downloaded folder in a terminal.
+Create and activate a virtual environment:
 
 **Linux / macOS**
 
@@ -81,17 +79,14 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-Open <http://127.0.0.1:8080>. Keep the terminal running; press
-<kbd>Ctrl</kbd>+<kbd>C</kbd> to stop. For later launches, reactivate the
-environment and run `python main.py`.
+Open <http://127.0.0.1:8080>. Stop with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+To relaunch, activate the environment and run `python main.py`.
 
 ### Deploy to Render
 
-Local use stays unchanged: `python main.py` opens `127.0.0.1:8080` without a login.
-Setting `PORT` or `RENDER` enables private hosted mode and requires authentication.
+Local use needs no login. Setting `PORT` or `RENDER` enables authenticated hosting.
 
-1. Install the requirements locally, then generate an **Argon2 password hash**
-   (the password prompt is hidden):
+1. Install requirements, then generate an **Argon2 password hash** (hidden input):
    ```bash
    python -c "from getpass import getpass; from argon2 import PasswordHasher; print(PasswordHasher().hash(getpass('New password: ')))"
    ```
@@ -100,71 +95,71 @@ Setting `PORT` or `RENDER` enables private hosted mode and requires authenticati
    python -c "import secrets; print(secrets.token_urlsafe(48))"
    ```
 3. In Render, choose **New → Blueprint**, connect this repository and select
-   `main`. The root `render.yaml` configures the free `long-catch` web service.
+   `main`. The root `render.yaml` configures the free `long-catch` service.
 4. Enter these values only in Render's secret environment-variable fields:
    - `APP_USERNAME`: your chosen username.
    - `APP_PASSWORD_HASH`: the complete generated hash, not the password.
    - `SESSION_SECRET`: the generated secret (at least 32 characters).
-5. Deploy. Python 3.12 runs `python main.py`, listening on `0.0.0.0:$PORT`.
+5. Deploy. `python main.py` listens on `0.0.0.0:$PORT`.
    `/health` is public and returns only `{"status":"ok"}`. Open the HTTPS
-   `.onrender.com` URL in Safari or Chrome and sign in.
+   `.onrender.com` URL and sign in.
 
-Render supplies the trusted HTTPS certificate; don't configure a self-signed
-certificate or bypass browser warnings. Normal local use remains HTTP.
+Render supplies HTTPS; don't use self-signed certificates or bypass warnings.
+Local use remains HTTP.
 
-Hosted mode refuses to start without valid authentication settings. Other pages,
-assets and NiceGUI's live connections require login. Sessions expire after 12
+**Updating:** pushes to the linked `main` branch deploy automatically when
+Auto-Deploy is enabled. Otherwise, open the service and choose **Manual Deploy →
+Deploy latest commit**. Wait for **Live**, check the deployed commit, then refresh
+the site and sign in again.
+
+Hosted mode requires valid authentication settings. Pages, assets and live
+connections require login. Sessions expire after 12
 hours; **Sign out → Sign out** revokes the session and its open connections.
 Cookies are Secure, HttpOnly and SameSite=Lax. Login attempts are rate-limited.
-Use one service instance/process: sessions and limits are in memory, and a
-restart signs everyone out. Changing credentials requires a restart.
+Use one instance/process: sessions and limits are in memory.
+Restarts sign everyone out; credential changes require a restart.
 
-Free services can take about a minute to wake after inactivity. This app stores
-no permanent swimmer settings, race history or user files; reloads/restarts reset
-them. It is a swimming visualizer, **not a web crawler**: there are no submitted
-URLs, crawl jobs, exports, or server-side Chromium/Playwright dependencies.
-Keep generated credentials out of Git, logs and screenshots. `.env` files are
-ignored, but local startup does not require one. Real Render/iPhone testing
-should include login, both tabs, logout, and reopening the URL in a private tab.
+Free services may take a minute to wake. Settings and race history are temporary;
+reloads/restarts reset them. This is **not a web crawler** and needs no server-side
+Chromium/Playwright. Keep credentials out of Git, logs and screenshots.
+`.env` files are ignored and unnecessary locally. After deployment, test login,
+both tabs, logout and private-tab access, including on iPhone.
 
 ## Usage
 
 ### Stroke studio
 
-1. Pick **Long power**, **Long light**, **Compact connected** or **Short slipping**.
-   Editing a preset changes its label to **Custom**.
+1. Pick one of four presets; edits change its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
    Expand **Motion details** for roll, pull width, depth, entry angle, kick size
    and kick timing (2-, 4- or 6-beat).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.
-4. Drag to orbit, scroll to zoom, or enable **Split view** for a Top, Side,
-   Front or Below camera. Add hand/foot trails to follow the paths, or switch on
-   **Water pressure** to see warm clouds build behind the hand after the catch
-   and dissipate downstream.
-5. Scrub the timeline to pause at **Entry → Catch → Pull → Push → Finish →
-   Recovery**, or use slow playback. **Play** resumes.
+4. Drag to orbit, scroll to zoom, or enable **Split view** (Top, Side, Front or
+   Below). Add hand/foot trails, or enable **Water pressure** to see warm clouds
+   build after the catch and dissipate downstream.
+5. Scrub to pause at **Entry → Catch → Pull → Push → Finish → Recovery**,
+   or slow playback. **Play** resumes.
 
 Each hand entry counts as one stroke; a full arm cycle contains two.
 More slip reduces distance per stroke, and extra drive cannot rescue a poor catch.
-A low stroke rate leaves a longer unpropelled glide, so less momentum carries
-into the next catch and distance per stroke drops.
+A low rate lengthens the unpropelled glide, reducing momentum carry and distance
+per stroke.
 
 ### Race
 
 1. Choose **25 m**, **50 m** or **100 m**, then **Solo** or **Two swimmers**.
 2. Select **Swimmer A** (teal) or **Swimmer B** (amber) to edit independent
-   presets, controls and faults. **Use studio setup** copies your studio stroke;
-   **Copy A to B** gives both lanes the same baseline.
+   settings and faults. **Use studio setup** copies your studio stroke;
+   **Copy A to B** matches both lanes.
 3. **Start race**, pause/resume, or **Reset race**. Playback at **1x**, **2x**
    or **4x** changes viewing speed, not simulated finish times.
-4. Follow the distance lead, then compare finish times and the winning margin.
+4. Compare the lead, finish times and winning margin.
 
-Changing a setup, distance or swimmer count resets the race; selecting a lane
-or reapplying an identical setup does not. Leaving Race pauses it. Studio
-settings and playback remain independent.
+Setup, distance or swimmer-count changes reset the race; lane selection and
+identical setups don't. Leaving Race pauses it. Studio remains independent.
 
-**Model limits:** races use steady-speed estimates, without dives, turns or
-fatigue. Roll, pull width, depth, entry angle and kick change appearance, not
+**Model limits:** steady-speed races omit dives, turns and fatigue.
+Roll, pull width, depth, entry angle and kick affect appearance, not
 estimated speed. Water effects, pressure and buoyancy are visual only and never
 alter results.
 
@@ -177,16 +172,16 @@ alter results.
 | <kbd>1</kbd>–<kbd>4</kbd> | Select a studio preset |
 | <kbd>C</kbd> / <kbd>V</kbd> | Reset studio camera / toggle split view |
 
-Shortcuts respect focused controls. On the timeline, arrows step 5% and
-Home/End seek to the cycle's start/end.
+Shortcuts respect focused controls. Timeline arrows step 5%; Home/End seek
+the start/end.
 
 ### Try it
 
 <details open>
 <summary><b>Compare two strokes over 50 m</b></summary>
 
-Race **Long power** against **Short slipping**. For a controlled comparison,
-copy A to B, then change only B's slip.
+Race **Long power** against **Short slipping**. To isolate slip,
+copy A to B, then adjust B's slip.
 
 <img src="docs/screenshots/race-comparison.png" alt="Race lab's teal and amber follow cameras comparing Long power with Short slipping" width="700">
 
@@ -196,7 +191,7 @@ copy A to B, then change only B's slip.
 <summary><b>Inspect the underwater push</b></summary>
 
 Choose **Long power**, scrub to **Push** (about 60%) and select **Triceps**.
-Orbit around the hand pushing toward the hip; step forward to inspect release.
+Orbit the hand; step forward to inspect release.
 
 <img src="docs/screenshots/push-inspection.png" alt="Paused swimmer during the underwater push with the Push timeline segment selected" width="700">
 
@@ -205,8 +200,8 @@ Orbit around the hand pushing toward the hip; step forward to inspect release.
 <details open>
 <summary><b>Check the catch from below</b></summary>
 
-Enable **Split view → Below** and **Hands** trails. Scrub to **Catch** to
-inspect the forearm, then try **Crossover** to compare the entry.
+Enable **Split view → Below** and **Hands** trails. Inspect **Catch**, then
+compare the **Crossover** entry.
 
 <img src="docs/screenshots/below-catch.png" alt="Split orbit and below-water views of the catch with hand trails enabled" width="700">
 
@@ -221,10 +216,12 @@ ruff check .
 ruff format --check .
 ```
 
-The focused model suite covers timing, efficiency, faults, race results,
-buoyancy bounds and input validation. For UI changes, also check both tabs,
-lane isolation, playback, scrubbing, cameras and narrow layouts in a browser.
+Tests cover timing, efficiency, faults, races, buoyancy and validation.
+For UI changes, check both tabs, lane isolation, playback, scrubbing, cameras
+and narrow layouts in a browser.
 Restart the server after JavaScript or CSS edits.
+Water animation caches wave shapes, bounds ripple calculations and skips
+unchanged paused frames without reducing surface detail.
 
 `main.py` starts the app; `long_catch/model.py` owns pure maths,
 `app.py` owns settings and UI, and `swimmer.py` builds the scene.
