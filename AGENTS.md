@@ -82,79 +82,27 @@ when Render sets `PORT`, it binds to `0.0.0.0` on that port.
   after editing either file.
 - Verify UI changes in the browser before claiming success.
 
-## Browser automation
+## Browser and animation checks
 
-On Windows, `playwright-cli` resolves to a `.ps1` script that PowerShell's
-execution policy blocks. Never call it from PowerShell. Run it through Git
-Bash or WSL so the `sh` shim is used instead:
-
-```bash
-bash -lc "playwright-cli open http://127.0.0.1:8080/"
-```
-
-If `node` itself is blocked in the agent shell, use the shared VS Code browser
-(`runPlaywrightCode`) instead. For screenshots at a fixed size, open a new page
-with `page.context().newPage()` and call `setViewportSize` on it.
-
-- The shared tab is usually hidden. Hidden tabs throttle
-  `requestAnimationFrame`, so clicks time out waiting for "stable" and the
-  estimates don't update. Forced clicks there give false results. For any
-  UI check, open a fresh visible page with `newPage()` and `setViewportSize`.
-- There is no global `THREE`. In page scripts, make vectors with
-  `scene.position.clone()` and quaternions with `scene.quaternion.clone()`.
-- Drive the engine deterministically instead of waiting on animation:
-  `L = window.LongCatch`, `L.set({...})`, then
-  `L.step(ph - L.step(0)); L.advance(0)` to jump to phase `ph`. Call
-  `scene.updateMatrixWorld(true)` before reading world positions. The scene
-  is `getElement(<scene id>).scene`.
-- Helpers defined with `page.evaluate` are lost on reload. Use
-  `page.addInitScript` for helpers that must survive restarts.
-
-## Lessons from past work
-
-These problems cost real time before. Plan around them.
-
-### Long browser runs
-
-- An evaluate longer than about a minute returns a deferred result. Deferred
-  results are easily lost: by a page reload, a server restart, or simply
-  expiring. Split sweeps into chunks of about a minute (for example, one
-  setting value per call) and return compact summaries, not per-frame logs.
-- Restarting the server reloads the page and kills any in-flight evaluate.
-  Finish or abandon a sweep before editing `engine.js` and restarting.
-- Start each server in a new async shell id. Stop the old one by PID first
-  (`Get-NetTCPConnection -LocalPort 8080 -State Listen`), then wait about 6 s
-  before `page.goto`, or you get "connection refused".
-
-### Judging visual effects
-
-- Don't judge a faint effect from one camera. The pressure particles first
-  looked missing because they were low alpha and mostly behind the body from
-  the default view. Check from the Below or Side view, and measure what you
-  can (for example, count live particles for a clean versus a slipping
-  stroke) instead of eyeballing a screenshot.
-
-### Arm IK in `poseArm`
-
-- Elbow and hand "flips" (a jump in one frame) come from direction vectors
-  that pass through zero length, not from the keyframes themselves:
-  - a bend-direction guide nearly parallel to the shoulder→hand axis;
-  - a world-referenced guide under heavy body roll, where "out and up" can
-    point back along the arm;
-  - a palm twist angle crossing ±180°.
-- Fix these with continuous constructions: soft minimum shares, a partial
-  roll, or folding the angle. Avoid `if (length < threshold)` fallbacks, which
-  create a new discontinuity at the threshold.
-- Verify with a sweep, not by watching. Step 1/250 to 1/500 of a cycle across
-  catch, slip, width, depth, exit and faults. Flag elbow moves over 0.06 m or
-  hand turns over about 25–40° in one step. Find the wrists as the two
-  3-child groups that travel furthest; the elbow is `wrist.parent`. Accept
-  smooth humps of about 0.03 m per step.
-- Temporary debug hooks (for example `window.__dbg`) must be removed before
-  committing. Run `node --check long_catch/static/engine.js` after every edit.
-
-### Shell quirks
-
-- In PowerShell, `git push` writes progress to stderr, which shows up as a
-  red `NativeCommandError` even when the push succeeded. Read the
-  `old..new main -> main` line before assuming it failed.
+- On Windows, run `playwright-cli` through Git Bash or WSL to avoid the
+  PowerShell execution-policy issue. If unavailable, use the shared VS Code
+  browser tools.
+- Use a visible page for animation checks: background tabs can throttle
+  rendering and make interactions unreliable.
+- Browser scripts cannot assume a global `THREE`. Reuse scene objects for
+  vector and quaternion operations.
+- For repeatable motion checks, use the `window.LongCatch` phase controls
+  rather than wall-clock waits. Update scene world matrices before measuring
+  world-space positions.
+- Keep browser checks short and collect results before reloading or restarting;
+  page-local helpers and unfinished evaluations can be lost. Verify server
+  readiness before navigating rather than relying on a fixed delay.
+- Inspect visual effects from multiple relevant views. Distinguish camera
+  occlusion or low opacity from missing behaviour, and support visual checks
+  with measurements where practical.
+- For sudden joint flips, check degenerate direction vectors, coordinate
+  frames and angle wrapping as well as keyframes. Prefer continuous
+  transitions; verify full-cycle continuity across affected settings and
+  faults, including extremes.
+- Remove temporary debug hooks and syntax-check changed JavaScript before
+  committing.
