@@ -49,7 +49,9 @@ cloud services or downloaded models.
   estimates. Hands turn teal when holding water and coral when slipping; amber
   highlights muscle emphasis.
 - **Water and motion:** stroke-driven ripples, spray, bubbles and wake, with
-  natural breathing and subtle pace-dependent buoyancy.
+  natural breathing, subtle pace-dependent buoyancy and gently damped steering
+  from hand entry and pull direction. Crossover can nudge the heading; this
+  illustrative sway does not change pace estimates or race distances.
 - **Race:** solo or two-swimmer comparisons over 25, 50 or 100 m, with distance
   tracks, finish times and a winning margin.
 

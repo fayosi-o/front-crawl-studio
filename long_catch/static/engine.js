@@ -222,12 +222,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.chest.rotation.order = 'ZYX';
     m.pelvis.rotation.order = 'ZYX';
     m.rigs = {};
+    m.steering = {yaw: 0, turn: 0, sway: 0, drift: 0};
     for (const side of ['R', 'L']) {
       const shoulder = m['sh' + side], vector = () => shoulder.position.clone();
       m.rigs[side] = {
         target: vector(), axis: vector(), pole: vector(), hint: vector(), elbow: vector(),
         upper: vector(), lower: vector(), normal: vector(), z: vector(),
         matrix: shoulder.matrix.clone(), quaternion: shoulder.quaternion.clone(), baseX: shoulder.position.x,
+        hand: vector(), previousHand: vector(), handKnown: false,
       };
     }
     el.$el.style.width = '100%';
@@ -1092,9 +1094,56 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     return 1 + 0.6 * (surgeShape(P).at(u) - 1);
   }
 
+  // A small, damped reaction to the posed hands, sampled before moving the whole swimmer.
+  // Entry brakes at the front; a loaded backward/sideways sweep reacts in the opposite direction.
+  // Lane-centering and soft limits keep this illustrative motion from accumulating into drift.
+  function steer(m, P, dt, slipness) {
+    const body = m.chest.parent, s = m.steering;
+    if (S.trailReset) {
+      s.yaw = s.turn = s.sway = s.drift = 0;
+      for (const r of Object.values(m.rigs)) r.handKnown = false;
+    }
+    let sideways = 0, torque = 0;
+    body.updateMatrixWorld(true);
+    for (const side of ['R', 'L']) {
+      const r = m.rigs[side];
+      m['wr' + side].localToWorld(r.hand.set(0.065, 0, -0.02));
+      if (dt > 0 && r.handKnown) {
+        const vx = clamp((r.hand.x - r.previousHand.x) / dt, -3, 3);
+        const vy = clamp((r.hand.y - r.previousHand.y) / dt, -3, 3);
+        const vz = clamp((r.hand.z - r.previousHand.z) / dt, -3, 3);
+        const wet = smooth(clamp(-r.hand.z / 0.06, 0, 1));
+        const load = wet * (1 - 0.85 * slipness) * clamp(-vx, 0, 2);
+        const entry = wet * Math.exp(-Math.abs(r.hand.z) / 0.08) * Math.max(0, -vz);
+        const fx = load * -vx - 0.3 * entry * Math.max(0, vx + P.speed);
+        const fy = -vy * (load + 0.3 * entry);
+        sideways += fy;
+        torque += r.hand.x * fy - r.hand.y * fx;
+      }
+      if (dt > 0 || !r.handKnown) {
+        r.previousHand.copy(r.hand);
+        r.handKnown = true;
+      }
+    }
+    // Substeps keep the damped response stable at low frame rates and during slow playback.
+    const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
+    for (let i = 0; i < steps; i++) {
+      s.turn += (1.8 * torque - 7 * s.turn - 14 * s.yaw) * h;
+      s.yaw += s.turn * h;
+      s.drift += (0.36 * sideways + 0.5 * P.speed * s.yaw - 6 * s.drift - 9 * s.sway) * h;
+      s.sway += s.drift * h;
+    }
+    body.rotation.z = 2 * D * Math.tanh(s.yaw / (2 * D));
+    body.position.y = 0.035 * Math.tanh(s.sway / 0.035);
+    body.updateMatrixWorld(true);
+  }
+
   function advance(scaled) {
     if (!S.params || !resolve()) return;
     const P = S.params, m = S.m;
+    // Measure the prescribed stroke in a neutral frame, never the previous steering response.
+    m.chest.parent.rotation.z = 0;
+    m.chest.parent.position.y = 0;
     // The water streams past at the swimmer's instantaneous speed (lane ropes, floor, trails, bubbles).
     S.flow = P.speed * surge(P);
     if (scaled > 0) {
@@ -1147,6 +1196,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F, st);
+    steer(m, P, scaled, slipness);
     updateSplash(m, P, scaled, slipness);
     updateTrails(m, P, scaled);
     updateWater(m, P, scaled);
@@ -1254,6 +1304,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (!params.playing) S.seekPausePending = false;
       if (!params.playing && params.speed !== S.params?.speed) S.ride = null;
       S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params);
+      if (S.m) for (const r of Object.values(S.m.rigs)) r.handKnown = false;
     },
     step(amount) { S.phase = wrap(S.phase + amount); S.last = null; S.trailReset = true; return S.phase; },
     fit() { setTimeout(fitCamera, 60); },
