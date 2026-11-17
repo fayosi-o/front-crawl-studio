@@ -138,6 +138,8 @@ class SwimmerBuilder:
         ui.scene.sphere(1, 24, 16).material(skin).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
         ui.scene.sphere(1, 24, 16).material(skin).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
         for side, sign in SIDES:
+            # Latissimus dorsi: the swimmer's V-taper from the armpit down the flank.
+            ellipsoid(0.19, 0.05, 0.085, skin).move(0.04, sign * 0.165, -0.005)
             self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
     def _head(self) -> None:
@@ -208,15 +210,23 @@ class SwimmerBuilder:
         strap.rotate_R(basis(start, _cross(normal, start))).move(*_scaled(normal, 1.075 * offset))
 
     def _arm(self, side: str, sign: int) -> None:
-        """Nested shoulder -> elbow -> wrist groups so the engine can pose each joint."""
+        """Nested shoulder -> elbow -> wrist groups so the engine can pose each joint.
+
+        In each joint frame +x runs down the bone and +z is the elbow-point (back of the arm) side,
+        so the olecranon and triceps sit on +z and the palm faces -z.
+        """
         skin, b = self.colors.skin, self.body
         with self._register('sh' + side, ui.scene.group().move(0.27, sign * b.shoulder_y, 0)):
             ui.scene.sphere(0.065, 20, 14).material(skin)
+            ellipsoid(0.085, 0.07, 0.072, skin).move(0.03, 0, 0.004)  # deltoid cap
             limb_x(b.upper_arm, 0.058, 0.041, skin)
+            ellipsoid(0.10, 0.05, 0.056, skin).move(0.14, 0, 0.006)  # biceps and triceps
             self._patch('tri' + side, ellipsoid(0.095, 0.038, 0.025, self.colors.patch)).move(0.13, 0, 0.035)
             with self._register('el' + side, ui.scene.group().move(b.upper_arm, 0, 0)):
                 ui.scene.sphere(0.042, 18, 12).material(skin)
+                ui.scene.sphere(0.028, 14, 10).material(skin).move(-0.006, 0, 0.026)  # olecranon (elbow point)
                 self._register('fa' + side, limb_x(b.forearm, 0.042, 0.028, skin))
+                ellipsoid(0.09, 0.041, 0.04, skin).move(0.075, 0, 0)  # forearm muscle bulk
                 with self._register('wr' + side, ui.scene.group().move(b.forearm, 0, 0)):
                     ui.scene.sphere(0.029, 16, 10).material(skin)
                     self._register('ha' + side, ellipsoid(0.08, 0.046, 0.018, skin)).move(0.065, 0, 0)
@@ -227,6 +237,8 @@ class SwimmerBuilder:
     def _pelvis(self) -> None:
         """Hips in suit colour, plus the core and hip-drive emphasis patches."""
         ellipsoid(0.16, 0.165, 0.12, self.colors.suit).move(-0.02, 0, 0)
+        for _, sign in SIDES:
+            ellipsoid(0.10, 0.08, 0.07, self.colors.suit).move(-0.07, sign * 0.07, 0.055)  # glutes
         self._patch('core', ellipsoid(0.10, 0.13, 0.105, self.colors.patch)).move(0.13, 0, 0.015)
         for side, sign in SIDES:
             hip = ui.scene.sphere(0.065, 16, 10).material(self.colors.patch, 0.0)

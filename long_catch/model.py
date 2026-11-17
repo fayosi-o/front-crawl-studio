@@ -27,6 +27,12 @@ RACE_PLAYBACK_SPEEDS = (1.0, 2.0, 4.0)
 # Hold quality at or above this reads as "holding water" in the UI.
 HOLDING_THRESHOLD = 0.7
 
+# Momentum between strokes: the body coasts on a passive-drag time constant once
+# the hand stops driving, so long gaps between strokes bleed speed that the next
+# catch must win back from slower water.
+GLIDE_DECAY_S = 1.6  # seconds for coasting speed to fall to 1/e
+PROPULSIVE_S = 0.85  # seconds of each stroke in which the hand drives the body
+
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
     """Limit ``value`` to the closed range [minimum, maximum]."""
@@ -105,6 +111,23 @@ def cycle_duration(stroke_rate: float) -> float:
     return 120.0 / stroke_rate
 
 
+def glide_seconds(stroke_rate: float) -> float:
+    """Unpropelled coast in each stroke: the time between one push ending and the next catch."""
+    return max(0.0, 60.0 / stroke_rate - PROPULSIVE_S)
+
+
+def momentum_carry(stroke_rate: float) -> float:
+    """Fraction of peak speed still carried when the next stroke catches (0–1).
+
+    A low turnover leaves a long coast, so the next hand meets slower water
+    and spends part of its pull re-accelerating the body. A higher turnover
+    keeps the body and the water around it moving between strokes.
+    """
+    if stroke_rate <= 0:
+        raise ValueError('stroke_rate must be positive')
+    return math.exp(-glide_seconds(stroke_rate) / GLIDE_DECAY_S)
+
+
 def format_duration(seconds: float) -> str:
     """Format seconds as ``'12.3 s'`` under a minute, else ``'m:ss.s'``; ``'–'`` if invalid."""
     if not math.isfinite(seconds) or seconds < 0:
@@ -123,6 +146,7 @@ class Metrics:
     distance_per_stroke: float  # metres per hand entry
     strokes_per_25: float
     seconds_per_25: float
+    momentum: float = 1.0  # 0–1: speed carried into the next catch (see momentum_carry)
 
     @property
     def holding(self) -> bool:
@@ -141,14 +165,18 @@ def estimate_metrics(
 
     Drive only scales the benefit of a good hold, so it cannot rescue a poor
     catch or heavy slip. Slip also costs distance directly, rates above 56 spm
-    shorten the stroke, and ``drag`` (from faults) removes a fixed fraction.
+    shorten the stroke, low rates lose momentum in the glide between strokes,
+    and ``drag`` (from faults) removes a fixed fraction.
     """
     hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
     # Drive multiplies the hold rather than adding to it.
     connection = 0.7 + 0.3 * drive_balance
     rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
+    momentum = momentum_carry(stroke_rate)
     distance_per_stroke = clamp(
-        (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty) * (1.0 - drag),
+        (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty)
+        * (0.80 + 0.20 * momentum)
+        * (1.0 - drag),
         0.45,
         1.40,
     )
@@ -158,6 +186,7 @@ def estimate_metrics(
         distance_per_stroke=distance_per_stroke,
         strokes_per_25=strokes_per_25,
         seconds_per_25=strokes_per_25 * 60.0 / stroke_rate,
+        momentum=momentum,
     )
 
 
@@ -268,30 +297,36 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'catch': (0, 100),
     'roll': (20, 62),
     'slip': (0, 100),
+    'width': (0, 100),
     'depth': (0, 100),
     'entry': (0, 40),
     'drive': (0, 100),
     'kick': (0, 100),
+    'beats': (2, 6),
 }
+# Settings that move in coarser steps than 1 (kicks per arm cycle: 2, 4, or 6).
+SETTING_STEPS: dict[str, int] = {'beats': 2}
 
 
 @dataclass(frozen=True, slots=True)
 class StrokeSettings:
     """User-facing settings: percentages 0–100, rate in spm, roll and entry in degrees."""
 
-    rate: int = 38
+    rate: int = 42
     catch: int = 92
     roll: int = 46
     slip: int = 8
+    width: int = 35  # pull width: 0 = hand sweeps in under the body, 100 = wide of the shoulder line
     depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
     entry: int = 5
     drive: int = 85
     kick: int = 45
+    beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
 
     def __post_init__(self) -> None:
         for name, (lo, hi) in SETTING_RANGES.items():
             value = getattr(self, name)
-            if not lo <= value <= hi:
+            if not lo <= value <= hi or (value - lo) % SETTING_STEPS.get(name, 1):
                 raise ValueError(f'{name}={value} outside {lo}–{hi}')
 
     def with_values(self, **changes: int) -> StrokeSettings:
@@ -320,6 +355,7 @@ class ViewState:
     angle: ViewAngle = 'top'
     trail: Trail = 'off'
     trail_seconds: float = 1.5
+    pressure: bool = False
 
     def __post_init__(self) -> None:
         if self.emphasis not in EMPHASES:
@@ -368,6 +404,8 @@ class ViewState:
             'slip': slip,
             'drive': s.drive / 100,
             'kick': s.kick / 100,
+            'beats': s.beats,
+            'width': s.width / 100,
             'depth': s.depth / 100,
             'entry': s.entry,
             'roll': s.roll,
@@ -380,19 +418,24 @@ class ViewState:
             'rush': RUSH if 'rushing' in self.faults else 1.0,
             'trail': self.trail,
             'trailSeconds': self.trail_seconds,
+            'pressure': self.pressure,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
-            'speed': speed,  # metres per second
+            'speed': speed,  # metres per second, averaged over the cycle
+            'momentum': m.momentum,
+            # Share of each stroke spent coasting; the engine shapes the speed surge from it.
+            'glide': glide_seconds(s.rate) * s.rate / 60.0,
             'rideHeight': ride_height,
             'hipDrop': hip_drop,
         }
 
 
 # Example strokes, ordered from most to least efficient (keys 1–4 in the UI).
+# The first three are distance strokes built on a two- or four-beat kick.
 PRESETS: dict[str, StrokeSettings] = {
-    'Long power': StrokeSettings(rate=38, catch=92, roll=46, slip=8, drive=85, kick=45),
-    'Long light': StrokeSettings(rate=40, catch=88, roll=44, slip=10, drive=70, kick=25),
-    'Compact connected': StrokeSettings(rate=48, catch=82, roll=42, slip=14, drive=68, kick=60),
-    'Short slipping': StrokeSettings(rate=54, catch=42, roll=34, slip=62, drive=35, kick=35),
+    'Long power': StrokeSettings(rate=42, catch=92, roll=46, slip=8, width=35, drive=85, kick=45, beats=2),
+    'Long light': StrokeSettings(rate=44, catch=88, roll=44, slip=10, width=40, drive=70, kick=30, beats=2),
+    'Compact connected': StrokeSettings(rate=52, catch=82, roll=40, slip=14, width=30, drive=68, kick=55, beats=4),
+    'Short slipping': StrokeSettings(rate=56, catch=42, roll=34, slip=62, width=85, drive=35, kick=40, beats=6),
 }
 
 

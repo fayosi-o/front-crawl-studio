@@ -20,9 +20,12 @@ serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
 - Natural motion in `engine.js` (breathing, heave, small per-stroke noise) is
   visual only. It is keyed to stroke time and must never change the phase,
   timeline, or Python metrics.
-- The water reaction in `engine.js` (ripples, spray, bubbles, wake, kick wash)
-  reads the measured limb motion and is also visual only: it must never feed
-  back into the pose, phase, or metrics.
+- The water reaction in `engine.js` (ripples, spray, bubbles, wake, kick wash,
+  the pressure view and the per-stroke surge) reads the measured limb motion and
+  is also visual only: it must never feed back into the pose, phase, or metrics.
+- The default stroke is a distance stroke: a two-beat kick (contralateral
+  downbeat with each catch drives the hip roll). Pull width and kick timing are
+  visual only.
 
 ### Adding a stroke fault
 
@@ -40,6 +43,8 @@ browser as `render_params()['faults']`. A new fault needs:
 - More slip must reduce estimated distance per stroke.
 - More drive must not compensate for a poor catch or heavy slip.
 - Every fault must cost estimated distance per stroke.
+- A lower stroke rate must lower momentum carry (longer glide between the push
+  and the next catch) and with it distance per stroke.
 - Muscle highlighting is an illustrative overlay. Don't present numbers as
   measured, and don't add disclaimer text to the UI.
 

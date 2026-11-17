@@ -44,11 +44,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   const ROLL_PEAK = 0.18;
   // Ease into the reach limits (metres) so the elbow straightens or folds gradually instead of snapping.
   const SOFT = 0.045;
-  function softReach(d) {
+  function softReach(d, min = MIN_REACH) {
     if (d > MAX_REACH - SOFT) return MAX_REACH - SOFT * Math.exp(-(d - MAX_REACH + SOFT) / SOFT);
-    if (d < MIN_REACH + SOFT) return MIN_REACH + SOFT * Math.exp(-(MIN_REACH + SOFT - d) / SOFT);
+    if (d < min + SOFT) return min + SOFT * Math.exp(-(min + SOFT - d) / SOFT);
     return d;
   }
+  // Under water the elbow never folds past about 95 degrees of bend: the power diamond keeps the
+  // hand a forearm's length below the elbow rather than tucked into the armpit.
+  const PULL_REACH = reachAt(95);
 
   // Smoothly interpolate a keyframe list [[phase, value], ...] at phase p.
   function keyed(p, keys) {
@@ -63,57 +66,92 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Wrist target path for one arm at phase p, plus overlay and colouring values.
   // F holds active stroke faults; each one bends the healthy path toward a typical error.
+  // Vectors below are [forward, outward (away from the midline), up] in the unrolled body frame.
+  // `out` is the wrist's offset from its own shoulder, so out = -SHOULDER_Y is the body's midline.
   function arm(p, P, F) {
-    const c = P.catch, s = P.slip, L = P.length;
+    const c = P.catch, s = P.slip, L = P.length, w = P.width ?? 0.35;
     const exit = P.exit, fin = CONFIG.finish, pull = CONFIG.pull, push = CONFIG.push;
     // Stroke depth: -1 keeps the hand tucked close to the body, +1 pulls deep with a straighter arm.
     const d = 2 * P.depth - 1;
-    const midRec = exit + (1 - exit) * 0.4, lateRec = exit + (1 - exit) * 0.72;
+    const rec = f => exit + (1 - exit) * f;  // fraction f of the way through the recovery
+    const midRec = rec(0.4), lateRec = rec(0.7), preEntry = rec(0.88);
     const over = F.overreach ? 1 : 0, cross = F.crossover ? 1 : 0;
     // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
     const tilt = deg => [0.56 * Math.cos(deg * D), -0.56 * Math.sin(deg * D)];
     const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
+    // Fingertips go in just past the head with the elbow still bent and high, then the arm extends
+    // forward under the surface. An over-reaching swimmer spears in at full stretch instead.
+    const entryX = lerp(0.36, enterX + 0.08, over), entryH = lerp(-0.01, enterH + 0.03, over);
     const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over;
-    const finishX = -lerp(0.40, 0.50, L);
+    const finishX = -lerp(0.40, 0.50, L), exitX = -lerp(0.42, 0.52, L);
     let x = keyed(p, [
-      [0, enterX + 0.08 * over], [0.12, glideX - 0.01 + 0.08 * over], [0.21, lerp(0.30, 0.40, c) + 0.08 * over],
-      [pull, pullX], [fin, finishX], [exit, -lerp(0.42, 0.52, L)],
-      [midRec, -0.10], [lateRec, 0.22], [1, enterX + 0.08 * over],
+      [0, entryX], [0.11, enterX + 0.08 * over], [0.16, glideX - 0.01 + 0.08 * over],
+      [0.22, lerp(0.30, 0.40, c) + 0.08 * over],
+      [pull, pullX], [fin, finishX], [exit, exitX],
+      [midRec, -0.10], [lateRec, 0.16], [preEntry, 0.30], [1, entryX],
     ]);
     // One uninterrupted sweep: pull under the chest, then extend back toward the hip.
     // The slight timing bias puts peak rearward hand speed in the push, not at a stop under the shoulder.
     if (p >= pull && p < fin) x = lerp(pullX, finishX, smooth(((p - pull) / (fin - pull)) ** 1.25));
+    // Pull width: a narrow pull sweeps the hand in under the chest while the elbow stays out (the
+    // "power diamond" of the hand, forearm, and upper arm); a wide one keeps the hand outside the
+    // shoulder line with a straighter arm. Both open slightly out at the catch first.
     // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
     const out = keyed(p, [
-      [0, 0.025], [0.12, 0.035], [0.21, 0.06], [0.30, 0.12 + 0.04 * (1 - c)], [0.50, 0.12],
-      [fin, 0.08], [exit, 0.10], [midRec, 0.30], [lateRec, 0.22], [1, 0.025],
-    ]) - cross * keyed(p, [[0, 0.33], [0.12, 0.31], [0.30, 0.15], [0.50, 0.02], [exit, 0], [lateRec, 0.08], [1, 0.33]]);
+      [0, 0.02], [0.11, 0.03], [0.16, 0.04], [0.22, 0.05 + 0.05 * w + 0.03 * (1 - c)],
+      [0.36, lerp(-0.15, 0.12, w)], [push, lerp(-0.13, 0.11, w)],
+      [fin, lerp(-0.06, 0.09, w)], [exit, lerp(0.0, 0.10, w)],
+      [midRec, 0.20], [lateRec, 0.16], [preEntry, 0.06], [1, 0.02],
+    ]) - cross * keyed(p, [
+      [0, 0.33], [0.16, 0.31], [0.30, 0.15], [push, 0.02], [exit, 0], [lateRec, 0.08], [preEntry, 0.24], [1, 0.33],
+    ]);
     // Distance-style catch: the hand tips down in front while the elbow stays high, then hangs
     // under the elbow so the forearm and hand form one near-vertical paddle facing backwards.
     const height = keyed(p, [
-      [0, enterH + 0.03 * over], [0.12, glideH + 0.05 * over], [0.21, lerp(-0.16, -0.22, c) + 0.03 * over],
+      [0, entryH], [0.11, enterH + 0.03 * over], [0.16, glideH + 0.05 * over],
+      [0.22, lerp(-0.16, -0.22, c) + 0.03 * over],
       [0.30, lerp(-0.26, -0.40, c) - 0.05 * d],
-      [push, -0.32 - 0.08 * d], [fin, -0.06 - 0.02 * d], [exit, 0.0], [midRec, 0.12], [lateRec, 0.12],
-      [1, enterH + 0.03 * over],
+      [push, -0.32 - 0.08 * d], [fin, -0.06 - 0.02 * d], [exit, 0.0],
+      [midRec, 0.10], [lateRec, 0.10], [preEntry, 0.06], [1, entryH],
     ]);
-    // Recovery is elbow-led: the elbow arcs highest while the relaxed hand swings below and outside it.
+    // Recovery is elbow-led and compact: the elbow lifts highest while the relaxed forearm hangs
+    // beneath it, close to the body, then swings forward past the head to the entry.
     const elbow = [
-      keyed(p, [[exit, -0.22], [midRec, -0.04], [lateRec, 0.14], [1, 0.26]]),
-      keyed(p, [[exit, 0.18], [midRec, 0.26], [lateRec, 0.22], [1, 0.08]]),
-      keyed(p, [[exit, 0.20], [midRec, 0.40], [lateRec, 0.32], [1, 0.05]]),
+      keyed(p, [[exit, -0.24], [midRec, -0.04], [lateRec, 0.10], [preEntry, 0.14], [1, 0.16]]),
+      keyed(p, [[exit, 0.12], [midRec, 0.18], [lateRec, 0.18], [preEntry, 0.14], [1, 0.10]]),
+      keyed(p, [[exit, 0.16], [midRec, 0.30], [lateRec, 0.26], [preEntry, 0.18], [1, 0.10]]),
     ];
     const recovery = p < exit ? 0 : smooth(clamp((p - exit) / 0.05, 0, 1)) * smooth(clamp((1 - p) / 0.07, 0, 1));
     const under = p < exit;
+    // Underwater elbow direction. The upper arm rotates inward through the catch so the elbow
+    // points out and up and stays ahead of the hand; a weak catch lets it drop and trail.
+    // Narrow pulls flare the elbow out to the side; wide pulls point it back and up. Through the
+    // push the guide stays mostly outward: with the body rolled onto the pulling side, world-up
+    // points under the chest, so a large up share would fold the elbow inward.
+    const dropped = lerp(-0.6, 0.35, c);
+    const elbowDir = [0, 1, 2].map(i => keyed(p, [
+      [0, [0.15, 0.75, 0.65][i]], [0.12, [0.15, 0.75, 0.65][i]],
+      [0.22, [lerp(-0.1, 0.35, c), 0.8, dropped][i]],
+      [0.36, [lerp(0.15, -0.2, w), 1.0, lerp(0.1, 0.45, w)][i]],
+      [push, [0.0, 0.95, 0.25][i]], [fin, [-0.3, 0.6, 0.7][i]], [1, [0.15, 0.75, 0.65][i]],
+    ]));
+    // Palm direction for the forearm twist. Down and slightly out at entry, back through the catch
+    // and push, pinkie-first and facing the thigh at release, then facing back and out (thumb down)
+    // as the elbow lifts, and out to the side as the hand swings forward to the entry. Slip skews the palm inward so it slices rather than holds.
+    const palm = [0, 1, 2].map(i => keyed(p, [
+      [0, [0.1, 0.3, -1][i]], [0.14, [0.1, 0.15, -1][i]], [0.22, [-0.7, 0, -0.7][i]],
+      [0.36, [-1, -0.25 * (1 - w), -0.15][i]], [push, [-1, 0, 0.35][i]],
+      [fin, [-0.2, -0.8, 0.5][i]], [exit, [-0.2, -0.6, 0.6][i]],
+      [midRec, [-0.6, 0.6, 0.2][i]], [lateRec, [-0.2, 1, -0.1][i]],
+      [preEntry, [0, 0.45, -1][i]], [1, [0.1, 0.3, -1][i]],
+    ]));
+    palm[1] -= 0.9 * s * bump(p, 0.14, fin);
     // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
     const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
     const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
-    // Through the catch the upper arm rotates inward: the elbow guide swings forward and out
-    // (dipping slightly from straight up), so a good catch keeps the elbow ahead of the hand.
-    const catching = bump(p, 0.14, 0.46);
-    const pole = lerp(-0.35, 1, c) - 0.25 * catching;
     return {
-      x, out, height, elbow, recovery, pole, lead: 0.7 * c * catching, shrug: front,
+      x, out, height, elbow, recovery, elbowDir, palm, shrug: front,
       wrist: wrist * D, under, stage,
       back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),
     };
@@ -277,7 +315,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       t.points.visible = t.line.visible = on;
       if (!on) continue;
       if (dt > 0) {
-        const drift = P.speed * dt;
+        const drift = (S.flow ?? P.speed) * dt;
         for (const q of t.pts) { q[0] -= drift; q[3] += dt; }
         m[limb.joint].localToWorld(t.at.set(...limb.tip));
         t.pts.push([t.at.x, t.at.y, t.at.z, 0]);
@@ -503,9 +541,74 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Visual only: nothing here feeds back into the phase, the pose, or the metrics.
   // Positions are in the swimmer's frame, where the still pool water streams back at swim speed.
   // Particles are [x, y, z, vx, vy, vz, age, life].
-  const FX = { maxRipples: 24, maxBubbles: 420, maxSpray: 160, rippleSpeed: 0.55, gravity: 9.81, rise: 0.28 };
+  const FX = {
+    maxRipples: 24, maxBubbles: 420, maxSpray: 160, maxPressure: 700, rippleSpeed: 0.55, gravity: 9.81, rise: 0.28,
+  };
   const rand = (a, b) => a + (b - a) * Math.random();
   const spawnCount = rate => Math.floor(rate + Math.random());
+
+  // Simulated pressure view (visual only). Probes on each palm, forearm, and instep measure how
+  // hard that surface is moving into the water ahead of it; loaded water is released as a warm
+  // cloud pushed the way the surface drives it, which the stream then carries back, spreads, cools,
+  // and dissipates. `face` is the surface normal in the joint frame (palm and instep face local -z);
+  // a forearm is round, so it loads the water on whichever side it moves toward.
+  const PRESSURE = {
+    hot: [1.0, 0.6, 0.22], cool: [0.55, 0.82, 1.0],
+    probes: ['R', 'L'].flatMap(s => [
+      { joint: 'wr' + s, at: [0.065, 0, -0.02], face: [0, 0, -1], gain: 1, hand: true },
+      { joint: 'el' + s, at: [0.15, 0, 0], face: null, gain: 0.45, hand: true },
+      { joint: 'ankle' + s, at: [-0.07, 0, -0.02], face: [0, 0, -1], gain: 0.5, hand: false },
+    ]),
+  };
+
+  function updatePressure(fx, m, dt, slipness, flow) {
+    const sys = fx.pressure;
+    for (const pr of fx.probes) {
+      const joint = m[pr.joint];
+      joint.localToWorld(pr.pos.set(...pr.at));
+      if (pr.known) pr.vel.subVectors(pr.pos, pr.prev).divideScalar(dt);
+      pr.prev.copy(pr.pos);
+      const wasKnown = pr.known;
+      pr.known = true;
+      if (!wasKnown || pr.pos.z > -0.03) continue;
+      // Load follows the limb's push relative to the body: a hand that holds the water stays nearly
+      // still in it while the body moves past, so the push it makes is what loads the water.
+      if (pr.face) {
+        pr.n.set(...pr.face).transformDirection(joint.matrixWorld);
+      } else {
+        pr.axis.set(1, 0, 0).transformDirection(joint.matrixWorld);
+        pr.n.copy(pr.vel).addScaledVector(pr.axis, -pr.vel.dot(pr.axis));
+        if (pr.n.lengthSq() < 1e-6) continue;
+        pr.n.normalize();
+      }
+      const q = Math.max(0, pr.vel.dot(pr.n));
+      // A slipping hand moves fast but builds little pressure: the water slides off it instead.
+      const hold = pr.hand ? 1 - 0.9 * slipness : 1;
+      const rate = Math.min(320, 90 * pr.gain * hold * q * q);
+      for (let i = spawnCount(rate * dt); i > 0; i--) {
+        const push = 0.55 * q * rand(0.6, 1.1);
+        emit(sys, pr.pos.x + 0.03 * pr.n.x + rand(-0.03, 0.03), pr.pos.y + 0.03 * pr.n.y + rand(-0.03, 0.03),
+          pr.pos.z + 0.03 * pr.n.z + rand(-0.02, 0.02),
+          -flow + push * pr.n.x + rand(-0.15, 0.15), push * pr.n.y + rand(-0.15, 0.15), push * pr.n.z + rand(-0.1, 0.1),
+          rand(0.8, 1.4), clamp(0.35 + 0.35 * q, 0.35, 1));
+      }
+    }
+  }
+
+  // Fresh pressure glows warm and dense; as it spreads and slows it cools to pale blue and fades.
+  function drawPressure(sys) {
+    const [hr, hg, hb] = PRESSURE.hot, [cr, cg, cb] = PRESSURE.cool, list = sys.list;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i], age = q[6] / q[7], cool = smooth(clamp(age * 1.6, 0, 1));
+      const alpha = 0.5 * (q[8] ?? 1) * Math.min(1, q[6] / 0.06) * (1 - age) ** 1.4;
+      sys.pos[3 * i] = q[0]; sys.pos[3 * i + 1] = q[1]; sys.pos[3 * i + 2] = q[2];
+      sys.col[4 * i] = lerp(hr, cr, cool); sys.col[4 * i + 1] = lerp(hg, cg, cool); sys.col[4 * i + 2] = lerp(hb, cb, cool);
+      sys.col[4 * i + 3] = alpha;
+    }
+    sys.geo.attributes.position.needsUpdate = true;
+    sys.geo.attributes.color.needsUpdate = true;
+    sys.geo.setDrawRange(0, list.length);
+  }
 
   function makeParticles(group, max, size, color) {
     const geo = new THREE.BufferGeometry();
@@ -520,7 +623,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     points.frustumCulled = false;
     points.renderOrder = 4;
     group.add(points);
-    return { max, list: [], geo, pos, col, color };
+    return { max, list: [], geo, pos, col, color, points };
   }
 
   // Build the ripple list, particle systems, and per-limb trackers once per scene.
@@ -535,16 +638,23 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       ripples: [], wash: 0, footX: -1.6,
       bubbles: makeParticles(group, FX.maxBubbles, 0.05, [0.85, 0.96, 1]),
       spray: makeParticles(group, FX.maxSpray, 0.045, [1, 1, 1]),
+      pressure: makeParticles(group, FX.maxPressure, 0.18, PRESSURE.hot),
       limbs: ALL_LIMBS.map(limb => ({
         limb, hand: limb.key.startsWith('hand'), known: false, air: 0, wet: 0,
         pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(),
       })),
+      probes: PRESSURE.probes.map(probe => ({
+        ...probe, known: false,
+        pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(),
+        n: new THREE.Vector3(), axis: new THREE.Vector3(),
+      })),
     };
+    m.fx.pressure.points.material.blending = THREE.AdditiveBlending;
     return m.fx;
   }
 
-  function emit(sys, x, y, z, vx, vy, vz, life) {
-    if (sys.list.length < sys.max) sys.list.push([x, y, z, vx, vy, vz, 0, life]);
+  function emit(sys, x, y, z, vx, vy, vz, life, strength = 1) {
+    if (sys.list.length < sys.max) sys.list.push([x, y, z, vx, vy, vz, 0, life, strength]);
   }
 
   function ripple(fx, x, y, strength) {
@@ -627,6 +737,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       return q[6] < q[7];
     });
+    // Pressure: the pushed water slows into the surrounding stream and is carried back with it.
+    const settle = Math.min(1, 2.5 * dt);
+    compact(fx.pressure.list, q => {
+      q[3] += (-flow - q[3]) * settle; q[4] -= q[4] * settle; q[5] -= q[5] * settle;
+      q[0] += q[3] * dt; q[1] += q[4] * dt; q[2] = Math.min(-0.01, q[2] + q[5] * dt); q[6] += dt;
+      return q[6] < q[7];
+    });
     // Rings ride back with the water and are dropped once they have faded.
     for (const r of fx.ripples) { r[0] -= flow * dt; r[2] += dt; }
     compact(fx.ripples, r => r[2] < 2.2);
@@ -647,11 +764,12 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Measure each limb, react to the water, and advance ripples and particles; frozen while paused.
   function updateSplash(m, P, dt, slipness) {
     if (!m.pool) return;
-    const fx = setupSplash(m), flow = P.speed;
+    const fx = setupSplash(m), flow = S.flow ?? P.speed;
     if (S.trailReset) {
-      fx.ripples.length = fx.bubbles.list.length = fx.spray.list.length = 0;
+      fx.ripples.length = fx.bubbles.list.length = fx.spray.list.length = fx.pressure.list.length = 0;
       fx.wash = 0;
       for (const l of fx.limbs) { l.known = false; l.air = l.wet = 0; }
+      for (const pr of fx.probes) pr.known = false;
     }
     if (dt > 0) {
       fx.washTarget = 0;
@@ -668,10 +786,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       fx.footX = feetX / feet;
       fx.wash += (clamp(fx.washTarget / 2, 0, 1.5) - fx.wash) * Math.min(1, 3 * dt);
+      if (P.pressure) updatePressure(fx, m, dt, slipness, flow);
       stepFx(fx, flow, dt);
     }
+    if (!P.pressure) fx.pressure.list.length = 0;
     drawParticles(fx.bubbles, 0.7);
     drawParticles(fx.spray, 0.9);
+    drawPressure(fx.pressure);
   }
 
   // ---- split view -------------------------------------------------------------
@@ -731,19 +852,33 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Fixed-length two-bone inverse kinematics for one arm in the rolled chest frame.
   function poseArm(m, side, a, P, slipness, bodyRoll, pitch = 0) {
     const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
-    const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll), lateral = sgn * 0.8;
+    const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll);
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
     sh.position.x = r.baseX + 0.04 * a.shrug;
     // Convert a shoulder-relative point with a world height into the rolled (then pitched) chest frame.
     const chestZ = (height, out, x) =>
       ((height + 0.06 - m.chest.position.z + (sh.position.x + x) * sp) / cp - sin * (sh.position.y + sgn * out)) / cos;
     r.target.set(a.x, sgn * a.out, chestZ(a.height, a.out, a.x));
-    const reach = softReach(r.target.length());
+    const reach = softReach(r.target.length(), lerp(PULL_REACH, MIN_REACH, a.recovery));
     r.axis.copy(r.target).normalize();
     r.target.copy(r.axis).multiplyScalar(reach);
-    // Keep the elbow guide world-up when the chest rolls underneath the arm.
-    r.pole.set(lerp(-0.15, 0.35, P.catch) + a.lead, lateral * cos + a.pole * sin, -lateral * sin + a.pole * cos);
-    r.pole.addScaledVector(r.axis, -r.pole.dot(r.axis)).normalize();
+    // Body-frame direction [forward, outward, up] → rolled chest frame. Under water the guide mostly
+    // follows the chest: with the body rolled onto the pulling side a world-referenced "out and up"
+    // would point straight back along a hand hanging below the shoulder and leave no bend direction.
+    // In the recovery it follows the world so the elbow leads up out of the water.
+    const guideRoll = bodyRoll * lerp(0.4, 1, a.recovery);
+    const gc = Math.cos(guideRoll), gs = Math.sin(guideRoll);
+    const toChest = (v, [f, o, u], c = gc, s = gs) => v.set(f, sgn * o * c + u * s, -sgn * o * s + u * c);
+    toChest(r.pole, a.elbowDir);
+    r.pole.addScaledVector(r.axis, -r.pole.dot(r.axis));
+    // A guide nearly along the shoulder-hand line (hand tucked under the chest, or a wide shallow
+    // pull) leaves almost no bend direction, and its remainder can swap fore and aft. Keep a soft
+    // minimum share toward "out and a little forward" so the bend direction never passes through zero.
+    r.hint.set(0.5, sgn, 0);
+    r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis)).normalize();
+    const share = r.pole.dot(r.hint), floor = 0.25;
+    const kept = 0.5 * (share + floor + Math.sqrt((share - floor) ** 2 + 0.01));
+    r.pole.addScaledVector(r.hint, kept - share).normalize();
     if (a.recovery > 0) {
       const [ex, eo, eh] = a.elbow;
       r.hint.set(ex, sgn * eo, chestZ(eh, eo, ex));
@@ -759,16 +894,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const minOut = clamp((0.015 - along * sgn * r.axis.y) / (lift * Math.sqrt(1 - r.axis.y ** 2)), -1, 1);
     const outward = r.pole.dot(r.z);
     if (outward < minOut) {
+      // Keep the guide's fore/aft remainder unnormalised. When the guide points almost straight
+      // inward that remainder shrinks through zero and changes sign; the growing outward share
+      // then swings the elbow out to the side instead of snapping it from front to back.
       r.normal.copy(r.pole).addScaledVector(r.z, -outward);
-      // With the guide nearly all inward, its remainder can flip fore/aft; bias it to the back side.
       const spare = r.normal.length();
-      if (spare < 0.35) {
-        r.hint.set(0, 0, 1).addScaledVector(r.axis, -r.axis.z);
-        r.hint.addScaledVector(r.z, -r.hint.dot(r.z)).normalize();
-        r.normal.addScaledVector(r.hint, 0.35 - spare);
-      }
-      r.normal.normalize();
-      r.pole.copy(r.z).multiplyScalar(minOut).addScaledVector(r.normal, Math.sqrt(1 - minOut ** 2));
+      const keep = (minOut * spare) / Math.sqrt(Math.max(1e-3, 1 - minOut ** 2));
+      r.pole.copy(r.normal).addScaledVector(r.z, keep + 0.8 * Math.max(0, 0.6 - spare)).normalize();
     }
     r.elbow.copy(r.axis).multiplyScalar(along).addScaledVector(r.pole, lift);
     r.upper.copy(r.elbow).normalize();
@@ -782,19 +914,52 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     r.matrix.makeBasis(r.lower, r.normal, r.z);
     r.quaternion.setFromRotationMatrix(r.matrix);
     m['el' + side].quaternion.copy(sh.quaternion).invert().multiply(r.quaternion);
-    m['wr' + side].rotation.set(0, a.wrist, 0);
+    // Forearm rotation (pronation/supination) about the forearm's own axis. With no twist the palm
+    // faces the elbow crease; turn it toward the phase's palm direction, within the joint's range.
+    toChest(r.hint, a.palm, cos, sin).addScaledVector(r.lower, -r.hint.dot(r.lower));
+    // Fold the angle back to zero near ±180° (both sides then agree) and fade it when the palm
+    // target runs along the forearm, so the hand never snaps from one side to the other.
+    const raw = Math.atan2(r.hint.dot(r.normal), -r.hint.dot(r.z)), lim = 135 * D;
+    const folded = Math.abs(raw) <= lim ? raw : (Math.sign(raw) * lim * (Math.PI - Math.abs(raw))) / (Math.PI - lim);
+    const twist = folded * smooth(clamp(r.hint.length() / 0.3, 0, 1));
+    r.twist = twist;
+    m['wr' + side].rotation.set(twist, a.wrist, 0);
     paint(m['fa' + side], a.under, slipness);
     paint(m['ha' + side], a.under, slipness);
     paint(m['thumb' + side], a.under, slipness);
   }
 
-  // Healthy flutter drives from the hips; a knee kick drops the thighs and bends the knees hard.
+  // Two-beat kick, per leg: a quick downbeat from a slightly bent knee that snaps straight, then a
+  // slow, relaxed upbeat while the body glides. q is the time since this leg's downbeat began.
+  const TWO_BEAT = {
+    hip: [[0, 0.20], [0.13, -0.26], [0.30, -0.12], [0.75, 0.10], [1, 0.20]],
+    knee: [[0, 0.40], [0.08, 0.16], [0.14, 0.0], [0.6, 0.04], [0.88, 0.28], [1, 0.40]],
+    ankle: [[0, 0], [0.07, 1], [0.16, 0.2], [0.4, 0], [1, 0]],
+  };
+  // The left leg's downbeat starts just before the right hand enters, so it lands with the right
+  // catch (opposite leg, opposite arm) and rotates the hips onto the right side; the right leg mirrors it.
+  const KICK_START = 0.94;
+
+  // 0 for a six-beat flutter, 1 for a two-beat kick that drives the roll; a knee kick loses that link.
+  const kickTiming = (P, F) => (F.kneekick ? 0 : clamp((6 - (P.beats ?? 6)) / 4, 0, 1));
+
+  // Healthy kicks drive from the hips; a knee kick drops the thighs and bends the knees hard.
   // Each beat varies a little in size and timing (t is stroke time; zero kick stays still).
   function poseLegs(m, P, F, t) {
-    const kick = 2 * Math.PI * 3 * S.phase;
     const knees = F.kneekick ? 1 : 0, base = knees ? Math.max(P.kick, 0.6) : P.kick;
+    const beats = knees ? 6 : P.beats ?? 6;
+    const kick = 2 * Math.PI * (beats / 2) * S.phase;
     for (const [side, offset] of [['R', 0], ['L', Math.PI]]) {
       const k = base * (1 + 0.12 * noise(3 * t, offset ? 52 : 51));
+      if (beats === 2 && !knees) {
+        // Bigger single beats: the downbeat has to turn the hips as well as balance the legs.
+        const q = wrap(S.phase - KICK_START - (offset ? 0 : 0.5) + 0.01 * noise(2 * t, offset ? 62 : 61));
+        const big = 1.25 * Math.max(k, 0.25);
+        m['leg' + side].rotation.set(0, big * keyed(q, TWO_BEAT.hip), 0);
+        m['knee' + side].rotation.set(0, big * keyed(q, TWO_BEAT.knee), 0);
+        m['ankle' + side].rotation.set(0, -0.12 - 0.35 * big * keyed(q, TWO_BEAT.ankle), 0);
+        continue;
+      }
       const angle = kick + offset + 0.15 * noise(2 * t, offset ? 62 : 61);
       const hip = knees ? -0.12 * k + 0.06 * k * Math.sin(angle) : 0.26 * k * Math.sin(angle);
       const knee = knees ? 0.2 + 1.3 * k * Math.max(0, Math.sin(angle - 0.3)) : 0.45 * k * Math.max(0, Math.sin(angle - 0.7));
@@ -802,6 +967,17 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       m['knee' + side].rotation.set(0, knee, 0);
       m['ankle' + side].rotation.set(0, -0.12 + k * (knees ? 0.25 : 0.10) * Math.sin(angle - 0.5), 0);
     }
+  }
+
+  // Kick-driven roll for the two-beat timing: each downbeat flips the hips to the next side in
+  // about a fifth of a cycle, and they hold there (a short glide on the side) until the next beat.
+  // Returns -1..1 with +1 = right side down.
+  function kickRoll(p) {
+    const q = wrap(p - KICK_START), turn = 0.2;
+    if (q < turn) return -1 + 2 * smooth(q / turn);
+    if (q < 0.5) return 1;
+    if (q < 0.5 + turn) return 1 - 2 * smooth((q - 0.5) / turn);
+    return -1;
   }
 
   // ---- HUD and input ----------------------------------------------------------
@@ -850,14 +1026,37 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     advance(scaled);
   }
 
+  // Instantaneous swim speed within a stroke, relative to the cycle average (mean 1). The body peaks
+  // as each push finishes, coasts on drag through the glide (down to P.momentum of its peak when the
+  // next catch starts), then is driven back up. Cached per settings; visual only.
+  const PUSH_PEAKS = [CONFIG.finish - 0.5, CONFIG.finish];
+  function surgeShape(P) {
+    const key = `${P.glide}|${P.momentum}`;
+    if (S.surge?.key === key) return S.surge;
+    const glide = clamp(P.glide ?? 0, 0, 0.95), carry = clamp(P.momentum ?? 1, 0, 1);
+    const raw = u => (u < glide
+      ? carry ** (u / Math.max(glide, 1e-6))
+      : carry + (1 - carry) * smooth((u - glide) / (1 - glide)));
+    let mean = 0;
+    for (let i = 0; i < 64; i++) mean += raw((i + 0.5) / 64) / 64;
+    S.surge = { key, at: u => raw(u) / mean };
+    return S.surge;
+  }
+  function surge(P) {
+    const u = wrap(2 * (S.phase - PUSH_PEAKS[1]));  // strokes since the last push finished
+    return 1 + 0.6 * (surgeShape(P).at(u) - 1);
+  }
+
   function advance(scaled) {
     if (!S.params || !resolve()) return;
     const P = S.params, m = S.m;
+    // The water streams past at the swimmer's instantaneous speed (lane ropes, floor, trails, bubbles).
+    S.flow = P.speed * surge(P);
     if (scaled > 0) {
       const next = S.phase + scaled / (120 / P.rate);
       S.cycles += Math.floor(next);
       S.phase = next % 1;
-      S.offset += P.speed * scaled;
+      S.offset += S.flow * scaled;
     }
     // Exponential settling is stable at any frame rate and freezes with the stroke clock.
     if (!S.ride) S.ride = {height: P.rideHeight, hips: P.hipDrop};
@@ -872,12 +1071,16 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const roll = Math.min(80, P.roll * chestGain * (1 + 0.04 * noise(2 * st, 11))) * D;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
     const hipShare = F.flathips ? 0.06 : F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
-    const bodyRoll = roll * Math.cos(w * (S.phase - ROLL_PEAK)) + 6 * D * breath;
+    // Two-beat timing: the kick turns the hips first and the chest follows a moment later, then both
+    // hold on the side. A six-beat kick leaves the steady, even rotation.
+    const sharp = kickTiming(P, F);
+    const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p), sharp);
+    const bodyRoll = roll * rollAt(S.phase - 0.04 * sharp) + 6 * D * breath;
     const pitch = F.sinking ? -14 * D : 0, legPitch = F.sinking ? -24 * D : 0;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 * D * Math.sin(w * (S.phase - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
-    m.pelvis.rotation.set(roll * hipShare * Math.cos(w * (S.phase - ROLL_PEAK + lead)), legPitch, -1.8 * yaw);
+    m.pelvis.rotation.set(roll * hipShare * rollAt(S.phase + lead * (1 - sharp)), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
     m.pelvis.position.x = -0.36 * Math.cos(pitch);

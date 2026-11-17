@@ -47,13 +47,28 @@ class SliderSpec:
     hint: str
     low: str = ''
     high: str = ''
+    step: int = 1
 
 
 SLIDERS: tuple[SliderSpec, ...] = (
-    SliderSpec('rate', 'Stroke rate', ' spm', 'Hand entries per minute. Lower rates lengthen the underwater path.'),
+    SliderSpec(
+        'rate',
+        'Stroke rate',
+        ' spm',
+        'Hand entries per minute. Lower rates lengthen the underwater path but coast longer between strokes.',
+    ),
     SliderSpec('catch', 'Catch quality', '%', 'How early and firmly the forearm sets against the water.'),
     SliderSpec('roll', 'Body roll', '°', 'Peak rotation of the chest about the long axis.'),
     SliderSpec('slip', 'Slip', '%', 'How much the hand slides through the water instead of holding it.'),
+    SliderSpec(
+        'width',
+        'Pull width',
+        '%',
+        'Where the hand travels under water: in under the body with the elbow out (power diamond), '
+        'or wide of the shoulder with a straighter arm.',
+        'under body',
+        'wide of shoulder',
+    ),
     SliderSpec(
         'depth',
         'Stroke depth',
@@ -80,6 +95,16 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'Flutter-kick size.',
         'still legs',
         'strong flutter',
+    ),
+    SliderSpec(
+        'beats',
+        'Kick timing',
+        '-beat',
+        'Kicks per arm cycle. In a two-beat kick each downbeat lands as the opposite hand catches '
+        'and snaps the hips onto the next side.',
+        '2-beat glide',
+        '6-beat drive',
+        step=2,
     ),
 )
 # Import-time checks that the UI tables stay in step with the model.
@@ -109,6 +134,7 @@ STATS: tuple[tuple[str, str], ...] = (
     ('dps', 'Distance / stroke'),
     ('spl', 'Strokes / 25 m'),
     ('t25', 'Time / 25 m'),
+    ('carry', 'Momentum carry'),
 )
 
 
@@ -128,7 +154,7 @@ def stroke_slider(
             ui.icon('info_outline').classes('lc-info').tooltip(spec.hint)
             ui.element('div').classes('lc-spacer')
             value_label = ui.label(f'{value}{spec.unit}').classes('lc-value')
-        slider = ui.slider(min=lo, max=hi, step=1, value=value, on_change=lambda e: on_change(e.value)).props(
+        slider = ui.slider(min=lo, max=hi, step=spec.step, value=value, on_change=lambda e: on_change(e.value)).props(
             f'aria-label="{prefix}{spec.label}"'
         )
         if spec.low:
@@ -152,7 +178,9 @@ def stroke_controls(
     for spec in SLIDERS:
         if spec.key in ('rate', 'catch', 'slip', 'drive'):
             build(spec)
-    with ui.expansion('Motion details', caption='Roll, depth, entry and kick').classes('lc-motion-details w-full'):
+    with ui.expansion('Motion details', caption='Roll, width, depth, entry and kick').classes(
+        'lc-motion-details w-full'
+    ):
         for spec in SLIDERS:
             if spec.key not in ('rate', 'catch', 'slip', 'drive'):
                 build(spec)
@@ -367,6 +395,13 @@ class LongCatchPage:
                 with ui.row().classes('lc-control-range'):
                     ui.label('short wisp')
                     ui.label('long trail')
+            pressure = ui.switch(
+                'Water pressure', value=self.view.pressure, on_change=lambda e: self.update(pressure=e.value)
+            )
+            pressure.classes('lc-pressure-toggle').tooltip(
+                'Simulated pressure: clouds build where the palm, forearm and feet load the water, '
+                'are pushed backward, and dissipate. Slipping hands build little.'
+            )
 
     def _build_faults(self) -> None:
         """Fault chips that toggle on click, a Clear button, and a list of coaching cues."""
@@ -530,6 +565,7 @@ class LongCatchPage:
         self.stats['dps'].text = f'{metrics.distance_per_stroke:.2f} m'
         self.stats['spl'].text = f'{metrics.strokes_per_25:.1f}'
         self.stats['t25'].text = format_duration(metrics.seconds_per_25)
+        self.stats['carry'].text = f'{metrics.momentum:.0%}'
         self.stats['dps'].classes(replace=f'lc-stat-value {tone}')
         self.hold_banner.classes(replace=f'lc-hold {tone}')
         self.hold_icon.name = 'check_circle' if metrics.holding else 'warning'

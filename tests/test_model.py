@@ -19,6 +19,7 @@ from long_catch.model import (
     exit_phase,
     format_duration,
     matching_preset,
+    momentum_carry,
     path_length,
     phase_boundaries,
     phase_to_step,
@@ -90,6 +91,24 @@ def test_drive_cannot_rescue_poor_catch_and_slip():
     poor_full_drive = estimate_metrics(0.3, 0.7, 1.0, 40)
     good_no_drive = estimate_metrics(0.9, 0.1, 0.0, 40)
     assert poor_full_drive.distance_per_stroke < good_no_drive.distance_per_stroke
+
+
+def test_low_rate_loses_momentum_and_distance_in_the_glide():
+    slow, quick = estimate_metrics(0.9, 0.1, 0.7, 30), estimate_metrics(0.9, 0.1, 0.7, 50)
+    assert 0 < slow.momentum < quick.momentum <= 1
+    assert slow.distance_per_stroke < quick.distance_per_stroke
+    assert momentum_carry(200) == 1.0
+
+
+def test_pull_width_and_kick_timing_are_visual_only():
+    base = StrokeSettings()
+    other = base.with_values(width=100, beats=6)
+    assert base.metrics() == other.metrics()
+    params = ViewState(settings=other, pressure=True).render_params()
+    assert (params['width'], params['beats'], params['pressure']) == (1, 6, True)
+    for beats in (3, 8):
+        with pytest.raises(ValueError):
+            StrokeSettings(beats=beats)
 
 
 def test_outputs_are_finite_and_consistent():

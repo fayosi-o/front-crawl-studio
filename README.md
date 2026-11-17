@@ -39,13 +39,16 @@ setups in **Race**. No accounts, cloud services or downloaded models are needed.
 
 ## Features
 
-- **Stroke controls:** eight adjustable settings, four presets and eight
-  combinable faults with coaching cues.
+- **Stroke controls:** ten adjustable settings, four presets and eight
+  combinable faults with coaching cues. The default is a distance stroke: a
+  two-beat kick whose downbeat drives the hip roll, a short glide, and a
+  high-elbow "power diamond" pull whose width you can set.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
-  slow playback and a scrubbable six-phase timeline.
-- **Feedback:** live distance-per-stroke, stroke-count and pace estimates.
-  Hands turn teal when holding water and coral when slipping; amber highlights
-  the selected muscle emphasis.
+  a simulated **water pressure** view, slow playback and a scrubbable six-phase
+  timeline.
+- **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
+  estimates. Hands turn teal when holding water and coral when slipping; amber
+  highlights the selected muscle emphasis.
 - **Water and motion:** stroke-driven ripples, spray, bubbles and wake, with
   natural breathing and subtle pace-dependent buoyancy.
 - **Race:** solo or two-swimmer comparisons over 25, 50 or 100 m, with distance
@@ -130,15 +133,20 @@ should include login, both tabs, logout, and reopening the URL in a private tab.
 1. Pick **Long power**, **Long light**, **Compact connected** or **Short slipping**.
    Editing a preset changes its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
-   Expand **Motion details** for roll, depth, entry angle and kick.
+   Expand **Motion details** for roll, pull width, depth, entry angle, kick size
+   and kick timing (2-, 4- or 6-beat).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.
 4. Drag to orbit, scroll to zoom, or enable **Split view** for a Top, Side,
-   Front or Below camera. Add hand/foot trails to follow the paths.
+   Front or Below camera. Add hand/foot trails to follow the paths, or switch on
+   **Water pressure** to see warm clouds build behind the hand after the catch
+   and dissipate downstream.
 5. Scrub the timeline to pause at **Entry → Catch → Pull → Push → Finish →
    Recovery**, or use slow playback. **Play** resumes.
 
 Each hand entry counts as one stroke; a full arm cycle contains two.
 More slip reduces distance per stroke, and extra drive cannot rescue a poor catch.
+A low stroke rate leaves a longer unpropelled glide, so less momentum carries
+into the next catch and distance per stroke drops.
 
 ### Race
 
@@ -155,8 +163,9 @@ or reapplying an identical setup does not. Leaving Race pauses it. Studio
 settings and playback remain independent.
 
 **Model limits:** races use steady-speed estimates, without dives, turns or
-fatigue. Roll, depth, entry angle and kick change appearance, not estimated
-speed. Water effects and buoyancy are visual only and never alter results.
+fatigue. Roll, pull width, depth, entry angle and kick change appearance, not
+estimated speed. Water effects, pressure and buoyancy are visual only and never
+alter results.
 
 ### Keyboard shortcuts
 
