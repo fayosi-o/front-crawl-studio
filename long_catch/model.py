@@ -70,6 +70,7 @@ CATCH_START = 0.12
 PULL_START = 0.30
 PUSH_START = 0.50
 FINISH_START = 0.66
+FRONT_GLIDE_SHIFT = 0.08  # maximum timing shift, as a fraction of the full arm cycle
 
 
 def path_length(stroke_rate: float) -> float:
@@ -111,12 +112,36 @@ def cycle_duration(stroke_rate: float) -> float:
     return 120.0 / stroke_rate
 
 
-def glide_seconds(stroke_rate: float) -> float:
+def stroke_phase(phase: float, glide: int = 50) -> float:
+    """Map clock phase to arm-path phase, adjusting the front glide only."""
+    p = phase % 1.0
+    if p >= PULL_START:
+        return p
+    return p - FRONT_GLIDE_SHIFT * (glide - 50) / 50 * math.sin(math.pi * p / PULL_START) ** 2
+
+
+def stroke_time(phase: float, glide: int = 50) -> float:
+    """Clock phase at which an arm-path phase is reached (inverse of stroke_phase)."""
+    p = phase % 1.0
+    if p >= PULL_START or glide == 50:
+        return p
+    lo, hi = 0.0, PULL_START
+    for _ in range(32):
+        mid = (lo + hi) / 2
+        if stroke_phase(mid, glide) < p:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def glide_seconds(stroke_rate: float, glide: int = 50) -> float:
     """Unpropelled coast in each stroke: the time between one push ending and the next catch."""
-    return max(0.0, 60.0 / stroke_rate - PROPULSIVE_S)
+    delay = stroke_time(CATCH_START, glide) - CATCH_START
+    return max(0.0, 60.0 / stroke_rate - PROPULSIVE_S + delay * cycle_duration(stroke_rate))
 
 
-def momentum_carry(stroke_rate: float) -> float:
+def momentum_carry(stroke_rate: float, glide: int = 50) -> float:
     """Fraction of peak speed still carried when the next stroke catches (0–1).
 
     A low turnover leaves a long coast, so the next hand meets slower water
@@ -125,7 +150,7 @@ def momentum_carry(stroke_rate: float) -> float:
     """
     if stroke_rate <= 0:
         raise ValueError('stroke_rate must be positive')
-    return math.exp(-glide_seconds(stroke_rate) / GLIDE_DECAY_S)
+    return math.exp(-glide_seconds(stroke_rate, glide) / GLIDE_DECAY_S)
 
 
 def format_duration(seconds: float) -> str:
@@ -160,19 +185,20 @@ def estimate_metrics(
     drive_balance: float,
     stroke_rate: float,
     drag: float = 0.0,
+    glide: int = 50,
 ) -> Metrics:
     """Estimate stroke efficiency from fractional inputs (0–1) and a rate in spm.
 
     Drive only scales the benefit of a good hold, so it cannot rescue a poor
     catch or heavy slip. Slip also costs distance directly, rates above 56 spm
-    shorten the stroke, low rates lose momentum in the glide between strokes,
+    shorten the stroke, low rates and longer glides lose momentum between strokes,
     and ``drag`` (from faults) removes a fixed fraction.
     """
     hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
     # Drive multiplies the hold rather than adding to it.
     connection = 0.7 + 0.3 * drive_balance
     rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
-    momentum = momentum_carry(stroke_rate)
+    momentum = momentum_carry(stroke_rate, glide)
     distance_per_stroke = clamp(
         (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty)
         * (0.80 + 0.20 * momentum)
@@ -267,10 +293,10 @@ def fault_drag(faults: frozenset[str]) -> float:
     return 1.0 - keep
 
 
-def timeline_boundaries(length: float, rushed: bool = False) -> tuple[float, ...]:
+def timeline_boundaries(length: float, rushed: bool = False, glide: int = 50) -> tuple[float, ...]:
     """Phase boundaries as seen on screen; a rushed stroke squeezes the underwater part."""
     bounds = phase_boundaries(length)
-    return tuple(b * RUSH for b in bounds) if rushed else bounds
+    return tuple(stroke_time(b * (RUSH if rushed else 1.0), glide) for b in bounds)
 
 
 def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
@@ -303,6 +329,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'drive': (0, 100),
     'kick': (0, 100),
     'beats': (2, 6),
+    'glide': (0, 100),
 }
 # Settings that move in coarser steps than 1 (kicks per arm cycle: 2, 4, or 6).
 SETTING_STEPS: dict[str, int] = {'beats': 2}
@@ -322,6 +349,7 @@ class StrokeSettings:
     drive: int = 85
     kick: int = 45
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
+    glide: int = 50  # front-end timing: 0 = earlier catch, 50 = normal, 100 = longer glide
 
     def __post_init__(self) -> None:
         for name, (lo, hi) in SETTING_RANGES.items():
@@ -335,7 +363,7 @@ class StrokeSettings:
 
     def metrics(self) -> Metrics:
         """Estimates for these settings alone, ignoring any faults."""
-        return estimate_metrics(self.catch / 100, self.slip / 100, self.drive / 100, self.rate)
+        return estimate_metrics(self.catch / 100, self.slip / 100, self.drive / 100, self.rate, glide=self.glide)
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,7 +416,7 @@ class ViewState:
         """Estimates for the settings with every active fault applied."""
         s = self.settings
         catch, slip = self.effective_hold()
-        return estimate_metrics(catch, slip, s.drive / 100, s.rate, fault_drag(self.faults))
+        return estimate_metrics(catch, slip, s.drive / 100, s.rate, fault_drag(self.faults), s.glide)
 
     def render_params(self, metrics: Metrics | None = None) -> dict[str, float | str | bool | list[str]]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
@@ -405,6 +433,8 @@ class ViewState:
             'drive': s.drive / 100,
             'kick': s.kick / 100,
             'beats': s.beats,
+            'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
+            'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,
             'depth': s.depth / 100,
             'entry': s.entry,
@@ -423,7 +453,7 @@ class ViewState:
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
             # Share of each stroke spent coasting; the engine shapes the speed surge from it.
-            'glide': glide_seconds(s.rate) * s.rate / 60.0,
+            'glide': glide_seconds(s.rate, s.glide) * s.rate / 60.0,
             'rideHeight': ride_height,
             'hipDrop': hip_drop,
         }

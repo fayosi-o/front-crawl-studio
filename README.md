@@ -39,7 +39,7 @@ cloud services or downloaded models.
 
 ## Features
 
-- **Stroke controls:** ten settings, four presets and eight combinable faults
+- **Stroke controls:** eleven settings, four presets and eight combinable faults
   with coaching cues. The default distance stroke combines kick-led hip roll,
   a two-beat kick, short glide and adjustable-width high-elbow "power diamond"
   pull. All faults start off; Crossover is optional.
@@ -131,7 +131,7 @@ both tabs, logout and private-tab access, including on iPhone.
 
 1. Pick one of four presets; edits change its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
-   Expand **Motion details** for roll, pull width, depth, entry angle, kick size
+   Expand **Motion details** for glide length, roll, pull width, depth, entry angle, kick size
    and kick timing (2-, 4- or 6-beat).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.
 4. Drag to orbit, scroll to zoom, or enable **Split view** (Top, Side, Front or
@@ -144,6 +144,11 @@ Each hand entry counts as one stroke; a full arm cycle contains two.
 More slip reduces distance per stroke, and extra drive cannot rescue a poor catch.
 A low rate lengthens the unpropelled glide, reducing momentum carry and distance
 per stroke.
+
+**Glide length** adjusts the front-end hold independently of rate: 50% keeps the
+normal stroke, lower values catch earlier, and higher values hold longer.
+It is a timing control, not metres; longer glides also reduce estimated momentum
+and distance per stroke. The kick-led roll follows the catch.
 
 ### Race
 

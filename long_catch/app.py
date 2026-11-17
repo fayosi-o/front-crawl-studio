@@ -59,6 +59,15 @@ SLIDERS: tuple[SliderSpec, ...] = (
     ),
     SliderSpec('catch', 'Catch quality', '%', 'How early and firmly the forearm sets against the water.'),
     SliderSpec('roll', 'Body roll', '°', 'Peak rotation of the chest about the long axis.'),
+    SliderSpec(
+        'glide',
+        'Glide length',
+        '%',
+        'Time spent reaching forward before the catch, not distance in metres. '
+        '50% is normal. Longer glides lose more momentum; stroke rate stays unchanged.',
+        'earlier catch',
+        'longer glide',
+    ),
     SliderSpec('slip', 'Slip', '%', 'How much the hand slides through the water instead of holding it.'),
     SliderSpec(
         'width',
@@ -167,7 +176,7 @@ def stroke_slider(
 def stroke_controls(
     settings: StrokeSettings, on_change: Callable[[SliderSpec, float], None], prefix: str = ''
 ) -> tuple[dict[str, ui.slider], dict[str, ui.label]]:
-    """Keep the main pace controls visible and group the visual motion details."""
+    """Keep the main pace controls visible and group detailed stroke settings."""
     sliders, values = {}, {}
 
     def build(spec: SliderSpec) -> None:
@@ -178,7 +187,7 @@ def stroke_controls(
     for spec in SLIDERS:
         if spec.key in ('rate', 'catch', 'slip', 'drive'):
             build(spec)
-    with ui.expansion('Motion details', caption='Roll, width, depth, entry and kick').classes(
+    with ui.expansion('Motion details', caption='Glide, roll, width, depth, entry and kick').classes(
         'lc-motion-details w-full'
     ):
         for spec in SLIDERS:
@@ -574,7 +583,7 @@ class LongCatchPage:
     def _render_timeline(self) -> None:
         """Size the phase segments; recovery moves with stroke rate and spinning arms squeeze the pull."""
         length = path_length(self.view.settings.rate)
-        starts = (0.0, *timeline_boundaries(length, 'rushing' in self.view.faults), 1.0)
+        starts = (0.0, *timeline_boundaries(length, 'rushing' in self.view.faults, self.view.settings.glide), 1.0)
         if starts == self._segment_layout:
             return
         self._segment_layout = starts

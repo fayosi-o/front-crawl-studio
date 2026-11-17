@@ -157,6 +157,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     };
   }
 
+  // Smooth front-end timing adjustment; the pull and recovery keep their original clock phases.
+  function strokePhase(p, P) {
+    return p < CONFIG.pull ? p - P.frontGlide * Math.sin(Math.PI * p / CONFIG.pull) ** 2 : p;
+  }
+
   // Spinning arms race through the underwater part, leaving more of the cycle for recovery.
   function rushed(p, P) {
     if (P.rush >= 1) return p;
@@ -340,6 +345,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Floor: tiles and two layers of drifting caustics, well below the swimmer.
   // Every layer fades out at its edges so the pool has no hard slab outline.
   const SURFACE = { w: 10, h: 4, nx: 120, ny: 48, x: -0.5 };
+  const SWELL = [[2.1, 1.3, 1.7, 0.009], [3.4, -2.2, 2.6, 0.006], [7.9, 5.1, 4.1, 0.003]];
   const FLOOR_Z = -2.1;
 
   function canvasTexture(size, draw, repeat) {
@@ -481,7 +487,28 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     });
     scene.add(pool);
     setupLighting(pool);
-    m.pool = { tiles, caustics, flow, time: 0 };
+    const pos = m.water.geometry.attributes.position, a = pos.array;
+    const fixed = new Float64Array(pos.count), heights = new Float64Array(pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      const x = a[3 * i] + SURFACE.x, y = a[3 * i + 1], d = 0.55 - x;
+      fixed[i] = 0.018 * Math.exp(-((x - 0.62) ** 2) / 0.02 - y * y / 0.03)
+        - 0.012 * Math.exp(-((x - 0.3) ** 2) / 0.03 - y * y / 0.09);
+      if (d > 0) {
+        const wing = Math.abs(y) - 0.36 * d, width = 0.05 + 0.04 * d;
+        fixed[i] += 0.006 * Math.exp(-d / 2.4 - (wing * wing) / (width * width)) * Math.cos(12 * d);
+      }
+    }
+    // Separate fixed spatial terms from the changing wave phase.
+    const waves = SWELL.map(([kx, ky, , amplitude]) => {
+      const values = new Float64Array(2 * pos.count);
+      for (let i = 0; i < pos.count; i++) {
+        const phase = kx * (a[3 * i] + SURFACE.x) + ky * a[3 * i + 1];
+        values[2 * i] = amplitude * Math.sin(phase);
+        values[2 * i + 1] = amplitude * Math.cos(phase);
+      }
+      return values;
+    });
+    m.pool = { tiles, caustics, flow, fixed, heights, waves, time: 0, dirty: true };
     return true;
   }
 
@@ -492,21 +519,17 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const pool = m.pool, t = (pool.time += dt), off = S.offset, fx = m.fx;
     const pos = m.water.geometry.attributes.position, a = pos.array;
     const pace = Math.min(1, P.speed), ripples = fx ? fx.ripples : [], wash = fx ? fx.wash : 0, footX = fx ? fx.footX : -1.6;
+    if (dt === 0 && !pool.dirty && pool.pace === pace) return;
+    const heights = pool.heights, [wave0, wave1, wave2] = pool.waves;
+    const [c0, s0, c1, s1, c2, s2] = SWELL.flatMap(([kx, , kt]) => {
+      const phase = kx * off + kt * t;
+      return [Math.cos(phase), Math.sin(phase)];
+    });
     for (let i = 0; i < pos.count; i++) {
       const x = a[3 * i] + SURFACE.x + off, y = a[3 * i + 1], lx = a[3 * i] + SURFACE.x;
-      const swell = 0.009 * Math.sin(2.1 * x + 1.3 * y + 1.7 * t) + 0.006 * Math.sin(3.4 * x - 2.2 * y + 2.6 * t)
-        + 0.003 * Math.sin(7.9 * x + 5.1 * y + 4.1 * t);
-      // Bow wave lifts the water at the head; a shallow trough follows at the shoulders.
-      const bow = 0.018 * Math.exp(-((lx - 0.62) ** 2) / 0.02 - y * y / 0.03)
-        - 0.012 * Math.exp(-((lx - 0.3) ** 2) / 0.03 - y * y / 0.09);
-      let h = swell + bow * pace;
-      // Kelvin-style V wake: crests spread back from the head at about 20° and hold still relative to
-      // the swimmer, fading with distance.
-      const d = 0.55 - lx;
-      if (d > 0) {
-        const wing = Math.abs(y) - 0.36 * d, width = 0.05 + 0.04 * d;
-        h += 0.006 * pace * Math.exp(-d / 2.4 - (wing * wing) / (width * width)) * Math.cos(12 * d);
-      }
+      const j = 2 * i;
+      let h = wave0[j] * c0 + wave0[j + 1] * s0 + wave1[j] * c1 + wave1[j + 1] * s1
+        + wave2[j] * c2 + wave2[j + 1] * s2 + pool.fixed[i] * pace;
       // Kick wash: choppy water over and behind the feet that is carried back with the water.
       const behind = footX + 0.15 - lx;
       if (wash > 0.001 && behind > 0 && behind < 2) {
@@ -514,16 +537,32 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         h += 0.007 * wash * Math.exp(-behind / 0.7 - (y * y) / (spread * spread))
           * Math.sin(17 * x + 9 * t) * Math.sin(13 * y - 6 * t);
       }
-      // Ring ripples travel out from each splash and lose height as they spread and age.
-      for (const [rx, ry, age, s] of ripples) {
-        const front = FX.rippleSpeed * age + 0.03, gap = Math.hypot(lx - rx, y - ry) - front;
-        if (gap > 0.3 || gap < -0.3) continue;
-        h += (s * Math.exp(-1.8 * age - (gap * gap) / 0.012) * Math.cos(20 * gap)) / (1 + 4 * front);
-      }
-      a[3 * i + 2] = h;
+      heights[i] = h;
     }
+    // Each ripple touches only a small patch of the surface, not every water vertex.
+    const cols = SURFACE.nx + 1, sx = SURFACE.nx / SURFACE.w, sy = SURFACE.ny / SURFACE.h;
+    for (const [rx, ry, age, strength] of ripples) {
+      const front = FX.rippleSpeed * age + 0.03, outer = front + 0.3, inner = Math.max(0, front - 0.3);
+      const minCol = Math.max(0, Math.floor((rx - outer - SURFACE.x + SURFACE.w / 2) * sx));
+      const maxCol = Math.min(SURFACE.nx, Math.ceil((rx + outer - SURFACE.x + SURFACE.w / 2) * sx));
+      const minRow = Math.max(0, Math.floor((SURFACE.h / 2 - ry - outer) * sy));
+      const maxRow = Math.min(SURFACE.ny, Math.ceil((SURFACE.h / 2 - ry + outer) * sy));
+      const amplitude = strength * Math.exp(-1.8 * age) / (1 + 4 * front);
+      for (let row = minRow; row <= maxRow; row++) {
+        const dy = a[3 * row * cols + 1] - ry;
+        for (let col = minCol; col <= maxCol; col++) {
+          const i = row * cols + col, dx = a[3 * i] + SURFACE.x - rx, distanceSq = dx * dx + dy * dy;
+          if (distanceSq < inner * inner || distanceSq > outer * outer) continue;
+          const gap = Math.sqrt(distanceSq) - front;
+          heights[i] += amplitude * Math.exp(-(gap * gap) / 0.012) * Math.cos(20 * gap);
+        }
+      }
+    }
+    for (let i = 0; i < pos.count; i++) a[3 * i + 2] = heights[i];
     pos.needsUpdate = true;
     m.water.geometry.computeVertexNormals();
+    pool.dirty = false;
+    pool.pace = pace;
     pool.tiles.offset.x = wrap(off);
     // Positive UV offset moves the streaks back across the swimmer-relative surface.
     pool.flow.offset.x = wrap(off * pool.flow.repeat.x / SURFACE.w);
@@ -768,6 +807,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (S.trailReset) {
       fx.ripples.length = fx.bubbles.list.length = fx.spray.list.length = fx.pressure.list.length = 0;
       fx.wash = 0;
+      m.pool.dirty = true;
       for (const l of fx.limbs) { l.known = false; l.air = l.wet = 0; }
       for (const pr of fx.probes) pr.known = false;
     }
@@ -957,7 +997,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const k = base * (1 + 0.12 * noise(3 * t, offset ? 52 : 51));
       if (beats === 2 && !knees) {
         // Bigger single beats: the downbeat has to turn the hips as well as balance the legs.
-        const q = wrap(S.phase - KICK_START - (offset ? 0 : 0.5) + 0.01 * noise(2 * t, offset ? 62 : 61));
+        const q = wrap(S.phase - P.catchDelay - KICK_START - (offset ? 0 : 0.5)
+          + 0.01 * noise(2 * t, offset ? 62 : 61));
         const big = 1.25 * Math.max(k, 0.25);
         m['leg' + side].rotation.set(0, big * keyed(q, TWO_BEAT.hip), 0);
         m['knee' + side].rotation.set(0, big * keyed(q, TWO_BEAT.knee), 0);
@@ -1078,7 +1119,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Two-beat timing: the kick turns the hips first and the chest follows a moment later, then both
     // hold on the side. A six-beat kick leaves the steady, even rotation.
     const sharp = kickTiming(P, F);
-    const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p), sharp);
+    const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p - P.catchDelay), sharp);
     const bodyRoll = roll * rollAt(S.phase - 0.04 * sharp) + 6 * D * breath;
     const pitch = F.sinking ? -14 * D : 0, legPitch = F.sinking ? -24 * D : 0;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
@@ -1098,7 +1139,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const steady = -0.5 * bodyRoll, turn = Math.sign(breath) * 78 * D - bodyRoll;
     m.head.rotation.x = clamp(lerp(steady, turn, Math.abs(breath)), -70 * D, 70 * D) + 1.5 * D * noise(3 * st, 41);
 
-    const right = arm(rushed(S.phase, P), P, F), left = arm(rushed((S.phase + 0.5) % 1, P), P, F);
+    const right = arm(rushed(strokePhase(S.phase, P), P), P, F);
+    const left = arm(rushed(strokePhase((S.phase + 0.5) % 1, P), P), P, F);
     vary(right, st, 1);
     vary(left, st + 0.5, 5);
     const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));

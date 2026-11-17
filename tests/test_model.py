@@ -6,6 +6,7 @@ from dataclasses import astuple
 import pytest
 
 from long_catch.model import (
+    CATCH_START,
     FAULTS,
     PRESETS,
     RUSH,
@@ -23,6 +24,8 @@ from long_catch.model import (
     path_length,
     phase_boundaries,
     phase_to_step,
+    stroke_phase,
+    stroke_time,
     timeline_boundaries,
     waterline_pose,
 )
@@ -98,6 +101,37 @@ def test_low_rate_loses_momentum_and_distance_in_the_glide():
     assert 0 < slow.momentum < quick.momentum <= 1
     assert slow.distance_per_stroke < quick.distance_per_stroke
     assert momentum_carry(200) == 1.0
+
+
+@pytest.mark.parametrize('glide', [0, 50, 100])
+def test_glide_timing_is_continuous_monotonic_and_keeps_cycle_length(glide):
+    phases = [stroke_phase(i / 1000, glide) for i in range(1000)]
+    assert phases == sorted(phases)
+    assert phases[0] == 0
+    assert stroke_phase(0.30, glide) == 0.30
+    assert stroke_phase(1, glide) == 0
+    for rushed in (False, True):
+        bounds = timeline_boundaries(0.5, rushed, glide)
+        expected = [b * (RUSH if rushed else 1) for b in phase_boundaries(0.5)]
+        assert [stroke_phase(b, glide) for b in bounds] == pytest.approx(expected)
+    for phase in (0.05, 0.12, 0.22, 0.30, 0.66, 0.99):
+        assert stroke_phase(stroke_time(phase, glide), glide) == pytest.approx(phase)
+
+
+def test_longer_glide_delays_catch_and_costs_momentum_at_the_same_rate():
+    views = [ViewState(settings=StrokeSettings(glide=g)) for g in (0, 50, 100)]
+    params = [v.render_params() for v in views]
+    assert {p['rate'] for p in params} == {42}
+    assert params[0]['catchDelay'] < 0 == params[1]['catchDelay'] < params[2]['catchDelay']
+    assert params[0]['glide'] < params[1]['glide'] < params[2]['glide']
+    assert stroke_phase(CATCH_START, 100) < CATCH_START < stroke_phase(CATCH_START, 0)
+    assert views[0].metrics().momentum > views[1].metrics().momentum > views[2].metrics().momentum
+    assert views[0].metrics().distance_per_stroke > views[1].metrics().distance_per_stroke
+    assert views[1].metrics().distance_per_stroke > views[2].metrics().distance_per_stroke
+    for view in views:
+        assert view.settings.metrics() == view.metrics()
+    with pytest.raises(ValueError):
+        StrokeSettings(glide=101)
 
 
 def test_pull_width_and_kick_timing_are_visual_only():
@@ -206,7 +240,10 @@ def test_spinning_arms_slip_and_rush_the_underwater_phase():
 
 @pytest.mark.parametrize('distance', [25, 100])
 def test_race_finish_matches_distance_and_existing_estimates(distance):
-    swimmers = (ViewState(), ViewState(settings=PRESETS['Short slipping'], faults=frozenset({'sinking'})))
+    swimmers = (
+        ViewState(settings=StrokeSettings(glide=100)),
+        ViewState(settings=PRESETS['Short slipping'], faults=frozenset({'sinking'})),
+    )
     race = RaceConfig(swimmers, distance)
     for view, lane, finish in zip(swimmers, race.render_params()['lanes'], race.finish_times(), strict=True):
         assert finish == pytest.approx(view.metrics().seconds_per_25 * distance / 25)
