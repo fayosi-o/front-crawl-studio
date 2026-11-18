@@ -52,6 +52,7 @@ cloud services or downloaded models.
   natural breathing and lightweight water reactions. Hand angle, submerged
   forearms and slip affect visual thrust; drag slows the glide. Uneven pulls
   turn and drift the body, while buoyancy and kicks gently adjust its balance.
+  Submerged downbeats add modest thrust; wide, knee-bent kicks add resistance.
   These reactions do not change pace estimates or race results.
 - **Race:** solo or two-swimmer comparisons over 25, 50 or 100 m, with distance
   tracks, finish times and a winning margin.
@@ -156,6 +157,12 @@ and distance per stroke. The kick-led roll follows the catch.
 Watch the swimmer against the lane buoys to see pull-driven acceleration and
 coasting. Compare Crossover from the Top split view for heading and sideways
 travel. Motion stays within a small viewing window; it is not free navigation.
+
+Compare **Kick amplitude** at 0%, 45% and 100% against the lane buoys, or use
+the Side view to see the small balance response. Two-beat kicks give spaced
+impulses; four- and six-beat kicks spread the support through the stroke.
+Bigger kicks are not a speed shortcut, and **Knee kick** wastes more of the effort.
+At 0% the legs stop kicking (unless the Knee kick fault is enabled).
 
 ### Race
 

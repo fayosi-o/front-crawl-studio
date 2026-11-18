@@ -101,7 +101,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'kick',
         'Kick amplitude',
         '%',
-        'Flutter-kick size.',
+        'Kick size. Submerged downbeats add a little visual thrust and balance; large, bent kicks add drag.',
         'still legs',
         'strong flutter',
     ),

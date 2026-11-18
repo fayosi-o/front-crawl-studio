@@ -1006,7 +1006,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         // Bigger single beats: the downbeat has to turn the hips as well as balance the legs.
         const q = wrap(S.phase - P.catchDelay - KICK_START - (offset ? 0 : 0.5)
           + 0.01 * noise(2 * t, offset ? 62 : 61));
-        const big = 1.25 * Math.max(k, 0.25);
+        const big = 1.25 * k;
         m['leg' + side].rotation.set(0, big * keyed(q, TWO_BEAT.hip), 0);
         m['knee' + side].rotation.set(0, big * keyed(q, TWO_BEAT.knee), 0);
         m['ankle' + side].rotation.set(0, -0.12 - 0.35 * big * keyed(q, TWO_BEAT.ankle), 0);
@@ -1088,13 +1088,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       for (const p of m.probes) p.known = false;
     }
     const s = m.motion;
-    let forward = 0, sideways = 0, vertical = 0, torque = 0, tipping = 0;
+    let forward = 0, sideways = 0, vertical = 0, torque = 0, tipping = 0, kickDrive = 0;
     body.updateMatrixWorld(true);
     for (const p of m.probes) {
       const joint = m[p.joint];
       joint.localToWorld(p.pos.set(...p.at));
       if (dt > 0 && p.known) {
         p.velocity.subVectors(p.pos, p.prev).divideScalar(dt).clampLength(0, 3);
+        const downbeat = Math.max(0, -p.velocity.z);
         // The pool is still: include body travel, sideways drift and vertical motion.
         p.velocity.x += s.speed;
         p.velocity.y += s.drift;
@@ -1107,10 +1108,15 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         }
         const q = p.velocity.dot(p.normal);
         const wet = smooth(clamp(-(p.pos.z + s.height) / 0.06, 0, 1));
-        const grip = p.hand ? (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) : 0.2;
+        const grip = p.hand ? (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) : 0.2 * P.kick;
         const load = -p.gain * wet * grip * q * Math.abs(q);
         const fx = load * p.normal.x, fy = load * p.normal.y, fz = load * p.normal.z;
-        forward += fx;
+        if (p.hand) forward += fx;
+        else {
+          const knee = m[p.joint === 'ankleR' ? 'kneeR' : 'kneeL'].rotation.y;
+          // A small paddle approximation: submerged downbeats help, deeply bent knees waste them.
+          kickDrive += wet * P.kick * downbeat ** 2 * p.normal.z ** 2 / (1 + 4 * knee ** 2);
+        }
         sideways += fy;
         vertical += fz;
         torque += p.pos.x * fy - p.pos.y * fx;
@@ -1121,14 +1127,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         p.known = true;
       }
     }
-    // Slow load calibration keeps visual cruising speed near the Python estimate, while each
-    // actual pull supplies the acceleration. Drag remains active when neither arm is driving.
-    const dragShape = 1 + 2 * P.hipDrop + (S.faults.sinking ? 0.35 : 0) + 2 * Math.abs(s.pitch);
+    // Calibrate on arms only so kick changes aren't averaged away. Kick thrust is capped at
+    // 16% of the reference arm load; exposed thighs and bent knees also add a little resistance.
+    const legDrag = ['R', 'L'].reduce((sum, side) => sum + Math.sin(m['leg' + side].rotation.y) ** 2
+      + Math.sin(m['knee' + side].rotation.y) ** 2, 0);
+    const dragShape = 1 + 2 * P.hipDrop + (S.faults.sinking ? 0.35 : 0)
+      + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
       s.load += (Math.max(0, forward) - s.load) * (1 - Math.exp(-h * P.rate / 240));
       const drag = 0.6 * Math.max(0.015, s.load) * dragShape / Math.max(0.04, P.speed ** 2);
-      s.speed = clamp(s.speed + (0.6 * forward - drag * s.speed ** 2) * h, 0.15 * P.speed, 1.7 * P.speed);
+      const kickThrust = 0.16 * Math.max(0.015, s.load) * Math.tanh(kickDrive / 0.12);
+      s.speed = clamp(s.speed + (0.6 * (forward + kickThrust) - drag * s.speed ** 2) * h,
+        0.15 * P.speed, 1.7 * P.speed);
       s.surge += (s.speed - P.speed - 1.3 * s.surge) * h;
       s.turn += (2.4 * torque - 5 * s.turn) * h;
       s.yaw += s.turn * h;
