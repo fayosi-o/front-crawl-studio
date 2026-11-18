@@ -368,15 +368,15 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   // White in the middle, fading to black at every edge (used as an alpha map).
-  function drawEdgeFade(g, n) {
+  function drawEdgeFade(g, n, band = 0.22) {
     g.fillStyle = '#fff';
     g.fillRect(0, 0, n, n);
     g.globalCompositeOperation = 'multiply';
     for (const [x1, y1] of [[n, 0], [0, n]]) {
       const grad = g.createLinearGradient(0, 0, x1, y1);
       grad.addColorStop(0, '#000');
-      grad.addColorStop(0.22, '#fff');
-      grad.addColorStop(0.78, '#fff');
+      grad.addColorStop(band, '#fff');
+      grad.addColorStop(1 - band, '#fff');
       grad.addColorStop(1, '#000');
       g.fillStyle = grad;
       g.fillRect(0, 0, n, n);
@@ -464,15 +464,23 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   // Blend a second, smaller sample of the ripple map that drifts on its own (uniform lcRipple).
+  // Also adds a cheap Fresnel term: looking across the surface at a low angle, water reflects more
+  // sky, so it turns more opaque and lighter; looking straight down it stays clear.
   function addSecondRipple(material, uniform) {
     material.onBeforeCompile = shader => {
       const line = 'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;';
-      if (!shader.fragmentShader.includes(line)) return;
+      const maps = '#include <normal_fragment_maps>', out = '#include <opaque_fragment>';
+      const chunk = THREE.ShaderChunk.normal_fragment_maps || '';
+      if (!chunk.includes(line) || !shader.fragmentShader.includes(maps) || !shader.fragmentShader.includes(out)) return;
       shader.uniforms.lcRipple = uniform;
-      shader.fragmentShader = 'uniform vec3 lcRipple;\n' + shader.fragmentShader.replace(line, `
+      shader.fragmentShader = 'uniform vec3 lcRipple;\n' + shader.fragmentShader.replace(maps, chunk.replace(line, `
         vec3 rippleA = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;
         vec3 rippleB = texture2D( normalMap, vNormalMapUv * lcRipple.z + lcRipple.xy ).xyz * 2.0 - 1.0;
-        vec3 mapN = normalize( vec3( rippleA.xy + rippleB.xy, rippleA.z * rippleB.z ) );`);
+        vec3 mapN = normalize( vec3( rippleA.xy + rippleB.xy, rippleA.z * rippleB.z ) );`)).replace(out, `
+        float lcFresnel = pow( 1.0 - clamp( abs( dot( normal, normalize( vViewPosition ) ) ), 0.0, 1.0 ), 3.0 );
+        outgoingLight = mix( outgoingLight, vec3( 0.36, 0.62, 0.70 ), lcFresnel * 0.4 );
+        diffuseColor.a = min( diffuseColor.a * ( 1.0 + lcFresnel * 2.2 ), 0.6 );
+        ${out}`);
     };
   }
 
@@ -506,7 +514,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.water.geometry = new THREE.PlaneGeometry(SURFACE.w, SURFACE.h, SURFACE.nx, SURFACE.ny);
     m.water.material = new THREE.MeshPhongMaterial({
       color: CONFIG.colors.water, specular: 0xa8dbe6, shininess: 110, transparent: true, opacity: 0.2,
-      side: THREE.DoubleSide, depthWrite: false, alphaMap: edge, map: flow,
+      side: THREE.DoubleSide, depthWrite: false, alphaMap: canvasTexture(128, (g, n) => drawEdgeFade(g, n, 0.12)), map: flow,
       normalMap: ripple, normalScale: new THREE.Vector2(0.55, 0.55),
     });
     addSecondRipple(m.water.material, rippleB);
