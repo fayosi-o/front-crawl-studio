@@ -478,8 +478,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         vec3 rippleB = texture2D( normalMap, vNormalMapUv * lcRipple.z + lcRipple.xy ).xyz * 2.0 - 1.0;
         vec3 mapN = normalize( vec3( rippleA.xy + rippleB.xy, rippleA.z * rippleB.z ) );`)).replace(out, `
         float lcFresnel = pow( 1.0 - clamp( abs( dot( normal, normalize( vViewPosition ) ) ), 0.0, 1.0 ), 3.0 );
-        outgoingLight = mix( outgoingLight, vec3( 0.36, 0.62, 0.70 ), lcFresnel * 0.4 );
-        diffuseColor.a = min( diffuseColor.a * ( 1.0 + lcFresnel * 2.2 ), 0.6 );
+        outgoingLight = mix( outgoingLight, vec3( 0.44, 0.70, 0.78 ), lcFresnel * 0.45 );
+        diffuseColor.a = min( diffuseColor.a * ( 1.0 + lcFresnel * 1.5 ), 0.45 );
         ${out}`);
     };
   }
