@@ -144,8 +144,9 @@ both tabs, logout and private-tab access, including on iPhone.
 5. Scrub to pause at **Entry → Catch → Pull → Push → Finish → Recovery**,
    or slow playback. **Play** resumes.
 
-Live estimates stay pinned beside the Studio / Race tabs (below them on small
-screens), so they remain visible while scrolling the controls. In Race they
+Live estimates stay pinned in the same row as the Studio / Race tabs, so they
+remain visible while scrolling the controls. Narrow screens use shorter metric
+captions and icon-only tabs to keep the bar compact. In Race the estimates
 follow the selected swimmer, labelled A or B; returning to Studio restores
 the studio estimates.
 

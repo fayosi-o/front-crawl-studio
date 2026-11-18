@@ -139,11 +139,11 @@ FAULT_ICONS = {
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 
-STATS: tuple[tuple[str, str], ...] = (
-    ('dps', 'Distance / stroke'),
-    ('spl', 'Strokes / 25 m'),
-    ('t25', 'Time / 25 m'),
-    ('carry', 'Momentum carry'),
+STATS: tuple[tuple[str, str, str], ...] = (
+    ('dps', 'Distance / stroke', 'm/stroke'),
+    ('spl', 'Strokes / 25 m', 'Stk/25'),
+    ('t25', 'Time / 25 m', 'Time/25'),
+    ('carry', 'Momentum carry', 'Carry'),
 )
 
 
@@ -226,8 +226,8 @@ class LongCatchPage:
         ui.colors(primary=PALETTE.hold)
         with ui.element('header').classes('lc-header'):
             with ui.tabs(value='studio', on_change=lambda e: self.switch_mode(e.value)).classes('lc-mode-tabs'):
-                ui.tab('studio', label='Stroke studio', icon='accessibility_new')
-                ui.tab('race', label='Race', icon='sports_score')
+                ui.tab('studio', label='Stroke studio', icon='accessibility_new').props('aria-label="Stroke studio"')
+                ui.tab('race', label='Race', icon='sports_score').props('aria-label="Race"')
             with ui.element('section').classes('lc-estimates').props('aria-label="Stroke estimates"'):
                 with ui.element('div').classes('lc-estimate-context'):
                     self.estimate_title = ui.label('Studio estimates').classes('lc-section-title')
@@ -235,10 +235,12 @@ class LongCatchPage:
                         self.hold_icon = ui.icon('check_circle')
                         self.hold_text = ui.label()
                 with ui.element('div').classes('lc-stats'):
-                    for key, caption in STATS:
-                        with ui.element('div').classes('lc-stat'):
+                    for key, caption, short in STATS:
+                        with ui.element('div').classes('lc-stat').props(f'title="{caption}"'):
                             self.stats[key] = ui.label().classes('lc-stat-value')
-                            ui.label(caption).classes('lc-stat-caption')
+                            with ui.element('div').classes('lc-stat-caption'):
+                                ui.label(caption).classes('lc-caption-full')
+                                ui.label(short).classes('lc-caption-short').props('aria-hidden=true')
         with ui.element('div').classes('lc-root lc-studio') as self.studio:
             self._build_stage()
             self._build_panel()
@@ -584,7 +586,7 @@ class LongCatchPage:
         self.stats['dps'].classes(replace=f'lc-stat-value {tone}')
         self.hold_banner.classes(replace=f'lc-hold {tone}')
         self.hold_icon.name = 'check_circle' if metrics.holding else 'warning'
-        self.hold_text.text = 'Hand holding water' if metrics.holding else 'Hand slipping'
+        self.hold_text.text = 'Hand hold' if metrics.holding else 'Hand slipping'
 
     def _render_timeline(self) -> None:
         """Size the phase segments; recovery moves with stroke rate and spinning arms squeeze the pull."""

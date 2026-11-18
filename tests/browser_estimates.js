@@ -10,6 +10,8 @@ async page => {
     await view.waitForFunction(() => window.LongCatch?.ready());
     const header = view.locator('.lc-header');
     const values = () => header.locator('.lc-stat-value').allTextContents();
+    assert(await header.locator('.lc-hold > :last-child').textContent() === 'Hand hold',
+      'Holding status must read Hand hold');
     const studio = await values();
     await view.getByRole('button', {name: 'Expand "Motion details"', exact: true}).click();
     const glide = view.getByRole('slider', {name: 'Glide length', exact: true});
@@ -25,7 +27,8 @@ async page => {
     await view.waitForFunction(() => document.querySelector('.lc-estimate-context').textContent.includes('Swimmer B'));
     const b = await values();
     assert(a[0] !== b[0], 'Race estimates did not follow selected swimmer');
-    assert((await header.innerText()).includes('Hand slipping'), 'Slipping status not shown');
+    assert(await header.locator('.lc-hold > :last-child').textContent() === 'Hand slipping',
+      'Slipping status must read Hand slipping');
     const slip = view.getByRole('slider', {name: 'Race Slip', exact: true});
     await slip.focus();
     await slip.press('Home');
@@ -37,7 +40,7 @@ async page => {
     await view.waitForFunction(() => document.querySelector('.lc-estimate-context').textContent.includes('Studio'));
     assert(JSON.stringify(await values()) === JSON.stringify(editedStudio), 'Switching tabs lost studio estimates');
     const layouts = [];
-    for (const width of [1440, 1101, 1100, 1024, 768, 541, 540, 390, 320]) {
+    for (const width of [1440, 1101, 1100, 1024, 1001, 1000, 900, 780, 768, 601, 600, 541, 540, 390, 320]) {
       await view.setViewportSize({width, height: 900});
       await glide.scrollIntoViewIfNeeded();
       const layout = await header.evaluate(el => {
@@ -58,11 +61,17 @@ async page => {
             return tabs.right > stats.left && tabs.left < stats.right
               && tabs.bottom > stats.top && tabs.top < stats.bottom;
           })(),
+          inline: (() => {
+            const tabs = el.querySelector('.lc-mode-tabs').getBoundingClientRect();
+            const stats = el.querySelector('.lc-estimates').getBoundingClientRect();
+            return tabs.top < stats.bottom && stats.top < tabs.bottom;
+          })(),
         };
       });
       assert(layout.top >= -1 && layout.top < 2, `Header not pinned at ${width}px`);
       assert(!layout.overflow && !layout.clipped.length, `Estimates clipped at ${width}px: ${JSON.stringify(layout)}`);
       assert(!layout.overlap, `Estimates overlap tabs at ${width}px`);
+      assert(layout.inline && layout.height <= 68, `Estimates wrap below tabs at ${width}px: ${JSON.stringify(layout)}`);
       layouts.push(layout);
     }
     // At mobile widths a focused control must not be hidden behind the sticky header.
