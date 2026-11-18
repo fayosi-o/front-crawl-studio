@@ -197,6 +197,7 @@ times use the steady-speed estimate.
 | <kbd>←</kbd> / <kbd>→</kbd> | Step through the studio stroke |
 | <kbd>1</kbd>–<kbd>4</kbd> | Select a studio preset |
 | <kbd>C</kbd> / <kbd>V</kbd> | Reset studio camera / toggle split view |
+| <kbd>P</kbd> | Pin the swimmer while scrolling the settings (narrow layout) |
 
 Shortcuts respect focused controls. Timeline arrows step 5%; Home/End seek
 the start/end.

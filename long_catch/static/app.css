@@ -135,6 +135,9 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
   --q-primary: #23504e;
 }
 .lc-transport .q-btn-group .q-btn { padding: 2px 8px; min-height: 28px; font-size: 0.78rem; border-radius: 6px !important; }
+/* Pinning only matters once the panel stacks under the stage and the page scrolls. */
+.lc-pin-toggle { display: none !important; }
+.lc-pin-toggle.lc-active { color: var(--lc-hold); background: rgba(56, 196, 160, 0.16); }
 
 /* ---- panel ----------------------------------------------------------------------------- */
 .lc-panel {
@@ -325,6 +328,11 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
 @media (max-width: 760px) {
   .lc-root { flex-direction: column; height: auto; }
   .lc-stage { flex: none; height: 68vh; min-height: 420px; }
+  .lc-pin-toggle { display: inline-flex !important; }
+  .lc-pinned .lc-stage {
+    position: sticky; top: var(--lc-header-height); z-index: 10; height: 50vh; min-height: 300px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
   .lc-panel { flex: none; width: 100%; height: auto; border-left: 0; }
   .lc-hud-top { top: 10px; left: 10px; right: 10px; }
   .lc-brand { padding: 8px 12px; }

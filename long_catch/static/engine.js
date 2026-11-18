@@ -1300,7 +1300,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Shortcuts click the matching buttons so Python stays the single owner of state.
   const SHORTCUTS = {
-    ' ': '.lc-play', ArrowLeft: '.lc-step-back', ArrowRight: '.lc-step-forward', c: '.lc-reset-camera', v: '.lc-split-toggle',
+    ' ': '.lc-play', ArrowLeft: '.lc-step-back', ArrowRight: '.lc-step-forward', c: '.lc-reset-camera', v: '.lc-split-toggle', p: '.lc-pin-toggle',
   };
   function bindKeys() {
     document.addEventListener('keydown', e => {

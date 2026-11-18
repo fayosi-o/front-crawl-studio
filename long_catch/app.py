@@ -215,6 +215,7 @@ class LongCatchPage:
         self.second_view: ui.scene_view | None = None
         # Last-rendered layouts; renderers skip DOM work when nothing changed.
         self._view_layout: tuple | None = None
+        self.pinned = False
         self.race: RaceMode | None = None
 
     # ---- layout -------------------------------------------------------------------------------
@@ -336,8 +337,22 @@ class LongCatchPage:
                 ui.label('0%').classes('lc-cycle')
                 ui.element('div').classes('lc-spacer')
                 ui.toggle(PLAYBACK_LABELS, value=self.view.playback, on_change=lambda e: self.update(playback=e.value))
+                self.pin_button = self._icon_button('push_pin', 'Pin swimmer while scrolling (P)', self.toggle_pin)
+                self.pin_button.classes('lc-pin-toggle').props('aria-pressed=false')
                 reset = self._icon_button('center_focus_strong', 'Reset camera (C)', self.engine.reset_camera)
                 reset.classes('lc-reset-camera')
+
+    def toggle_pin(self) -> None:
+        """Keep the swimmer on screen while the settings scroll beneath it (stacked layout)."""
+        self.pinned = not self.pinned
+        if self.pinned:
+            self.studio.classes(add='lc-pinned')
+            self.pin_button.classes(add='lc-active')
+        else:
+            self.studio.classes(remove='lc-pinned')
+            self.pin_button.classes(remove='lc-active')
+        self.pin_button.props(f'aria-pressed={str(self.pinned).lower()}')
+        self.engine.fit()
 
     @staticmethod
     def _icon_button(icon: str, tooltip: str, on_click) -> ui.button:
