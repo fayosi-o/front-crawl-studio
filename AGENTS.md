@@ -44,7 +44,9 @@ browser as `render_params()['faults']`. A new fault needs:
 - More drive must not compensate for a poor catch or heavy slip.
 - Every fault must cost estimated distance per stroke.
 - A lower stroke rate must lower momentum carry (longer glide between the push
-  and the next catch) and with it distance per stroke.
+  and the next catch). Below 42 spm the stroke also lengthens in proportion to
+  the hold, so a patient 22 spm stroke covers about 1.95 m (≈12.8 strokes and
+  ≈2:19 per 100 m on the default settings); a slipping hand gains little.
 - Muscle highlighting is an illustrative overlay. Don't present numbers as
   measured, and don't add disclaimer text to the UI.
 

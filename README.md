@@ -46,9 +46,12 @@ cloud services or downloaded models.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
   simulated **water pressure**, slow playback and a six-phase timeline.
 - **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
-  estimates. Hands turn teal when holding water and coral when slipping; amber
+  estimates. Rates from 22 to 72 spm: a slow, well-held 22 spm stroke covers
+  about 1.95 m (≈12.8 strokes per 25 m, ≈2:19 per 100 m). Hands turn teal
+  when holding water and coral when slipping; amber
   highlights muscle emphasis.
-- **Water and motion:** stroke-driven ripples, spray, bubbles and wake, with
+- **Water and motion:** a rolling swell, bow wave, V-shaped wake and fine
+  scrolling surface ripples, plus stroke-driven ripples, spray and bubbles, with
   natural breathing and lightweight water reactions. Hand angle, submerged
   forearms and slip affect visual thrust; drag slows the glide. Uneven pulls
   turn and drift the body, while buoyancy and kicks gently adjust its balance.

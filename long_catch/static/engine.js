@@ -352,7 +352,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Floor: tiles and two layers of drifting caustics, well below the swimmer.
   // Every layer fades out at its edges so the pool has no hard slab outline.
   const SURFACE = { w: 10, h: 4, nx: 120, ny: 48, x: -0.5 };
-  const SWELL = [[2.1, 1.3, 1.7, 0.009], [3.4, -2.2, 2.6, 0.006], [7.9, 5.1, 4.1, 0.003]];
+  const SWELL = [[2.1, 1.3, 1.7, 0.018], [3.4, -2.2, 2.6, 0.012], [7.9, 5.1, 4.1, 0.005]];
+  // Fine ripples: one tile of the ripple normal map covers RIPPLE_TILE metres; a second, smaller
+  // sample of the same map drifts the other way so the pattern never visibly repeats.
+  const RIPPLE_TILE = 0.7;
   const FLOOR_Z = -2.1;
 
   function canvasTexture(size, draw, repeat) {
@@ -437,6 +440,42 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     g.putImageData(img, 0, 0);
   }
 
+  // Tileable ripple normal map: a sum of short waves with whole-number frequencies (so it wraps
+  // seamlessly), encoded as a tangent-space normal map. Generated once.
+  function drawRipples(g, n) {
+    const waves = [[3, 1, 0.0], [-2, 4, 1.3], [5, -3, 2.1], [1, 7, 0.7], [-7, 2, 4.2], [9, 5, 2.9], [-4, -9, 5.5]]
+      .map(([kx, ky, phase]) => [2 * Math.PI * kx, 2 * Math.PI * ky, phase, 1 / Math.hypot(kx, ky)]);
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        let dx = 0, dy = 0;
+        for (const [kx, ky, phase, amp] of waves) {
+          const c = amp * Math.cos(kx * x / n + ky * y / n + phase);
+          dx += kx * c; dy += ky * c;
+        }
+        const sx = -0.012 * dx, sy = -0.012 * dy, len = Math.hypot(sx, sy, 1), o = 4 * (y * n + x);
+        img.data[o] = 127.5 * (sx / len + 1);
+        img.data[o + 1] = 127.5 * (sy / len + 1);
+        img.data[o + 2] = 127.5 * (1 / len + 1);
+        img.data[o + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+
+  // Blend a second, smaller sample of the ripple map that drifts on its own (uniform lcRipple).
+  function addSecondRipple(material, uniform) {
+    material.onBeforeCompile = shader => {
+      const line = 'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;';
+      if (!shader.fragmentShader.includes(line)) return;
+      shader.uniforms.lcRipple = uniform;
+      shader.fragmentShader = 'uniform vec3 lcRipple;\n' + shader.fragmentShader.replace(line, `
+        vec3 rippleA = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;
+        vec3 rippleB = texture2D( normalMap, vNormalMapUv * lcRipple.z + lcRipple.xy ).xyz * 2.0 - 1.0;
+        vec3 mapN = normalize( vec3( rippleA.xy + rippleB.xy, rippleA.z * rippleB.z ) );`);
+    };
+  }
+
   // Replace NiceGUI's flat default lights (strong ambient + one overhead light) with a higher-contrast rig.
   // White light keeps the palette colours strong; less ambient and a stronger key light from above-front
   // add shading, and a faint cool rim light from behind separates the swimmer from the dark water.
@@ -458,15 +497,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!THREE) return false;
     const scene = S.el.scene, edge = canvasTexture(128, drawEdgeFade);
     const flow = canvasTexture(256, drawFlow, [4, 2]);
+    const ripple = canvasTexture(256, drawRipples, [SURFACE.w / RIPPLE_TILE, SURFACE.h / RIPPLE_TILE]);
+    const rippleB = { value: new THREE.Vector3(0, 0, 1.73) };
     const old = scene.getObjectByName('lc-pool');
     if (old) scene.remove(old);
 
     m.water.geometry.dispose();
     m.water.geometry = new THREE.PlaneGeometry(SURFACE.w, SURFACE.h, SURFACE.nx, SURFACE.ny);
     m.water.material = new THREE.MeshPhongMaterial({
-      color: CONFIG.colors.water, specular: 0x6fa9b8, shininess: 90, transparent: true, opacity: 0.17,
+      color: CONFIG.colors.water, specular: 0xa8dbe6, shininess: 110, transparent: true, opacity: 0.2,
       side: THREE.DoubleSide, depthWrite: false, alphaMap: edge, map: flow,
+      normalMap: ripple, normalScale: new THREE.Vector2(0.55, 0.55),
     });
+    addSecondRipple(m.water.material, rippleB);
     m.water.renderOrder = 2;
 
     const pool = new THREE.Group();
@@ -498,11 +541,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const fixed = new Float64Array(pos.count), heights = new Float64Array(pos.count);
     for (let i = 0; i < pos.count; i++) {
       const x = a[3 * i] + SURFACE.x, y = a[3 * i + 1], d = 0.55 - x;
-      fixed[i] = 0.018 * Math.exp(-((x - 0.62) ** 2) / 0.02 - y * y / 0.03)
-        - 0.012 * Math.exp(-((x - 0.3) ** 2) / 0.03 - y * y / 0.09);
+      // Bow wave: a hump pushed up ahead of the head and a trough beside the shoulders.
+      fixed[i] = 0.034 * Math.exp(-((x - 0.62) ** 2) / 0.025 - y * y / 0.04)
+        - 0.022 * Math.exp(-((x - 0.3) ** 2) / 0.04 - y * y / 0.1);
+      // Wake: two V-shaped wave trains spreading back from the shoulders.
       if (d > 0) {
-        const wing = Math.abs(y) - 0.36 * d, width = 0.05 + 0.04 * d;
-        fixed[i] += 0.006 * Math.exp(-d / 2.4 - (wing * wing) / (width * width)) * Math.cos(12 * d);
+        const wing = Math.abs(y) - 0.36 * d, width = 0.06 + 0.05 * d;
+        fixed[i] += 0.016 * Math.exp(-d / 3.2 - (wing * wing) / (width * width)) * Math.cos(12 * d);
       }
     }
     // Separate fixed spatial terms from the changing wave phase.
@@ -515,7 +560,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       return values;
     });
-    m.pool = { tiles, caustics, flow, fixed, heights, waves, time: 0, dirty: true };
+    m.pool = { tiles, caustics, flow, ripple, rippleB, fixed, heights, waves, time: 0, dirty: true };
     return true;
   }
 
@@ -573,6 +618,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     pool.tiles.offset.x = wrap(off);
     // Positive UV offset moves the streaks back across the swimmer-relative surface.
     pool.flow.offset.x = wrap(off * pool.flow.repeat.x / SURFACE.w);
+    // Ripples ride back with the pool water and drift slowly; the second layer crosses them.
+    pool.ripple.offset.set(wrap(off / RIPPLE_TILE + 0.05 * t), wrap(0.03 * t));
+    pool.rippleB.value.x = wrap(off * 1.73 / RIPPLE_TILE - 0.04 * t);
+    pool.rippleB.value.y = wrap(-0.06 * t);
     pool.caustics.forEach((map, i) => {
       const r = map.repeat.x / SURFACE.w, s = i ? -1 : 1;
       map.offset.set(wrap(off * r + 0.02 * s * t), wrap(0.015 * t * s));

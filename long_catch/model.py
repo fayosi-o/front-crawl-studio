@@ -33,6 +33,12 @@ HOLDING_THRESHOLD = 0.7
 GLIDE_DECAY_S = 1.6  # seconds for coasting speed to fall to 1/e
 PROPULSIVE_S = 0.85  # seconds of each stroke in which the hand drives the body
 
+# Below this rate the stroke lengthens: a slow, patient stroke reaches further and
+# holds the water for longer, worth up to LONG_STROKE_M extra metres at the slowest rate.
+LONG_STROKE_FROM = 42.0
+LONG_STROKE_SPAN = 20.0
+LONG_STROKE_M = 1.2
+
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
     """Limit ``value`` to the closed range [minimum, maximum]."""
@@ -191,20 +197,22 @@ def estimate_metrics(
 
     Drive only scales the benefit of a good hold, so it cannot rescue a poor
     catch or heavy slip. Slip also costs distance directly, rates above 56 spm
-    shorten the stroke, low rates and longer glides lose momentum between strokes,
+    shorten the stroke, rates below 42 spm lengthen it only as far as the hand
+    holds water, low rates and longer glides lose momentum between strokes,
     and ``drag`` (from faults) removes a fixed fraction.
     """
     hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
     # Drive multiplies the hold rather than adding to it.
     connection = 0.7 + 0.3 * drive_balance
     rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
+    reach = clamp((LONG_STROKE_FROM - stroke_rate) / LONG_STROKE_SPAN, 0.0, 1.0) ** 1.5
     momentum = momentum_carry(stroke_rate, glide)
     distance_per_stroke = clamp(
-        (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty)
+        (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty + LONG_STROKE_M * reach * hold_quality)
         * (0.80 + 0.20 * momentum)
         * (1.0 - drag),
         0.45,
-        1.40,
+        2.20,
     )
     strokes_per_25 = 25.0 / distance_per_stroke
     return Metrics(
@@ -319,7 +327,7 @@ def waterline_pose(speed: float) -> tuple[float, float]:
 
 # Inclusive slider ranges; StrokeSettings rejects anything outside them.
 SETTING_RANGES: dict[str, tuple[int, int]] = {
-    'rate': (32, 72),
+    'rate': (22, 72),
     'catch': (0, 100),
     'roll': (20, 62),
     'slip': (0, 100),

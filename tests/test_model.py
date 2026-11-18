@@ -99,8 +99,16 @@ def test_drive_cannot_rescue_poor_catch_and_slip():
 def test_low_rate_loses_momentum_and_distance_in_the_glide():
     slow, quick = estimate_metrics(0.9, 0.1, 0.7, 30), estimate_metrics(0.9, 0.1, 0.7, 50)
     assert 0 < slow.momentum < quick.momentum <= 1
-    assert slow.distance_per_stroke < quick.distance_per_stroke
+    assert slow.seconds_per_25 > estimate_metrics(0.9, 0.1, 0.7, 42).seconds_per_25
     assert momentum_carry(200) == 1.0
+
+
+def test_slow_long_stroke_reaches_further_only_when_holding_water():
+    m = StrokeSettings(rate=22).metrics()
+    assert m.strokes_per_25 == pytest.approx(12.8, abs=0.2)
+    assert m.seconds_per_25 * 4 == pytest.approx(138, abs=2)
+    slipping = estimate_metrics(0.3, 0.7, 1.0, 22).distance_per_stroke
+    assert slipping < estimate_metrics(0.3, 0.7, 1.0, 42).distance_per_stroke + 0.3 < m.distance_per_stroke
 
 
 @pytest.mark.parametrize('glide', [0, 50, 100])
