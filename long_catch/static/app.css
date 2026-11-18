@@ -26,6 +26,7 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
 .lc-estimates { flex: 1; min-width: 0; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .lc-estimate-context { flex: 0 0 132px; }
 .lc-estimate-context .lc-section-title { margin: 0 0 2px; letter-spacing: 0.03em; font-size: 0.63rem; }
+.lc-estimate-context .lc-section-title:empty { display: none; }
 .lc-estimate-context .lc-hold { margin: 0; padding: 2px 0; gap: 4px; background: none; font-size: 0.68rem; }
 .lc-estimates .lc-stats { width: min(100%, 520px); grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .lc-estimates .lc-stat { padding: 4px 7px; }

@@ -141,7 +141,7 @@ class SwimmerBuilder:
             self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
     def _head(self) -> None:
-        """Neck, head, jaw, nose, swim cap, and goggles; the face points down (-z).
+        """Neck, head, jaw, swim cap, and goggles; the face points down (-z).
 
         The skull and cap are built on a unit sphere inside one scaled group,
         so the cap dome hugs the head exactly. The goggles are placed in the
@@ -152,9 +152,8 @@ class SwimmerBuilder:
         with ui.scene.group().move(0.29, 0, 0):
             limb_x(0.11, 0.052, 0.045, c.skin)
         centre, axes = HEAD_CENTRE, HEAD_AXES
-        # Chin and nose: in swim pose "down and forward" maps to -x and -z.
+        # Chin: in swim pose "down and forward" maps to -x and -z.
         ellipsoid(0.07, 0.068, 0.05, c.skin).move(centre[0] - 0.035, 0, centre[2] - 0.065)
-        ui.scene.sphere(0.026, 16, 10).material(c.skin).scale(1.25, 0.7, 0.75).move(0.565, 0, -0.085)
         with ui.scene.group().move(*centre).scale(*axes):
             ui.scene.sphere(1, 32, 20).material(c.skin)
             # Cap dome: axis tilted 30 deg from straight up towards the crown, covering ears and nape.

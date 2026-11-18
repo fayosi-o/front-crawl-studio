@@ -230,7 +230,7 @@ class LongCatchPage:
                 ui.tab('race', label='Race', icon='sports_score').props('aria-label="Race"')
             with ui.element('section').classes('lc-estimates').props('aria-label="Stroke estimates"'):
                 with ui.element('div').classes('lc-estimate-context'):
-                    self.estimate_title = ui.label('Studio estimates').classes('lc-section-title')
+                    self.estimate_title = ui.label().classes('lc-section-title')
                     with ui.element('div').classes('lc-hold') as self.hold_banner:
                         self.hold_icon = ui.icon('check_circle')
                         self.hold_text = ui.label()
@@ -291,7 +291,6 @@ class LongCatchPage:
 
             with ui.element('div').classes('lc-hud-top'):
                 with ui.element('div').classes('lc-glass lc-brand'):
-                    ui.label('Long Catch').classes('lc-title')
                     ui.label('Front-crawl stroke explorer').classes('lc-subtitle')
                     with ui.row().classes('lc-legend'):
                         for css, text in (('hold', 'holding'), ('slip', 'slipping'), ('patch', 'emphasis')):
@@ -575,7 +574,7 @@ class LongCatchPage:
                         ui.label(f'{fault.label}: ').classes('lc-cue-name')
                         ui.label(fault.cue).classes('inline')
 
-    def _render_stats(self, metrics: Metrics, context: str = 'Studio estimates') -> None:
+    def _render_stats(self, metrics: Metrics, context: str = '') -> None:
         """Fill in the estimate tiles and colour the hold banner."""
         self.estimate_title.text = context
         tone = 'lc-good' if metrics.holding else 'lc-bad'

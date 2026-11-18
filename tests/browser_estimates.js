@@ -10,6 +10,9 @@ async page => {
     await view.waitForFunction(() => window.LongCatch?.ready());
     const header = view.locator('.lc-header');
     const values = () => header.locator('.lc-stat-value').allTextContents();
+    assert(await view.locator('.lc-brand .lc-title').count() === 0, 'Stage title should be hidden');
+    assert(await header.locator('.lc-estimate-context > .lc-section-title').textContent() === '',
+      'Studio estimate heading should be hidden');
     assert(await header.locator('.lc-hold > :last-child').textContent() === 'Hand hold',
       'Holding status must read Hand hold');
     const studio = await values();
@@ -37,7 +40,7 @@ async page => {
     await view.waitForFunction(() => document.querySelector('.lc-estimate-context').textContent.includes('Swimmer A'));
     assert(JSON.stringify(await values()) === JSON.stringify(a), 'Solo did not restore swimmer A estimates');
     await view.getByRole('tab', {name: 'Stroke studio', exact: true}).click();
-    await view.waitForFunction(() => document.querySelector('.lc-estimate-context').textContent.includes('Studio'));
+    await view.waitForFunction(() => document.querySelector('.lc-estimate-context > .lc-section-title').textContent.trim() === '');
     assert(JSON.stringify(await values()) === JSON.stringify(editedStudio), 'Switching tabs lost studio estimates');
     const layouts = [];
     for (const width of [1440, 1101, 1100, 1024, 1001, 1000, 900, 780, 768, 601, 600, 541, 540, 390, 320]) {
