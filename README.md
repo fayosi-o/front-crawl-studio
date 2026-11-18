@@ -46,13 +46,12 @@ cloud services or downloaded models.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
   simulated **water pressure**, slow playback and a six-phase timeline.
 - **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
-  estimates. Rates from 22 to 72 spm: a slow, well-held 22 spm stroke covers
-  about 1.95 m (≈12.8 strokes per 25 m, ≈2:19 per 100 m). Hands turn teal
-  when holding water and coral when slipping; amber
-  highlights muscle emphasis.
+  estimates for rates from 22 to 72 spm. Hands turn teal when holding water and
+  coral when slipping; amber highlights muscle emphasis.
 - **Water and motion:** a rolling swell, bow wave, V-shaped wake and fine
-  scrolling surface ripples, plus stroke-driven ripples, spray and bubbles, with
-  natural breathing and lightweight water reactions. Hand angle, submerged
+  scrolling surface ripples, plus stroke-driven ripples, spray and bubbles. The
+  surface stays clear from above and catches more light when viewed across it.
+  Natural breathing and lightweight water reactions add life. Hand angle, submerged
   forearms and slip affect visual thrust; drag slows the glide. Uneven pulls
   turn and drift the body, while buoyancy and kicks gently adjust its balance.
   Submerged downbeats add modest thrust; wide, knee-bent kicks add resistance.
@@ -155,8 +154,10 @@ the studio estimates.
 
 Each hand entry counts as one stroke; a full arm cycle contains two.
 More slip reduces distance per stroke, and extra drive cannot rescue a poor catch.
-A low rate lengthens the unpropelled glide, reducing momentum carry and distance
-per stroke.
+A low rate lengthens the unpropelled glide and reduces momentum carry, so pace
+slows. Below 42 spm a well-held stroke also reaches further: on the default
+settings, 22 spm covers about 1.95 m per stroke (≈12.8 strokes per 25 m,
+≈2:19 per 100 m). A slipping hand gains little from slowing down.
 
 **Glide length** adjusts the front-end hold independently of rate: 50% keeps the
 normal stroke, lower values catch earlier, and higher values hold longer.

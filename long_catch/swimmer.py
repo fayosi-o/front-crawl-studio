@@ -259,6 +259,6 @@ class SwimmerBuilder:
         buoys = []
         for y, z in ((1.2, 0.02), (-1.2, -0.01)):
             for i in range(18):
-                color = self.colors.buoy if i % 2 else '#ffffff'
+                color = self.colors.hold if i % 2 else self.colors.text
                 buoys.append(ui.scene.sphere(0.045, 12, 8).material(color).move(-4.25 + i * 0.5, y, z).id)
         self.ids['buoys'] = buoys
