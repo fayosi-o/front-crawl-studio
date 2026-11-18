@@ -235,8 +235,6 @@ class SwimmerBuilder:
     def _pelvis(self) -> None:
         """Hips in suit colour, plus the core and hip-drive emphasis patches."""
         ellipsoid(0.16, 0.165, 0.12, self.colors.suit).move(-0.02, 0, 0)
-        for _, sign in SIDES:
-            ellipsoid(0.10, 0.08, 0.07, self.colors.suit).move(-0.07, sign * 0.07, 0.055)  # glutes
         self._patch('core', ellipsoid(0.10, 0.13, 0.105, self.colors.patch)).move(0.13, 0, 0.015)
         for side, sign in SIDES:
             hip = ui.scene.sphere(0.065, 16, 10).material(self.colors.patch, 0.0)
