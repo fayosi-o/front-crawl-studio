@@ -96,6 +96,14 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   width: min(620px, calc(100% - 28px)); padding: 10px 12px 6px;
 }
+.lc-dock-toggle {
+  position: absolute !important; right: 14px; bottom: 126px; z-index: 2;
+  color: var(--lc-text); padding: 0 !important; border-radius: 999px !important;
+}
+.lc-dock-hidden .lc-dock { display: none; }
+.lc-dock-hidden .lc-dock-toggle { bottom: 14px; }
+.lc-dock-hidden .lc-camera-hint { bottom: 18px; }
+.lc-dock-hidden .lc-view-label { bottom: 14px; }
 .lc-timeline {
   position: relative; height: 28px; border-radius: 8px; overflow: hidden;
   background: rgba(231, 240, 234, 0.05); cursor: ew-resize; touch-action: none; user-select: none;

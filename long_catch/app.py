@@ -216,6 +216,7 @@ class LongCatchPage:
         # Last-rendered layouts; renderers skip DOM work when nothing changed.
         self._view_layout: tuple | None = None
         self.pinned = False
+        self.dock_shown = True
         self.race: RaceMode | None = None
 
     # ---- layout -------------------------------------------------------------------------------
@@ -306,6 +307,8 @@ class LongCatchPage:
                             ui.label(Phase.ENTRY.label).classes(f'lc-arm-phase lc-arm-{side}')
             ui.label('Drag to orbit / scroll to zoom').classes('lc-camera-hint')
             self._build_transport()
+            self.dock_button = self._icon_button('expand_more', 'Hide / show controls (H)', self.toggle_dock)
+            self.dock_button.classes('lc-glass lc-dock-toggle').props('aria-pressed=true')
 
     def _build_transport(self) -> None:
         """Bottom dock: phase timeline, step and play buttons, speed, and camera reset.
@@ -341,6 +344,16 @@ class LongCatchPage:
                 self.pin_button.classes('lc-pin-toggle').props('aria-pressed=false')
                 reset = self._icon_button('center_focus_strong', 'Reset camera (C)', self.engine.reset_camera)
                 reset.classes('lc-reset-camera')
+
+    def toggle_dock(self) -> None:
+        """Hide the playback dock for an unobstructed view; shortcuts keep working."""
+        self.dock_shown = not self.dock_shown
+        if self.dock_shown:
+            self.studio.classes(remove='lc-dock-hidden')
+        else:
+            self.studio.classes(add='lc-dock-hidden')
+        icon = 'expand_more' if self.dock_shown else 'expand_less'
+        self.dock_button.props(f'icon={icon} aria-pressed={str(self.dock_shown).lower()}')
 
     def toggle_pin(self) -> None:
         """Keep the swimmer on screen while the settings scroll beneath it (stacked layout)."""
