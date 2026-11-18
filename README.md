@@ -49,9 +49,10 @@ cloud services or downloaded models.
   estimates. Hands turn teal when holding water and coral when slipping; amber
   highlights muscle emphasis.
 - **Water and motion:** stroke-driven ripples, spray, bubbles and wake, with
-  natural breathing, subtle pace-dependent buoyancy and gently damped steering
-  from hand entry and pull direction. Crossover can nudge the heading; this
-  illustrative sway does not change pace estimates or race distances.
+  natural breathing and lightweight water reactions. Hand angle, submerged
+  forearms and slip affect visual thrust; drag slows the glide. Uneven pulls
+  turn and drift the body, while buoyancy and kicks gently adjust its balance.
+  These reactions do not change pace estimates or race results.
 - **Race:** solo or two-swimmer comparisons over 25, 50 or 100 m, with distance
   tracks, finish times and a winning margin.
 
@@ -152,6 +153,10 @@ normal stroke, lower values catch earlier, and higher values hold longer.
 It is a timing control, not metres; longer glides also reduce estimated momentum
 and distance per stroke. The kick-led roll follows the catch.
 
+Watch the swimmer against the lane buoys to see pull-driven acceleration and
+coasting. Compare Crossover from the Top split view for heading and sideways
+travel. Motion stays within a small viewing window; it is not free navigation.
+
 ### Race
 
 1. Choose **25 m**, **50 m** or **100 m**, then **Solo** or **Two swimmers**.
@@ -168,7 +173,8 @@ identical setups don't. Leaving Race pauses it. Studio remains independent.
 **Model limits:** steady-speed races omit dives, turns and fatigue.
 Roll, pull width, depth, entry angle and kick affect appearance, not
 estimated speed. Water effects, pressure and buoyancy are visual only and never
-alter results.
+alter results. Visual speed varies with the pulls; race progress and finish
+times use the steady-speed estimate.
 
 ### Keyboard shortcuts
 
@@ -227,6 +233,15 @@ Tests cover timing, efficiency, faults, races, buoyancy and validation.
 For UI changes, check both tabs, lane isolation, playback, scrubbing, cameras
 and narrow layouts in a browser.
 Restart the server after JavaScript or CSS edits.
+With an existing `playwright-cli` installation and the server running, run the
+water-motion browser checks from `tests`:
+
+```bash
+playwright-cli -s=motion open http://127.0.0.1:8080/
+playwright-cli -s=motion run-code --filename=browser_motion.js
+playwright-cli -s=motion close
+```
+
 Water animation caches wave shapes, bounds ripple calculations and skips
 unchanged paused frames without reducing surface detail.
 

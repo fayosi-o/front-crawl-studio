@@ -222,14 +222,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.chest.rotation.order = 'ZYX';
     m.pelvis.rotation.order = 'ZYX';
     m.rigs = {};
-    m.steering = {yaw: 0, turn: 0, sway: 0, drift: 0};
+    m.motion = null;
+    m.bodyOrigin = m.chest.parent.position.clone();
+    m.probes = PRESSURE.probes.map(p => ({
+      ...p, pos: m.chest.position.clone(), prev: m.chest.position.clone(),
+      velocity: m.chest.position.clone(), normal: m.chest.position.clone(),
+      axis: m.chest.position.clone(), known: false,
+    }));
     for (const side of ['R', 'L']) {
       const shoulder = m['sh' + side], vector = () => shoulder.position.clone();
       m.rigs[side] = {
         target: vector(), axis: vector(), pole: vector(), hint: vector(), elbow: vector(),
         upper: vector(), lower: vector(), normal: vector(), z: vector(),
         matrix: shoulder.matrix.clone(), quaternion: shoulder.quaternion.clone(), baseX: shoulder.position.x,
-        hand: vector(), previousHand: vector(), handKnown: false,
       };
     }
     el.$el.style.width = '100%';
@@ -1073,84 +1078,88 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     advance(scaled);
   }
 
-  // Instantaneous swim speed within a stroke, relative to the cycle average (mean 1). The body peaks
-  // as each push finishes, coasts on drag through the glide (down to P.momentum of its peak when the
-  // next catch starts), then is driven back up. Cached per settings; visual only.
-  const PUSH_PEAKS = [CONFIG.finish - 0.5, CONFIG.finish];
-  function surgeShape(P) {
-    const key = `${P.glide}|${P.momentum}`;
-    if (S.surge?.key === key) return S.surge;
-    const glide = clamp(P.glide ?? 0, 0, 0.95), carry = clamp(P.momentum ?? 1, 0, 1);
-    const raw = u => (u < glide
-      ? carry ** (u / Math.max(glide, 1e-6))
-      : carry + (1 - carry) * smooth((u - glide) / (1 - glide)));
-    let mean = 0;
-    for (let i = 0; i < 64; i++) mean += raw((i + 0.5) / 64) / 64;
-    S.surge = { key, at: u => raw(u) / mean };
-    return S.surge;
-  }
-  function surge(P) {
-    const u = wrap(2 * (S.phase - PUSH_PEAKS[1]));  // strokes since the last push finished
-    return 1 + 0.6 * (surgeShape(P).at(u) - 1);
-  }
-
-  // A small, damped reaction to the posed hands, sampled before moving the whole swimmer.
-  // Entry brakes at the front; a loaded backward/sideways sweep reacts in the opposite direction.
-  // Lane-centering and soft limits keep this illustrative motion from accumulating into drift.
-  function steer(m, P, dt, slipness) {
-    const body = m.chest.parent, s = m.steering;
-    if (S.trailReset) {
-      s.yaw = s.turn = s.sway = s.drift = 0;
-      for (const r of Object.values(m.rigs)) r.handKnown = false;
+  // Lightweight visual reactions, not a calibrated fluid solver. Sample the prescribed stroke in
+  // a neutral body frame so yesterday's reaction never becomes today's limb impulse.
+  function moveThroughWater(m, P, dt, slipness, breath, oldX, resetMotion) {
+    const body = m.chest.parent;
+    if (!m.motion || resetMotion) {
+      m.motion = {speed: P.speed, load: 0.35 * (1 - 0.9 * slipness), surge: 0, yaw: 0, turn: 0, sway: 0, drift: 0,
+        height: 0, rise: 0, pitch: 0, pitchRate: 0};
+      for (const p of m.probes) p.known = false;
     }
-    let sideways = 0, torque = 0;
+    const s = m.motion;
+    let forward = 0, sideways = 0, vertical = 0, torque = 0, tipping = 0;
     body.updateMatrixWorld(true);
-    for (const side of ['R', 'L']) {
-      const r = m.rigs[side];
-      m['wr' + side].localToWorld(r.hand.set(0.065, 0, -0.02));
-      if (dt > 0 && r.handKnown) {
-        const vx = clamp((r.hand.x - r.previousHand.x) / dt, -3, 3);
-        const vy = clamp((r.hand.y - r.previousHand.y) / dt, -3, 3);
-        const vz = clamp((r.hand.z - r.previousHand.z) / dt, -3, 3);
-        const wet = smooth(clamp(-r.hand.z / 0.06, 0, 1));
-        const load = wet * (1 - 0.85 * slipness) * clamp(-vx, 0, 2);
-        const entry = wet * Math.exp(-Math.abs(r.hand.z) / 0.08) * Math.max(0, -vz);
-        const fx = load * -vx - 0.3 * entry * Math.max(0, vx + P.speed);
-        const fy = -vy * (load + 0.3 * entry);
+    for (const p of m.probes) {
+      const joint = m[p.joint];
+      joint.localToWorld(p.pos.set(...p.at));
+      if (dt > 0 && p.known) {
+        p.velocity.subVectors(p.pos, p.prev).divideScalar(dt).clampLength(0, 3);
+        // The pool is still: include body travel, sideways drift and vertical motion.
+        p.velocity.x += s.speed;
+        p.velocity.y += s.drift;
+        p.velocity.z += s.rise;
+        if (p.face) {
+          p.normal.set(...p.face).transformDirection(joint.matrixWorld);
+        } else {
+          p.axis.set(1, 0, 0).transformDirection(joint.matrixWorld);
+          p.normal.copy(p.velocity).addScaledVector(p.axis, -p.velocity.dot(p.axis)).normalize();
+        }
+        const q = p.velocity.dot(p.normal);
+        const wet = smooth(clamp(-(p.pos.z + s.height) / 0.06, 0, 1));
+        const grip = p.hand ? (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) : 0.2;
+        const load = -p.gain * wet * grip * q * Math.abs(q);
+        const fx = load * p.normal.x, fy = load * p.normal.y, fz = load * p.normal.z;
+        forward += fx;
         sideways += fy;
-        torque += r.hand.x * fy - r.hand.y * fx;
+        vertical += fz;
+        torque += p.pos.x * fy - p.pos.y * fx;
+        tipping += p.pos.z * fx - p.pos.x * fz;
       }
-      if (dt > 0 || !r.handKnown) {
-        r.previousHand.copy(r.hand);
-        r.handKnown = true;
+      if (dt > 0 || !p.known) {
+        p.prev.copy(p.pos);
+        p.known = true;
       }
     }
-    // Substeps keep the damped response stable at low frame rates and during slow playback.
+    // Slow load calibration keeps visual cruising speed near the Python estimate, while each
+    // actual pull supplies the acceleration. Drag remains active when neither arm is driving.
+    const dragShape = 1 + 2 * P.hipDrop + (S.faults.sinking ? 0.35 : 0) + 2 * Math.abs(s.pitch);
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
-      s.turn += (1.8 * torque - 7 * s.turn - 14 * s.yaw) * h;
+      s.load += (Math.max(0, forward) - s.load) * (1 - Math.exp(-h * P.rate / 240));
+      const drag = 0.6 * Math.max(0.015, s.load) * dragShape / Math.max(0.04, P.speed ** 2);
+      s.speed = clamp(s.speed + (0.6 * forward - drag * s.speed ** 2) * h, 0.15 * P.speed, 1.7 * P.speed);
+      s.surge += (s.speed - P.speed - 1.3 * s.surge) * h;
+      s.turn += (2.4 * torque - 5 * s.turn) * h;
       s.yaw += s.turn * h;
-      s.drift += (0.36 * sideways + 0.5 * P.speed * s.yaw - 6 * s.drift - 9 * s.sway) * h;
+      s.drift += (0.8 * sideways + s.speed * Math.sin(4 * D * Math.tanh(s.yaw / (4 * D)))
+        - 4 * s.drift) * h;
       s.sway += s.drift * h;
+      s.rise += (0.12 * vertical + 22 * (0.006 * Math.abs(breath) - s.height) - 7 * s.rise) * h;
+      s.height += s.rise * h;
+      s.pitchRate += (0.14 * tipping - 18 * (s.pitch + 0.7 * D * Math.abs(breath)) - 6 * s.pitchRate) * h;
+      s.pitch += s.pitchRate * h;
     }
-    body.rotation.z = 2 * D * Math.tanh(s.yaw / (2 * D));
-    body.position.y = 0.035 * Math.tanh(s.sway / 0.035);
+    // A follow-frame window bounds the illustration, not a spring pulling him to lane centre.
+    body.rotation.set(0, 2 * D * Math.tanh(s.pitch / (2 * D)), 4 * D * Math.tanh(s.yaw / (4 * D)));
+    body.position.x = m.bodyOrigin.x + 0.14 * Math.tanh(s.surge / 0.14);
+    body.position.y = m.bodyOrigin.y + 0.18 * Math.tanh(s.sway / 0.18);
+    body.position.z = m.bodyOrigin.z + 0.025 * Math.tanh(s.height / 0.025);
+    S.flow = s.speed;
+    // Translation plus the scrolling pool must add up to travel, not count the surge twice.
+    if (dt > 0) S.offset += s.speed * dt - (body.position.x - oldX);
     body.updateMatrixWorld(true);
   }
 
-  function advance(scaled) {
-    if (!S.params || !resolve()) return;
-    const P = S.params, m = S.m;
+  function poseSwimmer(P, m, scaled, resetMotion) {
     // Measure the prescribed stroke in a neutral frame, never the previous steering response.
-    m.chest.parent.rotation.z = 0;
-    m.chest.parent.position.y = 0;
-    // The water streams past at the swimmer's instantaneous speed (lane ropes, floor, trails, bubbles).
-    S.flow = P.speed * surge(P);
+    const previousX = m.chest.parent.position.x;
+    m.chest.parent.rotation.set(0, 0, 0);
+    m.chest.parent.position.copy(m.bodyOrigin);
     if (scaled > 0) {
       const next = S.phase + scaled / (120 / P.rate);
       S.cycles += Math.floor(next);
       S.phase = next % 1;
-      S.offset += S.flow * scaled;
     }
     // Exponential settling is stable at any frame rate and freezes with the stroke clock.
     if (!S.ride) S.ride = {height: P.rideHeight, hips: P.hipDrop};
@@ -1178,8 +1187,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
     m.pelvis.position.x = -0.36 * Math.cos(pitch);
-    // The body rides a little higher as each arm presses back (twice per cycle), with a slight drift.
-    const heave = 0.008 * Math.cos(2 * w * (S.phase - 0.4)) + 0.004 * noise(1.5 * st, 21);
+    // Keep only small pose variation here; the common body parent carries buoyancy and pull lift.
+    const heave = 0.003 * noise(1.5 * st, 21);
     m.chest.position.z = heave + S.ride.height;
     m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0)
       + 0.6 * heave + S.ride.height - S.ride.hips;
@@ -1196,11 +1205,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F, st);
-    steer(m, P, scaled, slipness);
-    updateSplash(m, P, scaled, slipness);
-    updateTrails(m, P, scaled);
-    updateWater(m, P, scaled);
-    fitView();
+    moveThroughWater(m, P, scaled, slipness, breath, previousX, resetMotion);
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
@@ -1212,7 +1217,23 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     patch(m.core, ec * k * core);
     patch(m.hipR, ec * k * core);
     patch(m.hipL, ec * k * core);
+    return [right, left, slipness];
+  }
 
+  function advance(scaled) {
+    if (!S.params || !resolve()) return;
+    const P = S.params, m = S.m;
+    const previousOffset = S.offset;
+    // Sample moving limbs at a bounded interval too, including the race's 4x playback.
+    const steps = Math.max(1, Math.ceil(scaled * 120));
+    let posed;
+    for (let i = 0; i < steps; i++) posed = poseSwimmer(P, m, scaled / steps, S.trailReset && i === 0);
+    const [right, left, slipness] = posed;
+    if (scaled > 0) S.flow = (S.offset - previousOffset) / scaled;
+    updateSplash(m, P, scaled, slipness);
+    updateTrails(m, P, scaled);
+    updateWater(m, P, scaled);
+    fitView();
     // Buoys scroll back at swim speed and wrap around a 9 m window centred on the swimmer.
     const span = 9;
     m.buoys.forEach((b, i) => {
@@ -1304,7 +1325,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (!params.playing) S.seekPausePending = false;
       if (!params.playing && params.speed !== S.params?.speed) S.ride = null;
       S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params);
-      if (S.m) for (const r of Object.values(S.m.rigs)) r.handKnown = false;
+      if (S.m) for (const p of S.m.probes) p.known = false;
     },
     step(amount) { S.phase = wrap(S.phase + amount); S.last = null; S.trailReset = true; return S.phase; },
     fit() { setTimeout(fitCamera, 60); },
