@@ -224,9 +224,21 @@ class LongCatchPage:
         ui.add_head_html(stylesheet())
         ui.add_body_html(engine_script())
         ui.colors(primary=PALETTE.hold)
-        with ui.tabs(value='studio', on_change=lambda e: self.switch_mode(e.value)).classes('lc-mode-tabs'):
-            ui.tab('studio', label='Stroke studio', icon='accessibility_new')
-            ui.tab('race', label='Race', icon='sports_score')
+        with ui.element('header').classes('lc-header'):
+            with ui.tabs(value='studio', on_change=lambda e: self.switch_mode(e.value)).classes('lc-mode-tabs'):
+                ui.tab('studio', label='Stroke studio', icon='accessibility_new')
+                ui.tab('race', label='Race', icon='sports_score')
+            with ui.element('section').classes('lc-estimates').props('aria-label="Stroke estimates"'):
+                with ui.element('div').classes('lc-estimate-context'):
+                    self.estimate_title = ui.label('Studio estimates').classes('lc-section-title')
+                    with ui.element('div').classes('lc-hold') as self.hold_banner:
+                        self.hold_icon = ui.icon('check_circle')
+                        self.hold_text = ui.label()
+                with ui.element('div').classes('lc-stats'):
+                    for key, caption in STATS:
+                        with ui.element('div').classes('lc-stat'):
+                            self.stats[key] = ui.label().classes('lc-stat-value')
+                            ui.label(caption).classes('lc-stat-caption')
         with ui.element('div').classes('lc-root lc-studio') as self.studio:
             self._build_stage()
             self._build_panel()
@@ -245,11 +257,15 @@ class LongCatchPage:
         self.engine.set_active(not racing)
         if racing and self.race is None:
             with self.race_space:
-                self.race = RaceMode(lambda: self.view)
+                self.race = RaceMode(lambda: self.view, self._render_stats)
                 self.race.build()
             self.race.start()
         elif self.race is not None:
             self.race.set_active(racing)
+            if racing:
+                self.race._render_editor()
+        if not racing:
+            self._render_stats(self.view.metrics())
 
     def _build_stage(self) -> None:
         """3D scene (plus a hidden second pane for split view) and the HUD overlays."""
@@ -342,17 +358,6 @@ class LongCatchPage:
                         button.props('flat no-caps').classes(f'lc-preset lc-preset-{number}')
                         button.tooltip(f'Shortcut: {number}')
                         self.preset_buttons[name] = button
-
-            with ui.element('div').classes('lc-card lc-metrics-card'):
-                section_title('Stroke estimates')
-                with ui.element('div').classes('lc-stats'):
-                    for key, caption in STATS:
-                        with ui.element('div').classes('lc-stat'):
-                            self.stats[key] = ui.label().classes('lc-stat-value')
-                            ui.label(caption).classes('lc-stat-caption')
-                with ui.element('div').classes('lc-hold') as self.hold_banner:
-                    self.hold_icon = ui.icon('check_circle')
-                    self.hold_text = ui.label()
 
             with ui.element('div').classes('lc-card'):
                 section_title('Stroke')
@@ -568,8 +573,9 @@ class LongCatchPage:
                         ui.label(f'{fault.label}: ').classes('lc-cue-name')
                         ui.label(fault.cue).classes('inline')
 
-    def _render_stats(self, metrics: Metrics) -> None:
+    def _render_stats(self, metrics: Metrics, context: str = 'Studio estimates') -> None:
         """Fill in the estimate tiles and colour the hold banner."""
+        self.estimate_title.text = context
         tone = 'lc-good' if metrics.holding else 'lc-bad'
         self.stats['dps'].text = f'{metrics.distance_per_stroke:.2f} m'
         self.stats['spl'].text = f'{metrics.strokes_per_25:.1f}'
@@ -578,7 +584,7 @@ class LongCatchPage:
         self.stats['dps'].classes(replace=f'lc-stat-value {tone}')
         self.hold_banner.classes(replace=f'lc-hold {tone}')
         self.hold_icon.name = 'check_circle' if metrics.holding else 'warning'
-        self.hold_text.text = 'Hand holding water' if metrics.holding else 'Hand slipping — catch is losing grip'
+        self.hold_text.text = 'Hand holding water' if metrics.holding else 'Hand slipping'
 
     def _render_timeline(self) -> None:
         """Size the phase segments; recovery moves with stroke rate and spinning arms squeeze the pull."""
@@ -594,8 +600,9 @@ class LongCatchPage:
 class RaceMode:
     """Independent lane settings and a browser-owned race clock, on the same page."""
 
-    def __init__(self, studio_view: Callable[[], ViewState]) -> None:
+    def __init__(self, studio_view: Callable[[], ViewState], show_estimates: Callable[[Metrics, str], None]) -> None:
         self.studio_view = studio_view
+        self.show_estimates = show_estimates
         self.engine = RaceEngine()
         self.swimmers = [ViewState(settings=PRESETS[name]) for name in ('Long power', 'Short slipping')]
         self.distance = 50
@@ -812,6 +819,7 @@ class RaceMode:
         self.editor_title.classes(replace=f'lc-section-title lc-lane-{"b" if self.selected else "a"}')
         self.preset.props(f'display-value="{matching_preset(view.settings) or "Custom"}"')
         self.copy_button.text = 'Copy B to A' if self.selected else 'Copy A to B'
+        self.show_estimates(view.metrics(), f'Swimmer {"B" if self.selected else "A"} estimates')
 
     def _render(self) -> None:
         for i, view in enumerate(self.swimmers):

@@ -144,6 +144,11 @@ both tabs, logout and private-tab access, including on iPhone.
 5. Scrub to pause at **Entry → Catch → Pull → Push → Finish → Recovery**,
    or slow playback. **Play** resumes.
 
+Live estimates stay pinned beside the Studio / Race tabs (below them on small
+screens), so they remain visible while scrolling the controls. In Race they
+follow the selected swimmer, labelled A or B; returning to Studio restores
+the studio estimates.
+
 Each hand entry counts as one stroke; a full arm cycle contains two.
 More slip reduces distance per stroke, and extra drive cannot rescue a poor catch.
 A low rate lengthens the unpropelled glide, reducing momentum carry and distance
@@ -241,11 +246,12 @@ For UI changes, check both tabs, lane isolation, playback, scrubbing, cameras
 and narrow layouts in a browser.
 Restart the server after JavaScript or CSS edits.
 With an existing `playwright-cli` installation and the server running, run the
-water-motion browser checks from `tests`:
+water-motion and pinned-estimate browser checks from `tests`:
 
 ```bash
 playwright-cli -s=motion open http://127.0.0.1:8080/
 playwright-cli -s=motion run-code --filename=browser_motion.js
+playwright-cli -s=motion run-code --filename=browser_estimates.js
 playwright-cli -s=motion close
 ```
 
