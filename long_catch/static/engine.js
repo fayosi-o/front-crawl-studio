@@ -169,20 +169,70 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     return p < early ? p * exit / early : exit + (p - early) * (1 - exit) / (1 - early);
   }
 
+  // ---- drills -----------------------------------------------------------------
+  // Visual only. Each drill remaps the cycle clock onto the two arms; a waiting arm stays long in
+  // front at HOLD (just after the entry, arm extended). Returns [right, rightHeld, left, leftHeld].
+  // Catch-up gives each arm half of a cycle that Python has made twice as long, so every arm keeps
+  // its normal stroke speed and waits in front while the other strokes. Both remaps are continuous:
+  // HOLD + 1 wraps back to HOLD.
+  const HOLD = 0.10;
+  function drillArms(p, P) {
+    if (P.drill === 'catchup') {
+      const one = q => (q < 0.5 ? [wrap(HOLD + 2 * q), false] : [HOLD, true]);
+      return [...one(p), ...one(wrap(p + 0.5))];
+    }
+    if (P.drill === 'single') return [p, false, HOLD, true];
+    return [p, false, wrap(p + 0.5), false];
+  }
+
+  // Body timing (roll, kick, snaking) for the clock phase p. In catch-up the body holds on the side of
+  // the stroking arm through its catch and pull, then turns over during that arm's push and recovery,
+  // so each recovering shoulder is up and the waiting hand catches on its own side. Shifting the
+  // two-beat roll by CATCHUP_BODY lands both turns there; the other drills keep the normal timing.
+  const CATCHUP_BODY = 0.29;
+  const bodyPhase = (p, P) => (P.drill === 'catchup' ? wrap(p + CATCHUP_BODY) : p);
+
+  // Clock phase at which the right arm reaches timeline position f (inverse of drillArms).
+  function clockFor(f, P) {
+    if (P?.drill !== 'catchup') return f;
+    return f >= HOLD ? (f - HOLD) / 2 : (f + 1 - HOLD) / 2;
+  }
+
+  // Fist drill: the hands close (thumbs tucked), so the palm loads little and the forearm does the catching.
+  const FIST_GAIN = { wr: 0.25, el: 1.5 };
+  const probeGain = (p, P) => p.gain * (P.drill === 'fist' && p.hand ? FIST_GAIN[p.joint.slice(0, 2)] : 1);
+  function shapeHands(m, P) {
+    const fist = P.drill === 'fist';
+    if (m.fist === fist) return;
+    m.fist = fist;
+    for (const side of ['R', 'L']) {
+      const hand = m['ha' + side], base = m.handBase[side];
+      if (fist) {
+        hand.scale.set(0.05, 0.045, 0.036);
+        hand.position.x = 0.04;
+      } else {
+        hand.scale.copy(base.scale);
+        hand.position.copy(base.position);
+      }
+      m['thumb' + side].visible = !fist;
+    }
+  }
+
   // ---- natural motion ---------------------------------------------------------
   // Visual only: these never touch the phase, the timeline, or the Python metrics.
   // Variation is keyed to stroke time (cycles + phase), so it holds still while paused.
 
-  // Bilateral breathing every third stroke (one breath per 1.5 cycles, alternating sides). The head
-  // turns toward the arm as it finishes and starts its recovery, then rotates back down by the end
-  // of the recovery, before that hand enters again.
+  // One breath every P.breath strokes (default three: bilateral, alternating sides). The head turns
+  // toward the arm as it finishes and starts its recovery, then rotates back down by the end of the
+  // recovery, before that hand enters again. Odd counts alternate sides; even counts always breathe
+  // right. rightArm and leftArm are each arm's clock phase after any drill remap.
   // Returns -1..1: negative turns the face to the right (-y), positive to the left.
-  function breathing(P) {
-    const t = S.cycles + S.phase, exit = P.exit;
+  function breathing(P, rightArm, leftArm) {
+    const t = S.cycles + S.phase, exit = P.exit, every = P.breath || 3;
     const turnWindow = p => keyed(p, [[exit - 0.22, 0], [exit - 0.04, 1], [exit + 0.08, 1], [exit + 0.2, 0]]);
-    const breathes = n => ((n % 3) + 3) % 3 === 0;  // n counts hand entries: right even, left odd
-    const right = breathes(2 * Math.floor(t)) ? turnWindow(S.phase) : 0;
-    const left = breathes(2 * Math.floor(t - 0.5) + 1) ? turnWindow((S.phase + 0.5) % 1) : 0;
+    const breathes = n => ((n % every) + every) % every === 0;  // n counts hand entries: right even, left odd
+    const right = breathes(2 * Math.floor(t)) ? turnWindow(rightArm) : 0;
+    const left = breathes(2 * Math.floor(t - 0.5) + 1) ? turnWindow(leftArm) : 0;
     return left - right;
   }
 
@@ -221,6 +271,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Roll about the body axis first, then yaw it (snaking) in the water plane.
     m.chest.rotation.order = 'ZYX';
     m.pelvis.rotation.order = 'ZYX';
+    // The head pivots at the base of the neck: turn about the spine to breathe, then lift (head-lift fault).
+    m.head.rotation.order = 'YXZ';
+    m.handBase = Object.fromEntries(['R', 'L'].map(s => [s, {
+      scale: m['ha' + s].scale.clone(), position: m['ha' + s].position.clone(),
+    }]));
     m.rigs = {};
     m.motion = null;
     m.bodyOrigin = m.chest.parent.position.clone();
@@ -664,7 +719,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     ]),
   };
 
-  function updatePressure(fx, m, dt, slipness, flow) {
+  function updatePressure(fx, m, P, dt, slipness, flow) {
     const sys = fx.pressure;
     for (const pr of fx.probes) {
       const joint = m[pr.joint];
@@ -687,7 +742,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const q = Math.max(0, pr.vel.dot(pr.n));
       // A slipping hand moves fast but builds little pressure: the water slides off it instead.
       const hold = pr.hand ? 1 - 0.9 * slipness : 1;
-      const rate = Math.min(320, 90 * pr.gain * hold * q * q);
+      const rate = Math.min(320, 90 * probeGain(pr, P) * hold * q * q);
       for (let i = spawnCount(rate * dt); i > 0; i--) {
         const push = 0.55 * q * rand(0.6, 1.1);
         emit(sys, pr.pos.x + 0.03 * pr.n.x + rand(-0.03, 0.03), pr.pos.y + 0.03 * pr.n.y + rand(-0.03, 0.03),
@@ -890,7 +945,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       fx.footX = feetX / feet;
       fx.wash += (clamp(fx.washTarget / 2, 0, 1.5) - fx.wash) * Math.min(1, 3 * dt);
-      if (P.pressure) updatePressure(fx, m, dt, slipness, flow);
+      if (P.pressure) updatePressure(fx, m, P, dt, slipness, flow);
       stepFx(fx, flow, dt);
     }
     if (!P.pressure) fx.pressure.list.length = 0;
@@ -983,7 +1038,12 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // pull) leaves almost no bend direction, and its remainder can swap fore and aft. Keep a soft
     // minimum share toward "out and a little forward" so the bend direction never passes through zero.
     r.hint.set(0.5, sgn, 0);
-    r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis)).normalize();
+    r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis));
+    // A wide pull points the arm itself out and forward, along that guide; its remainder then shrinks
+    // and flips side. Blend in "up" (toward the back) as it shrinks, so the hint never vanishes.
+    const spread = r.hint.length(), up = smooth(clamp((0.42 - spread) / 0.42, 0, 1));
+    r.normal.set(0, 0, 1).addScaledVector(r.axis, -r.axis.z);
+    r.hint.addScaledVector(r.normal, up).normalize();
     const share = r.pole.dot(r.hint), floor = 0.25;
     const kept = 0.5 * (share + floor + Math.sqrt((share - floor) ** 2 + 0.01));
     r.pole.addScaledVector(r.hint, kept - share).normalize();
@@ -998,8 +1058,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const along = (UPPER ** 2 - FOREARM ** 2 + reach ** 2) / (2 * reach);
     const lift = Math.sqrt(Math.max(0, UPPER ** 2 - along ** 2));
     // Bound elbow position, not its bend direction: recovery may fold inward without crossing the torso.
+    // A positive bound saturates smoothly (tanh, not a clamp): under heavy roll the catch starts with
+    // the elbow pinned fully outward, and a clamped bound then released it so fast as the elbow bent
+    // that the bend plane, and with it the hand, swung tens of degrees in a single frame. A negative
+    // bound stays linear down to -1, where it never applies.
     r.z.set(0, sgn, 0).addScaledVector(r.axis, -sgn * r.axis.y).normalize();
-    const minOut = clamp((0.015 - along * sgn * r.axis.y) / (lift * Math.sqrt(1 - r.axis.y ** 2)), -1, 1);
+    const bound = (0.015 - along * sgn * r.axis.y) / (lift * Math.sqrt(1 - r.axis.y ** 2));
+    const minOut = bound > 0 ? Math.tanh(bound) : Math.max(bound, -1);
     const outward = r.pole.dot(r.z);
     if (outward < minOut) {
       // Keep the guide's fore/aft remainder unnormalised. When the guide points almost straight
@@ -1053,15 +1118,16 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Healthy kicks drive from the hips; a knee kick drops the thighs and bends the knees hard.
   // Each beat varies a little in size and timing (t is stroke time; zero kick stays still).
-  function poseLegs(m, P, F, t) {
+  // `body` is the body-timing phase: the clock phase, shifted in a catch-up drill (see bodyPhase).
+  function poseLegs(m, P, F, t, body) {
     const knees = F.kneekick ? 1 : 0, base = knees ? Math.max(P.kick, 0.6) : P.kick;
     const beats = knees ? 6 : P.beats ?? 6;
-    const kick = 2 * Math.PI * (beats / 2) * S.phase;
+    const kick = 2 * Math.PI * (beats / 2) * body;
     for (const [side, offset] of [['R', 0], ['L', Math.PI]]) {
       const k = base * (1 + 0.12 * noise(3 * t, offset ? 52 : 51));
       if (beats === 2 && !knees) {
         // Bigger single beats: the downbeat has to turn the hips as well as balance the legs.
-        const q = wrap(S.phase - P.catchDelay - KICK_START - (offset ? 0 : 0.5)
+        const q = wrap(body - P.catchDelay - KICK_START - (offset ? 0 : 0.5)
           + 0.01 * noise(2 * t, offset ? 62 : 61));
         const big = 1.25 * k;
         m['leg' + side].rotation.set(0, big * keyed(q, TWO_BEAT.hip), 0);
@@ -1105,17 +1171,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (node) { node.textContent = text; S.ui[key + 'Text'] = text; }
   }
 
-  // Arm-phase labels, cycle percentage, and timeline marker.
+  // Arm-phase labels, cycle percentage, and timeline marker. The timeline follows the right arm, so
+  // in a catch-up drill the marker parks in the entry while that arm waits in front.
   function updateHud(right, left) {
-    setText('right', '.lc-arm-right', PHASES[right.stage]);
-    setText('left', '.lc-arm-left', PHASES[left.stage]);
-    setText('cycle', '.lc-cycle', Math.floor(S.phase * 100 + 1e-8) % 100 + '%');
+    setText('right', '.lc-arm-right', right.held ? 'Holding' : PHASES[right.stage]);
+    setText('left', '.lc-arm-left', left.held ? 'Holding' : PHASES[left.stage]);
+    const shown = drillArms(S.phase, S.params)[0];
+    setText('cycle', '.lc-cycle', Math.floor(shown * 100 + 1e-8) % 100 + '%');
     const marker = find('marker', '.lc-timeline-marker');
-    const position = (S.phase * 100).toFixed(1) + '%';
+    const position = (shown * 100).toFixed(1) + '%';
     if (marker && S.ui.markerAt !== position) { marker.style.left = position; S.ui.markerAt = position; }
     const timeline = find('timeline', '.lc-timeline');
     if (timeline && timeline.dataset.stage !== String(right.stage)) timeline.dataset.stage = right.stage;
-    const percent = String(Math.floor(S.phase * 100));
+    const percent = String(Math.floor(shown * 100));
     if (timeline && timeline.getAttribute('aria-valuenow') !== percent) {
       timeline.setAttribute('aria-valuenow', percent);
       timeline.setAttribute('aria-valuetext', `${PHASES[right.stage]}, ${percent}% of right-arm cycle`);
@@ -1166,7 +1234,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         const q = p.velocity.dot(p.normal);
         const wet = smooth(clamp(-(p.pos.z + s.height) / 0.06, 0, 1));
         const grip = p.hand ? (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) : 0.2 * P.kick;
-        const load = -p.gain * wet * grip * q * Math.abs(q);
+        const load = -probeGain(p, P) * wet * grip * q * Math.abs(q);
         const fx = load * p.normal.x, fy = load * p.normal.y, fz = load * p.normal.z;
         if (p.hand) forward += fx;
         else {
@@ -1188,8 +1256,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // 16% of the reference arm load; exposed thighs and bent knees also add a little resistance.
     const legDrag = ['R', 'L'].reduce((sum, side) => sum + Math.sin(m['leg' + side].rotation.y) ** 2
       + Math.sin(m['knee' + side].rotation.y) ** 2, 0);
+    // A lifted head drops the hips for the length of each breath.
     const dragShape = 1 + 2 * P.hipDrop + (S.faults.sinking ? 0.35 : 0)
-      + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
+      + (S.faults.headlift ? 0.5 * Math.abs(breath) : 0) + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
       s.load += (Math.max(0, forward) - s.load) * (1 - Math.exp(-h * P.rate / 240));
@@ -1225,7 +1294,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.chest.parent.rotation.set(0, 0, 0);
     m.chest.parent.position.copy(m.bodyOrigin);
     if (scaled > 0) {
-      const next = S.phase + scaled / (120 / P.rate);
+      // A catch-up drill stretches the cycle (cycleScale) so each arm keeps its normal speed.
+      const next = S.phase + scaled / ((120 / P.rate) * (P.cycleScale || 1));
       S.cycles += Math.floor(next);
       S.phase = next % 1;
     }
@@ -1237,21 +1307,25 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
     // Flat hips moves the rotation into the shoulders; sinking legs pitches the chest up and the pelvis down.
     // Breathing deepens the roll a few degrees toward the breathing side; roll size also wanders slightly.
-    const F = S.faults, w = 2 * Math.PI, st = S.cycles + S.phase, breath = breathing(P);
+    const [rightArm, rightHeld, leftArm, leftHeld] = drillArms(S.phase, P);
+    const F = S.faults, w = 2 * Math.PI, st = S.cycles + S.phase, breath = breathing(P, rightArm, leftArm);
     const chestGain = F.overrotation ? 1.65 : F.flathips ? 1.25 : 1;
     const roll = Math.min(80, P.roll * chestGain * (1 + 0.04 * noise(2 * st, 11))) * D;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
     const hipShare = F.flathips ? 0.06 : F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
     // Two-beat timing: the kick turns the hips first and the chest follows a moment later, then both
-    // hold on the side. A six-beat kick leaves the steady, even rotation.
-    const sharp = kickTiming(P, F);
+    // hold on the side. A six-beat kick leaves the steady, even rotation. Catch-up always holds on the
+    // side, on its own timing (see bodyPhase).
+    const body = bodyPhase(S.phase, P), sharp = P.drill === 'catchup' ? 1 : kickTiming(P, F);
     const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p - P.catchDelay), sharp);
-    const bodyRoll = roll * rollAt(S.phase - 0.04 * sharp) + 6 * D * breath;
-    const pitch = F.sinking ? -14 * D : 0, legPitch = F.sinking ? -24 * D : 0;
+    const bodyRoll = roll * rollAt(body - 0.04 * sharp) + 6 * D * breath;
+    // Head lift: each breath lifts the head forward, tips the chest up and lets the hips sink.
+    const lift = F.headlift ? Math.abs(breath) : 0;
+    const pitch = (F.sinking ? -14 * D : 0) - 8 * D * lift, legPitch = (F.sinking ? -24 * D : 0) - 10 * D * lift;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
-    const yaw = (F.snaking ? 7 * D * Math.sin(w * (S.phase - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
+    const yaw = (F.snaking ? 7 * D * Math.sin(w * (body - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
-    m.pelvis.rotation.set(roll * hipShare * rollAt(S.phase + lead * (1 - sharp)), legPitch, -1.8 * yaw);
+    m.pelvis.rotation.set(roll * hipShare * rollAt(body + lead * (1 - sharp)), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
     m.pelvis.position.x = -0.36 * Math.cos(pitch);
@@ -1261,23 +1335,28 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0)
       + 0.6 * heave + S.ride.height - S.ride.hips;
     // The head stays steady while the body rolls beneath it (the neck takes up half the roll),
-    // then turns with the roll to breathe, one goggle staying in the water.
-    const steady = -0.5 * bodyRoll, turn = Math.sign(breath) * 78 * D - bodyRoll;
+    // then turns with the roll to breathe, one goggle staying in the water. A head lifter turns
+    // less and lifts the face forward out of the water instead.
+    const steady = -0.5 * bodyRoll, turn = Math.sign(breath) * (F.headlift ? 40 : 78) * D - bodyRoll;
     m.head.rotation.x = clamp(lerp(steady, turn, Math.abs(breath)), -70 * D, 70 * D) + 1.5 * D * noise(3 * st, 41);
+    m.head.rotation.y = -24 * D * lift;
 
-    const right = arm(rushed(strokePhase(S.phase, P), P), P, F);
-    const left = arm(rushed(strokePhase((S.phase + 0.5) % 1, P), P), P, F);
+    const right = arm(rushed(strokePhase(rightArm, P), P), P, F);
+    const left = arm(rushed(strokePhase(leftArm, P), P), P, F);
+    right.held = rightHeld;
+    left.held = leftHeld;
     vary(right, st, 1);
     vary(left, st + 0.5, 5);
+    shapeHands(m, P);
     const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
     poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
-    poseLegs(m, P, F, st);
+    poseLegs(m, P, F, st, body);
     moveThroughWater(m, P, scaled, slipness, breath, previousX, resetMotion);
 
     const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
     const k = P.intensity;
-    const core = Math.abs(Math.sin(w * (S.phase - ROLL_PEAK + lead))) * (0.35 + 0.65 * P.drive) * (F.flathips ? 0.3 : 1);
+    const core = Math.abs(Math.sin(w * (body - ROLL_PEAK + lead))) * (0.35 + 0.65 * P.drive) * (F.flathips ? 0.3 : 1);
     patch(m.backR, eb * k * right.back);
     patch(m.backL, eb * k * left.back);
     patch(m.triR, et * k * right.triceps);
@@ -1326,7 +1405,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const node = bar || find('timeline', '.lc-timeline');
       if (!node) return;
       const rect = node.getBoundingClientRect();
-      S.phase = wrap(clamp((event.clientX - rect.left) / rect.width, 0, 0.999));
+      S.phase = wrap(clockFor(clamp((event.clientX - rect.left) / rect.width, 0, 0.999), S.params));
       S.last = null;
       S.trailReset = true;
     };
@@ -1349,7 +1428,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (step) document.querySelector(root)?.querySelector(step)?.click();
       else {
         pause();
-        S.phase = e.key === 'Home' ? 0 : 0.999;
+        S.phase = clockFor(e.key === 'Home' ? 0 : 0.999, S.params);
         S.last = null; S.trailReset = true;
       }
     });
@@ -1392,6 +1471,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     set(params) {
       if (!params.playing) S.seekPausePending = false;
       if (!params.playing && params.speed !== S.params?.speed) S.ride = null;
+      // A new drill moves the arms at once: restart trails, splashes and the motion response cleanly.
+      if (S.params && params.drill !== S.params.drill) S.trailReset = true;
       S.params = Object.assign({}, S.params, params); S.faults = faultFlags(S.params);
       if (S.m) for (const p of S.m.probes) p.known = false;
     },

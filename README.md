@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>An interactive 3D explorer for front-crawl stroke technique.</strong><br>
-  Shape a stroke, inspect common faults, and compare two swimmers over 25–100 m.
+  Shape a stroke, find what to fix first, practise drills, and compare two swimmers over 25–100 m.
 </p>
 
 <p align="center">
@@ -39,10 +39,18 @@ cloud services or downloaded models.
 
 ## Features
 
-- **Stroke controls:** eleven settings, four presets and eight combinable faults
-  with coaching cues. The default distance stroke combines kick-led hip roll,
-  a two-beat kick, short glide and adjustable-width high-elbow "power diamond"
-  pull. All faults start off; Crossover is optional.
+- **Stroke controls:** twelve settings, four presets and nine combinable faults
+  with coaching cues, including **Head lift** (lifting the face forward to
+  breathe). The default distance stroke combines kick-led hip roll, a two-beat
+  kick, short glide, bilateral breathing every three strokes and an
+  adjustable-width high-elbow "power diamond" pull. All faults start off.
+- **Fix first:** a coaching card that ranks the single changes worth the most
+  time per 100 m at your current stroke rate (clear a fault, set the catch
+  earlier, hold the water, connect the hips, shorten an over-long glide).
+  **Apply** makes that one change. The card also shows pace per 100 m, SWOLF
+  and speed.
+- **Drills:** the swimmer demonstrates **Catch-up**, **One arm** and **Fist**
+  drills. Drills change the movement only; estimates stay on the full stroke.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
   simulated **water pressure**, slow playback and a six-phase timeline.
 - **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
@@ -137,14 +145,17 @@ both tabs, logout and private-tab access, including on iPhone.
 
 1. Pick one of four presets; edits change its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
-   Expand **Motion details** for glide length, roll, pull width, depth, entry angle, kick size
-   and kick timing (2-, 4- or 6-beat).
+   Expand **Motion details** for glide length, roll, pull width, depth, entry angle, kick size,
+   kick timing (2-, 4- or 6-beat) and breathing (every 2–5 strokes).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.
 4. Drag to orbit, scroll to zoom, or enable **Split view** (Top, Side, Front or
    Below). Add hand/foot trails, or enable **Water pressure** to see warm clouds
    build after the catch and dissipate downstream.
 5. Scrub to pause at **Entry → Catch → Pull → Push → Finish → Recovery**,
    or slow playback. **Play** resumes.
+6. Read **Fix first** for the biggest wins at the same stroke rate, and
+   **Apply** one to see the estimates and swimmer change.
+7. Pick a **Drill** to watch a practice pattern (see below).
 
 Live estimates stay pinned in the same row as the Studio / Race tabs, so they
 remain visible while scrolling the controls. Narrow screens use shorter metric
@@ -174,6 +185,34 @@ impulses; four- and six-beat kicks spread the support through the stroke.
 Bigger kicks are not a speed shortcut, and **Knee kick** wastes more of the effort.
 At 0% the legs stop kicking (unless the Knee kick fault is enabled).
 
+**Breathing** sets how many hand entries there are per breath. Odd counts
+(3, 5) alternate sides; even counts (2, 4) always breathe to the right. Turn on
+**Head lift** to see the common fault: the face lifts forward instead of
+turning with the roll, the chest rises and the hips drop on every breath.
+
+#### Fix first
+
+Fix first scores each candidate change with the same estimate as the header and
+lists the three biggest savings, in seconds per 100 m. Candidates are each
+active fault, one 15-point step of catch, slip or drive, and a glide longer than
+50%. It never changes the stroke rate, which is a pacing choice rather than a
+technique fix. When nothing saves at least half a second per 100 m, the card
+says so. **SWOLF** is strokes plus seconds for one 25 m length; lower is more
+efficient.
+
+#### Drills
+
+- **Catch-up:** each hand waits in front until the other arrives. Each arm keeps
+  its normal speed, so turnover halves; the body holds on the side of the
+  pulling arm and turns over during its recovery. The timeline follows the right
+  arm, so its marker parks in **Entry** while that arm waits.
+- **One arm:** the left arm stays long in front while the right arm strokes.
+- **Fist:** closed hands make the forearm do the catching. With **Water
+  pressure** on, the load moves from the hand up to the forearm.
+
+Waiting arms read **Holding** in the arm panel. Drills apply to Stroke studio
+only; races always swim the full stroke.
+
 ### Race
 
 1. Choose **25 m**, **50 m** or **100 m**, then **Solo** or **Two swimmers**.
@@ -188,8 +227,8 @@ Setup, distance or swimmer-count changes reset the race; lane selection and
 identical setups don't. Leaving Race pauses it. Studio remains independent.
 
 **Model limits:** steady-speed races omit dives, turns and fatigue.
-Roll, pull width, depth, entry angle and kick affect appearance, not
-estimated speed. Water effects, pressure and buoyancy are visual only and never
+Roll, pull width, depth, entry angle, kick, breathing and drills affect
+appearance, not estimated speed. Water effects, pressure and buoyancy are visual only and never
 alter results. Visual speed varies with the pulls; race progress and finish
 times use the steady-speed estimate.
 
@@ -216,6 +255,17 @@ Race **Long power** against **Short slipping**. To isolate slip,
 copy A to B, then adjust B's slip.
 
 <img src="docs/screenshots/race-comparison.png" alt="Race lab's teal and amber follow cameras comparing Long power with Short slipping" width="700">
+
+</details>
+
+<details open>
+<summary><b>Find what to fix first, then drill it</b></summary>
+
+Choose **Long power** and read **Fix first**: slip is worth the most. **Apply**
+it, then pick **Catch-up** with **Hands** trails to watch each pull start from
+a long, steady line.
+
+<img src="docs/screenshots/catch-up-fix-first.png" alt="Catch-up drill with the right arm waiting in front, hand trails, and the Fix first card ranking slip, catch and drive changes" width="700">
 
 </details>
 
@@ -248,7 +298,8 @@ ruff check .
 ruff format --check .
 ```
 
-Tests cover timing, efficiency, faults, races, buoyancy and validation.
+Tests cover timing, efficiency, faults, races, buoyancy, coaching advice,
+drills, breathing and validation.
 For UI changes, check both tabs, lane isolation, playback, scrubbing, cameras
 and narrow layouts in a browser.
 Restart the server after JavaScript or CSS edits.

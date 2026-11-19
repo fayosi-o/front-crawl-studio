@@ -184,6 +184,21 @@ class Metrics:
         """True when the hold is good enough to call it "holding water"."""
         return self.hold_quality >= HOLDING_THRESHOLD
 
+    @property
+    def seconds_per_100(self) -> float:
+        """Pace per 100 m at a steady speed (no dives or turns)."""
+        return 4.0 * self.seconds_per_25
+
+    @property
+    def speed(self) -> float:
+        """Average swimming speed in metres per second."""
+        return 25.0 / self.seconds_per_25
+
+    @property
+    def swolf(self) -> float:
+        """Strokes plus seconds for one 25 m length; lower is more efficient."""
+        return self.strokes_per_25 + self.seconds_per_25
+
 
 def estimate_metrics(
     catch_quality: float,
@@ -286,11 +301,47 @@ FAULTS: dict[str, Fault] = {
         slip=0.35,
         catch=0.25,
     ),
+    'headlift': Fault(
+        'Head lift',
+        'The head lifts forward to breathe, so the chest rises, the hips drop and each breath stalls the stroke.',
+        'Turn to breathe with one goggle in the water; the roll makes the room.',
+        drag=0.06,
+    ),
 }
 
 # With 'rushing' on, the underwater part of the cycle is squeezed into this
 # fraction of its normal time, so the hand visibly hurries through the pull.
 RUSH = 0.72
+
+DrillName = Literal['off', 'catchup', 'single', 'fist']
+
+
+@dataclass(frozen=True, slots=True)
+class Drill:
+    """A practice pattern the swimmer can demonstrate. Drills are visual only: estimates stay on the full stroke."""
+
+    label: str
+    hint: str  # what the drill isolates and what to watch for
+    cycle_scale: float = 1.0  # cycle length relative to the full stroke at the same rate
+
+
+DRILLS: dict[DrillName, Drill] = {
+    'off': Drill('Full stroke', 'The full stroke at the chosen rate.'),
+    'catchup': Drill(
+        'Catch-up',
+        'Each hand waits in front until the other arrives, so every pull starts from a long, steady line. '
+        'Each arm keeps its normal speed, so turnover halves.',
+        cycle_scale=2.0,
+    ),
+    'single': Drill(
+        'One arm',
+        'The left arm stays long in front while the right arm strokes. Watch the hips start the roll.',
+    ),
+    'fist': Drill(
+        'Fist',
+        'Closed hands leave the forearm to catch. Turn on Water pressure to see the load move up the arm.',
+    ),
+}
 
 
 def fault_drag(faults: frozenset[str]) -> float:
@@ -338,6 +389,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'kick': (0, 100),
     'beats': (2, 6),
     'glide': (0, 100),
+    'breath': (2, 5),
 }
 # Settings that move in coarser steps than 1 (kicks per arm cycle: 2, 4, or 6).
 SETTING_STEPS: dict[str, int] = {'beats': 2}
@@ -358,6 +410,7 @@ class StrokeSettings:
     kick: int = 45
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
     glide: int = 50  # front-end timing: 0 = earlier catch, 50 = normal, 100 = longer glide
+    breath: int = 3  # hand entries per breath: odd counts alternate sides, even counts breathe right
 
     def __post_init__(self) -> None:
         for name, (lo, hi) in SETTING_RANGES.items():
@@ -392,10 +445,13 @@ class ViewState:
     trail: Trail = 'off'
     trail_seconds: float = 1.5
     pressure: bool = False
+    drill: DrillName = 'off'
 
     def __post_init__(self) -> None:
         if self.emphasis not in EMPHASES:
             raise ValueError(f'unknown emphasis {self.emphasis!r}')
+        if self.drill not in DRILLS:
+            raise ValueError(f'unknown drill {self.drill!r}')
         if self.playback not in PLAYBACK_SPEEDS:
             raise ValueError(f'unsupported playback speed {self.playback!r}')
         if self.angle not in VIEW_ANGLES:
@@ -426,7 +482,7 @@ class ViewState:
         catch, slip = self.effective_hold()
         return estimate_metrics(catch, slip, s.drive / 100, s.rate, fault_drag(self.faults), s.glide)
 
-    def render_params(self, metrics: Metrics | None = None) -> dict[str, float | str | bool | list[str]]:
+    def render_params(self, metrics: Metrics | None = None) -> dict[str, int | float | str | bool | list[str]]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
         s = self.settings
         m = metrics if metrics is not None else self.metrics()
@@ -441,6 +497,9 @@ class ViewState:
             'drive': s.drive / 100,
             'kick': s.kick / 100,
             'beats': s.beats,
+            'breath': s.breath,
+            'drill': self.drill,
+            'cycleScale': DRILLS[self.drill].cycle_scale,
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,
@@ -480,6 +539,60 @@ PRESETS: dict[str, StrokeSettings] = {
 def matching_preset(settings: StrokeSettings) -> str | None:
     """Name of the preset these settings equal, or None for a custom stroke."""
     return next((name for name, preset in PRESETS.items() if preset == settings), None)
+
+
+# ---- "fix first" coaching -------------------------------------------------------------------
+
+ADVICE_STEP = 15  # percentage points: one realistic coaching step for a single session
+MIN_SAVING = 0.5  # seconds per 100 m below which a change is not worth suggesting first
+
+# Technique levers at the same stroke rate: setting, direction, title, and coaching cue.
+SETTING_ADVICE: tuple[tuple[str, int, str, str], ...] = (
+    ('catch', 1, 'Set the catch earlier', 'Tip the fingertips down and set the forearm before you pull.'),
+    ('slip', -1, 'Hold the water', 'Move the hand only as fast as it can grip, then accelerate into the push.'),
+    ('drive', 1, 'Connect the hips', 'Start each pull with the hip turn, not the arm alone.'),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Advice:
+    """One change at the same stroke rate and its estimated time saving per 100 m."""
+
+    title: str
+    cue: str
+    seconds_per_100: float = 0.0  # estimated saving, positive
+    settings: tuple[tuple[str, int], ...] = ()  # setting changes as (field, new value)
+    fault: str | None = None  # stroke fault to clear
+
+    def apply(self, view: ViewState) -> ViewState:
+        """The view with this change made; every other setting and fault is kept."""
+        faults = view.faults - {self.fault} if self.fault else view.faults
+        return replace(view, settings=view.settings.with_values(**dict(self.settings)), faults=frozenset(faults))
+
+
+def advice(view: ViewState, limit: int = 3) -> tuple[Advice, ...]:
+    """The single changes that save the most estimated time, biggest first.
+
+    Every suggestion keeps the stroke rate: rate is a pacing choice (sprint or
+    distance), so the coach only ranks technique. Each active fault, one step of
+    catch, slip, or drive, and an over-long glide are scored through the same
+    estimate as the header, and only savings of at least ``MIN_SAVING`` count.
+    """
+    active = [(key, fault) for key, fault in FAULTS.items() if key in view.faults]
+    options = [Advice(f'Fix {fault.label.lower()}', fault.cue, fault=key) for key, fault in active]
+    s = view.settings
+    for key, direction, title, cue in SETTING_ADVICE:
+        lo, hi = SETTING_RANGES[key]
+        value = int(clamp(getattr(s, key) + direction * ADVICE_STEP, lo, hi))
+        if value != getattr(s, key):
+            options.append(Advice(title, cue, settings=((key, value),)))
+    if s.glide > 50:
+        cue = 'Start the catch once the arm is long; a long pause in front bleeds speed.'
+        options.append(Advice('Shorten the glide', cue, settings=(('glide', 50),)))
+    base = view.metrics().seconds_per_100
+    scored = [replace(a, seconds_per_100=base - a.apply(view).metrics().seconds_per_100) for a in options]
+    ranked = sorted((a for a in scored if a.seconds_per_100 >= MIN_SAVING), key=lambda a: -a.seconds_per_100)
+    return tuple(ranked[:limit])
 
 
 @dataclass(frozen=True, slots=True)

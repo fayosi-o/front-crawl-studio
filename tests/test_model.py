@@ -6,14 +6,19 @@ from dataclasses import astuple
 import pytest
 
 from long_catch.model import (
+    ADVICE_STEP,
     CATCH_START,
+    DRILLS,
     FAULTS,
+    MIN_SAVING,
     PRESETS,
     RUSH,
+    Advice,
     Phase,
     RaceConfig,
     StrokeSettings,
     ViewState,
+    advice,
     arm_phases,
     cycle_duration,
     estimate_metrics,
@@ -303,3 +308,93 @@ def test_buoyancy_follows_fault_adjusted_pace_without_changing_metrics():
 def test_buoyancy_rejects_invalid_speed(speed):
     with pytest.raises(ValueError):
         waterline_pose(speed)
+
+
+def test_pace_swolf_and_speed_follow_the_estimates():
+    m = StrokeSettings().metrics()
+    assert m.seconds_per_100 == pytest.approx(4 * m.seconds_per_25)
+    assert m.swolf == pytest.approx(m.strokes_per_25 + m.seconds_per_25)
+    assert m.speed * m.seconds_per_25 == pytest.approx(25)
+    slipping = PRESETS['Short slipping'].metrics()
+    assert slipping.swolf > m.swolf and slipping.speed < m.speed
+
+
+@pytest.mark.parametrize('breath', [2, 3, 4, 5])
+def test_breathing_pattern_is_visual_only_and_reaches_the_engine(breath):
+    settings = StrokeSettings(breath=breath)
+    assert settings.metrics() == StrokeSettings().metrics()
+    assert ViewState(settings=settings).render_params()['breath'] == breath
+
+
+@pytest.mark.parametrize('breath', [0, 1, 6])
+def test_breathing_pattern_rejects_unsupported_counts(breath):
+    with pytest.raises(ValueError):
+        StrokeSettings(breath=breath)
+
+
+def test_head_lift_fault_costs_distance_and_has_a_cue():
+    clean = ViewState()
+    lifted = clean.with_fault('headlift', True)
+    assert lifted.metrics().distance_per_stroke < clean.metrics().distance_per_stroke
+    assert FAULTS['headlift'].cue
+    assert lifted.render_params()['faults'] == ['headlift']
+
+
+def test_drills_are_visual_only_and_validated():
+    clean = ViewState()
+    for name, drill in DRILLS.items():
+        view = ViewState(drill=name)
+        assert view.metrics() == clean.metrics()
+        params = view.render_params()
+        assert params['drill'] == name and params['cycleScale'] == drill.cycle_scale
+        assert params['speed'] == clean.render_params()['speed']
+    assert DRILLS['catchup'].cycle_scale == 2.0
+    assert all(DRILLS[name].cycle_scale == 1.0 for name in ('off', 'single', 'fist'))
+    with pytest.raises(ValueError):
+        ViewState(drill='kickboard')
+
+
+def test_races_always_swim_the_full_stroke():
+    lane = RaceConfig((ViewState(),), 50).render_params()['lanes'][0]['params']
+    assert (lane['drill'], lane['cycleScale']) == ('off', 1.0)
+
+
+def test_advice_ranks_real_savings_biggest_first():
+    view = ViewState(faults=frozenset({'sinking', 'rushing', 'headlift'}))
+    tips = advice(view, limit=10)
+    savings = [tip.seconds_per_100 for tip in tips]
+    assert savings == sorted(savings, reverse=True)
+    assert all(saving >= MIN_SAVING for saving in savings)
+    before = view.metrics().seconds_per_100
+    for tip in tips:
+        after = tip.apply(view)
+        assert before - after.metrics().seconds_per_100 == pytest.approx(tip.seconds_per_100)
+        assert after.settings.rate == view.settings.rate
+    assert {tip.fault for tip in tips} >= {'sinking', 'rushing', 'headlift'}
+    assert tips[0].fault == 'rushing'
+    assert advice(view) == tips[:3]
+
+
+def test_advice_changes_one_thing_at_a_time():
+    view = ViewState(settings=StrokeSettings(glide=90), faults=frozenset({'crossover'}))
+    for tip in advice(view, limit=10):
+        after = tip.apply(view)
+        keys = ('catch', 'slip', 'drive', 'glide')
+        changed = [key for key in keys if getattr(after.settings, key) != getattr(view.settings, key)]
+        assert len(changed) + len(view.faults - after.faults) == 1
+        for key in changed:
+            step = abs(getattr(after.settings, key) - getattr(view.settings, key))
+            assert step <= ADVICE_STEP or key == 'glide'
+    assert any(tip.settings == (('glide', 50),) for tip in advice(view, limit=10))
+
+
+def test_advice_is_empty_for_a_clean_ideal_stroke():
+    assert advice(ViewState(settings=StrokeSettings(catch=100, slip=0, drive=100))) == ()
+
+
+def test_advice_apply_keeps_unrelated_view_options():
+    view = ViewState(faults=frozenset({'snaking', 'crossover'}), split=True, drill='fist', trail='hands')
+    tip = Advice('Fix snaking', 'cue', fault='snaking')
+    after = tip.apply(view)
+    assert after.faults == frozenset({'crossover'})
+    assert (after.split, after.drill, after.trail, after.settings) == (True, 'fist', 'hands', view.settings)

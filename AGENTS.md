@@ -24,8 +24,14 @@ serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
   the pressure view and the per-stroke surge) reads the measured limb motion and
   is also visual only: it must never feed back into the pose, phase, or metrics.
 - The default stroke is a distance stroke: a two-beat kick (contralateral
-  downbeat with each catch drives the hip roll). Pull width and kick timing are
-  visual only.
+  downbeat with each catch drives the hip roll). Pull width, kick timing and
+  breathing pattern are visual only.
+- Drills are data in `model.DRILLS` and visual only: `engine.js` remaps the
+  cycle clock onto each arm (`drillArms`), and catch-up also doubles the cycle
+  (`cycleScale`) and shifts the body timing (`bodyPhase`). Races always swim
+  the full stroke.
+- "Fix first" coaching lives in `model.advice`: it scores single changes with
+  the same estimate as the header and never changes the stroke rate.
 
 ### Adding a stroke fault
 
@@ -118,6 +124,9 @@ These problems cost real time before. Plan around them.
 
 ### Long browser runs
 
+- A long synchronous evaluate blocks NiceGUI's socket, and the page reloads,
+  losing helpers defined on `window`. Keep each call to about ten sweeps and
+  redefine helpers at the top of each call.
 - An evaluate longer than about a minute returns a deferred result. Deferred
   results are easily lost: by a page reload, a server restart, or simply
   expiring. Split sweeps into chunks of about a minute (for example, one
@@ -143,11 +152,24 @@ These problems cost real time before. Plan around them.
   - a bend-direction guide nearly parallel to the shoulder→hand axis;
   - a world-referenced guide under heavy body roll, where "out and up" can
     point back along the arm;
-  - a palm twist angle crossing ±180°.
+  - a palm twist angle crossing ±180°;
+  - a hard `clamp` on a bound that releases quickly: under heavy roll the
+    elbow's outward bound (`minOut`) sat at 1 and then fell fast as the elbow
+    bent, swinging the bend plane, and through the palm-twist fold the hand,
+    by 60–90° in one step. A `tanh` on the positive side fixed it;
+  - a fallback guide that can itself run along the arm: the "out and a little
+    forward" hint is parallel to a 100%-width pull, so it now blends in "up"
+    as its remainder shrinks.
 - Fix these with continuous constructions: soft minimum shares, a partial
   roll, or folding the angle. Avoid `if (length < threshold)` fallbacks, which
   create a new discontinuity at the threshold.
-- Verify with a sweep, not by watching. Step 1/250 to 1/500 of a cycle across
+- The palm-twist fold beyond ±135° moves about 3× faster than its input, so
+  any fast swing of the bend plane is amplified there. Look for the swing
+  rather than retuning the fold; the normal stroke uses that range.
+- Verify with a sweep, not by watching. Compare old and new code in one session
+  with a temporary `window.__flag` toggle, and give every sweep a complete set
+  of params: `LongCatch.set` merges, so a field left out keeps the previous
+  config's value. Step 1/250 to 1/500 of a cycle across
   catch, slip, width, depth, exit and faults. Flag elbow moves over 0.06 m or
   hand turns over about 25–40° in one step. Find the wrists as the two
   3-child groups that travel furthest; the elbow is `wrist.parent`. Accept

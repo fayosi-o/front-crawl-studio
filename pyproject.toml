@@ -1,6 +1,6 @@
 [project]
 name = "long-catch"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local 3D front-crawl stroke explorer."
 requires-python = ">=3.12"
 readme = "README.md"

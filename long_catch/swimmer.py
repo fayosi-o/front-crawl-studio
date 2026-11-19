@@ -48,6 +48,7 @@ def ellipsoid(sx: float, sy: float, sz: float, color: str, opacity: float = 1.0)
 
 # ---- head geometry (chest frame, metres) ----------------------------------------------------
 Vec = tuple[float, float, float]
+NECK_X = 0.29  # base of the neck along the spine; the head turns and lifts about this point
 HEAD_CENTRE: Vec = (0.50, 0.0, 0.015)
 HEAD_AXES: Vec = (0.1375, 0.0935, 0.113)  # skull semi-axes: crown (+x), side (y), back of head (+z)
 EYE_DIR: Vec = (0.04, 0.052, -0.097)  # right/left eye offset from the head centre (y sign flipped per side)
@@ -105,9 +106,10 @@ class SwimmerBuilder:
         with ui.scene.group().move(0, 0, -0.06):
             with self._register('chest', ui.scene.group()):
                 self._torso()
-                # Pivots about the spine (chest x-axis) so the engine can turn the head to breathe.
-                with self._register('head', ui.scene.group()):
-                    self._head()
+                # Pivots at the base of the neck: about the spine (x) to breathe, about y to lift.
+                with self._register('head', ui.scene.group().move(NECK_X, 0, 0)):
+                    with ui.scene.group().move(-NECK_X, 0, 0):
+                        self._head()
                 for side, sign in SIDES:
                     self._arm(side, sign)
             with self._register('pelvis', ui.scene.group().move(-0.36, 0, 0)):
@@ -149,7 +151,7 @@ class SwimmerBuilder:
         are not stretched by that scale.
         """
         c = self.colors
-        with ui.scene.group().move(0.29, 0, 0):
+        with ui.scene.group().move(NECK_X, 0, 0):
             limb_x(0.11, 0.052, 0.045, c.skin)
         centre, axes = HEAD_CENTRE, HEAD_AXES
         # Chin: in swim pose "down and forward" maps to -x and -z.

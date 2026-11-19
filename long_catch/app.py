@@ -12,6 +12,7 @@ from nicegui import ui
 from long_catch.auth import hosted
 from long_catch.engine import BrowserEngine, RaceEngine, engine_script
 from long_catch.model import (
+    DRILLS,
     EMPHASES,
     FAULTS,
     PHASE_LABELS,
@@ -21,11 +22,13 @@ from long_catch.model import (
     RACE_PLAYBACK_SPEEDS,
     SETTING_RANGES,
     TRAIL_SECONDS,
+    Advice,
     Metrics,
     Phase,
     RaceConfig,
     StrokeSettings,
     ViewState,
+    advice,
     format_duration,
     matching_preset,
     path_length,
@@ -115,9 +118,20 @@ SLIDERS: tuple[SliderSpec, ...] = (
         '6-beat drive',
         step=2,
     ),
+    SliderSpec(
+        'breath',
+        'Breathing',
+        ' strokes',
+        'Hand entries per breath. Odd counts alternate sides (bilateral breathing); '
+        'even counts always breathe to the right.',
+        'every 2',
+        'every 5',
+    ),
 )
 # Import-time checks that the UI tables stay in step with the model.
 assert {spec.key for spec in SLIDERS} == set(SETTING_RANGES)
+SLIDER_SPECS = {spec.key: spec for spec in SLIDERS}
+MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive')
 
 EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
 ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below'}
@@ -136,8 +150,19 @@ FAULT_ICONS = {
     'snaking': 'gesture',
     'kneekick': 'directions_bike',
     'rushing': 'fast_forward',
+    'headlift': 'arrow_upward',
 }
 assert set(FAULT_ICONS) == set(FAULTS)
+
+DRILL_LABELS = {'off': 'Full', 'catchup': 'Catch-up', 'single': 'One arm', 'fist': 'Fist'}
+assert set(DRILL_LABELS) == set(DRILLS)
+BRAND = 'Front-crawl stroke explorer'
+
+PACE: tuple[tuple[str, str, str], ...] = (
+    ('pace', 'Pace / 100 m', 'Steady-speed time for 100 m, without dives or turns.'),
+    ('swolf', 'SWOLF', 'Strokes plus seconds for one 25 m length. Lower is more efficient.'),
+    ('speed', 'Speed', 'Average swimming speed.'),
+)
 
 STATS: tuple[tuple[str, str, str], ...] = (
     ('dps', 'Distance / stroke', 'm/stroke'),
@@ -185,15 +210,24 @@ def stroke_controls(
         )
 
     for spec in SLIDERS:
-        if spec.key in ('rate', 'catch', 'slip', 'drive'):
+        if spec.key in MAIN_SLIDERS:
             build(spec)
-    with ui.expansion('Motion details', caption='Glide, roll, width, depth, entry and kick').classes(
+    with ui.expansion('Motion details', caption='Glide, roll, width, depth, entry, kick and breathing').classes(
         'lc-motion-details w-full'
     ):
         for spec in SLIDERS:
-            if spec.key not in ('rate', 'catch', 'slip', 'drive'):
+            if spec.key not in MAIN_SLIDERS:
                 build(spec)
     return sliders, values
+
+
+def change_text(settings: StrokeSettings, changes: tuple[tuple[str, int], ...]) -> str:
+    """Describe setting changes as 'Slip 8% → 0%'."""
+    parts = []
+    for key, value in changes:
+        spec = SLIDER_SPECS[key]
+        parts.append(f'{spec.label} {getattr(settings, key)}{spec.unit} → {value}{spec.unit}')
+    return ', '.join(parts)
 
 
 class LongCatchPage:
@@ -209,6 +243,8 @@ class LongCatchPage:
         self.preset_buttons: dict[str, ui.button] = {}
         self.fault_buttons: dict[str, ui.button] = {}
         self._fault_layout: frozenset[str] | None = None
+        self.pace: dict[str, ui.label] = {}
+        self._advice_layout: tuple[tuple[Advice, ...], StrokeSettings] | None = None
         self.segments: list[ui.element] = []
         self._applying_preset = False
         self._segment_layout: tuple[float, ...] = ()
@@ -293,7 +329,7 @@ class LongCatchPage:
 
             with ui.element('div').classes('lc-hud-top'):
                 with ui.element('div').classes('lc-glass lc-brand'):
-                    ui.label('Front-crawl stroke explorer').classes('lc-subtitle')
+                    self.brand = ui.label(BRAND).classes('lc-subtitle')
                     with ui.row().classes('lc-legend'):
                         for css, text in (('hold', 'holding'), ('slip', 'slipping'), ('patch', 'emphasis')):
                             with ui.element('span').classes('lc-legend-item'):
@@ -393,6 +429,8 @@ class LongCatchPage:
                 self.sliders, self.slider_values = stroke_controls(self.view.settings, self.on_slider)
 
             self._build_faults()
+            self._build_coach()
+            self._build_drills()
 
             with ui.element('div').classes('lc-card'):
                 section_title('Muscle emphasis')
@@ -465,6 +503,29 @@ class LongCatchPage:
                     self.fault_buttons[key] = button
             self.cues = ui.element('div').classes('lc-cues')
 
+    def _build_coach(self) -> None:
+        """Pace summary and the ranked changes that would save the most time at this rate."""
+        with ui.element('div').classes('lc-card lc-coach').props('aria-label="Fix first"'):
+            with ui.row().classes('lc-card-head'):
+                section_title('Fix first')
+                ui.label('same rate').classes('lc-badge').tooltip(
+                    'Suggestions keep the stroke rate; rate is a pacing choice, so only technique is ranked.'
+                )
+            with ui.element('div').classes('lc-pace'):
+                for key, caption, hint in PACE:
+                    with ui.element('div').classes('lc-pace-item').props(f'title="{hint}"'):
+                        self.pace[key] = ui.label().classes('lc-pace-value')
+                        ui.label(caption).classes('lc-stat-caption')
+            self.advice_list = ui.element('div').classes('lc-advice').props('aria-live=polite')
+
+    def _build_drills(self) -> None:
+        """Drill picker: the swimmer demonstrates a practice pattern; estimates stay on the full stroke."""
+        with ui.element('div').classes('lc-card'):
+            section_title('Drills')
+            drill = ui.toggle(DRILL_LABELS, value=self.view.drill, on_change=lambda e: self.update(drill=e.value))
+            drill.props('no-caps spread unelevated').classes('lc-segmented lc-drill-toggle')
+            self.drill_hint = ui.label().classes('lc-drill-hint')
+
     # ---- state ---------------------------------------------------------------------------------
 
     def update(self, **changes: Any) -> None:
@@ -480,17 +541,26 @@ class LongCatchPage:
         if not self._applying_preset:
             self.update(settings=self.view.settings.with_values(**{spec.key: int(value)}))
 
-    def apply_preset(self, name: str) -> None:
-        """Move every slider to the preset, then apply it as a single state change."""
-        preset = PRESETS[name]
-        # Suppress per-slider updates so the preset applies as one render.
+    def _move_sliders(self, settings: StrokeSettings) -> None:
+        """Move every slider to ``settings`` without triggering one update per slider."""
         self._applying_preset = True
         try:
             for key, slider in self.sliders.items():
-                slider.value = getattr(preset, key)
+                slider.value = getattr(settings, key)
         finally:
             self._applying_preset = False
+
+    def apply_preset(self, name: str) -> None:
+        """Move every slider to the preset, then apply it as a single state change."""
+        preset = PRESETS[name]
+        self._move_sliders(preset)
         self.update(settings=preset)
+
+    def apply_advice(self, tip: Advice) -> None:
+        """Make one suggested change (a setting step or a cleared fault) as a single state change."""
+        target = tip.apply(self.view)
+        self._move_sliders(target.settings)
+        self.update(settings=target.settings, faults=target.faults)
 
     def toggle_play(self) -> None:
         """Play or pause the animation."""
@@ -519,9 +589,47 @@ class LongCatchPage:
         self._render_presets()
         self._render_faults()
         self._render_stats(metrics)
+        self._render_coach(metrics)
+        self._render_drill()
         self._render_timeline()
         self._render_view()
         self.engine.set(self.view.render_params(metrics))
+
+    def _render_coach(self, metrics: Metrics) -> None:
+        """Pace summary, then the ranked suggestions (rebuilt only when they change)."""
+        self.pace['pace'].text = format_duration(metrics.seconds_per_100)
+        self.pace['swolf'].text = f'{metrics.swolf:.0f}'
+        self.pace['speed'].text = f'{metrics.speed:.2f} m/s'
+        tips = advice(self.view)
+        layout = (tips, self.view.settings)
+        if layout == self._advice_layout:
+            return
+        self._advice_layout = layout
+        self.advice_list.clear()
+        with self.advice_list:
+            if not tips:
+                ui.label('Nothing big left to fix at this stroke rate.').classes('lc-cue lc-cue-empty')
+            for rank, tip in enumerate(tips, start=1):
+                with ui.element('div').classes('lc-tip'):
+                    ui.label(str(rank)).classes('lc-tip-rank')
+                    with ui.element('div').classes('lc-tip-text'):
+                        ui.label(tip.title).classes('lc-tip-title')
+                        detail = change_text(self.view.settings, tip.settings) if tip.settings else tip.cue
+                        ui.label(detail).classes('lc-tip-detail')
+                        if tip.settings:
+                            ui.label(tip.cue).classes('lc-tip-detail lc-tip-cue')
+                    with ui.element('div').classes('lc-tip-side'):
+                        saving = ui.label(f'−{tip.seconds_per_100:.1f} s').classes('lc-tip-gain')
+                        saving.tooltip('Estimated time saved per 100 m')
+                        apply = ui.button('Apply', on_click=lambda t=tip: self.apply_advice(t))
+                        apply.props(f'flat dense no-caps aria-label="Apply: {tip.title}"').classes('lc-tip-apply')
+
+    def _render_drill(self) -> None:
+        """Explain the selected drill and name it on the stage."""
+        drill = self.view.drill
+        hint = DRILLS[drill].hint
+        self.drill_hint.text = hint if drill == 'off' else f'{hint} Estimates stay on the full stroke.'
+        self.brand.text = BRAND if drill == 'off' else f'{DRILLS[drill].label} drill'
 
     def _render_view(self) -> None:
         """Show or hide the second camera; it is created on first use so a single view stays cheap."""

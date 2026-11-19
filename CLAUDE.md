@@ -13,3 +13,7 @@
   http://127.0.0.1:8080/ rather than `playwright-cli` or the VS Code browser.
 - `node --check long_catch/static/engine.js` works here (Node is installed for
   checks only; the app itself still must not use Node).
+- The first `import nicegui` after a while can take several minutes of slow
+  disk reads (CPU time stays under a second), so the first `pytest` run or
+  server start may look hung. Run them in the background; later runs take
+  seconds.
