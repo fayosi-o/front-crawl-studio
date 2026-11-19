@@ -6,7 +6,7 @@ import json
 from functools import cache
 from typing import Any
 
-from nicegui import ui
+from nicegui import Client, ui
 
 from long_catch.model import FINISH_START, PHASE_LABELS, PULL_START, PUSH_START
 from long_catch.swimmer import BODY, SceneIds
@@ -36,10 +36,23 @@ def engine_script() -> str:
     return f'<script>window.LONG_CATCH_CONFIG = {json.dumps(config)};\n{source}\n{race}</script>'
 
 
+def js_call(client: Client, target: str, method: str, args: tuple[Any, ...]) -> None:
+    """Call ``target.method(*args)`` in the browser of ``client``.
+
+    Engines send through the client they were created for, not ``ui.run_javascript``,
+    which finds the page through the element that started the update; that element can
+    be deleted by the same update (e.g. Fix first's Apply button rebuilds its own list).
+    """
+    # json.dumps makes every argument a JS literal, so nothing is spliced in raw.
+    arguments = ', '.join(json.dumps(arg) for arg in args)
+    client.run_javascript(f'{target} && {target}.{method}({arguments})')
+
+
 class BrowserEngine:
     """Sends commands to ``window.LongCatch`` for one connected client."""
 
     def __init__(self) -> None:
+        self.client = ui.context.client
         self.started = False
 
     def start(self, scene_id: int, ids: SceneIds, params: dict[str, Any]) -> None:
@@ -74,17 +87,15 @@ class BrowserEngine:
         if self.started:
             self._call('setView', view_id, angle)
 
-    @staticmethod
-    def _call(method: str, *args: Any) -> None:
-        # json.dumps makes every argument a JS literal, so nothing is spliced in raw.
-        arguments = ', '.join(json.dumps(arg) for arg in args)
-        ui.run_javascript(f'window.LongCatch && window.LongCatch.{method}({arguments})')
+    def _call(self, method: str, *args: Any) -> None:
+        js_call(self.client, 'window.LongCatch', method, args)
 
 
 class RaceEngine:
     """Commands for the separate race clock; no browser state is sent to Python."""
 
     def __init__(self) -> None:
+        self.client = ui.context.client
         self.started = False
 
     def start(self, scenes: list[dict[str, Any]], config: dict) -> None:
@@ -95,7 +106,5 @@ class RaceEngine:
         if self.started:
             self.call('set', config)
 
-    @staticmethod
-    def call(method: str, *args: Any) -> None:
-        arguments = ', '.join(json.dumps(arg) for arg in args)
-        ui.run_javascript(f'window.LongCatchRace.{method}({arguments})')
+    def call(self, method: str, *args: Any) -> None:
+        js_call(self.client, 'window.LongCatchRace', method, args)
