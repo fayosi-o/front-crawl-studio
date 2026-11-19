@@ -160,3 +160,10 @@ These problems cost real time before. Plan around them.
 - In PowerShell, `git push` writes progress to stderr, which shows up as a
   red `NativeCommandError` even when the push succeeded. Read the
   `old..new main -> main` line before assuming it failed.
+
+## Git and deployment
+
+- Commit and push finished work straight to `main` without asking first.
+  Pushing to `main` deploys to Render, so push only after every check in
+  "Checks" passes, including `node tools/browser_checks.js`.
+- Never force-push `main`, rewrite its history, or push secrets.

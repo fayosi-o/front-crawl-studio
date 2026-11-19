@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__terminal__read_terminal",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git fetch)",
+      "Bash(git fetch *)",
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(mkdir *)",
+      "Bash(git -C * push *)",
+      "Bash(git -c * push *)"
+    ]
+  }
+}
