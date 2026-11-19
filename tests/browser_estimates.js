@@ -43,7 +43,7 @@ async page => {
     await view.waitForFunction(() => document.querySelector('.lc-estimate-context > .lc-section-title').textContent.trim() === '');
     assert(JSON.stringify(await values()) === JSON.stringify(editedStudio), 'Switching tabs lost studio estimates');
     const layouts = [];
-    for (const width of [1440, 1101, 1100, 1024, 1001, 1000, 900, 780, 768, 601, 600, 541, 540, 390, 320]) {
+    for (const width of [1440, 1101, 1100, 1024, 1001, 1000, 900, 780, 768, 721, 720, 601, 600, 541, 540, 390, 320]) {
       await view.setViewportSize({width, height: 900});
       await glide.scrollIntoViewIfNeeded();
       const layout = await header.evaluate(el => {

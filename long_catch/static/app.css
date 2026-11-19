@@ -315,6 +315,12 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
   }
   .lc-caption-short { display: block; white-space: nowrap; }
 }
+/* Between the phone layout and ~720px the four values share one row with the tabs. Platform
+   fallback fonts (Inter is not bundled) can be wider than Segoe UI, so give the values room. */
+@media (max-width: 720px) {
+  .lc-estimates .lc-stat { padding: 4px 3px; }
+  .lc-estimates .lc-stat-value { font-size: 0.88rem; }
+}
 @media (max-width: 600px) {
   .lc-header { gap: 6px; padding: 3px 6px; }
   .lc-mode-tabs .q-tab { width: 48px; padding: 0; }
