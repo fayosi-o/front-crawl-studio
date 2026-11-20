@@ -29,6 +29,7 @@ from long_catch.model import (
     StrokeSettings,
     ViewState,
     advice,
+    felt_load,
     format_duration,
     matching_preset,
     path_length,
@@ -339,8 +340,12 @@ class LongCatchPage:
                     for side in ('right', 'left'):
                         with ui.element('div').classes('lc-arm'):
                             ui.label(f'{side.title()} arm').classes('lc-arm-side')
-                            # The engine rewrites this text every frame.
+                            # The engine rewrites this text and the load bar every frame.
                             ui.label(Phase.ENTRY.label).classes(f'lc-arm-phase lc-arm-{side}')
+                            with ui.element('div').classes(f'lc-load lc-load-{side}').props('aria-hidden=true'):
+                                ui.label('Load').classes('lc-load-label')
+                                with ui.element('div').classes('lc-load-track'):
+                                    ui.element('div').classes('lc-load-fill')
             ui.label('Drag to orbit / scroll to zoom').classes('lc-camera-hint')
             self._build_transport()
             self.dock_button = self._icon_button('expand_more', 'Hide / show controls (H)', self.toggle_dock)
@@ -591,7 +596,7 @@ class LongCatchPage:
         self._render_stats(metrics)
         self._render_coach(metrics)
         self._render_drill()
-        self._render_timeline()
+        self._render_timeline(metrics)
         self._render_view()
         self.engine.set(self.view.render_params(metrics))
 
@@ -723,10 +728,13 @@ class LongCatchPage:
         self.hold_icon.name = 'check_circle' if metrics.holding else 'warning'
         self.hold_text.text = 'Hand hold' if metrics.holding else 'Hand slipping'
 
-    def _render_timeline(self) -> None:
-        """Size the phase segments; recovery moves with stroke rate and spinning arms squeeze the pull."""
-        length = path_length(self.view.settings.rate)
-        starts = (0.0, *timeline_boundaries(length, 'rushing' in self.view.faults, self.view.settings.glide), 1.0)
+    def _render_timeline(self, metrics: Metrics) -> None:
+        """Size the phase segments: recovery moves with stroke rate, a heavy felt load slows the
+        hand under water and shortens the recovery, and spinning arms squeeze the pull."""
+        s = self.view.settings
+        feel = felt_load(metrics.hold_quality, s.drive / 100)
+        bounds = timeline_boundaries(path_length(s.rate), 'rushing' in self.view.faults, s.glide, feel)
+        starts = (0.0, *bounds, 1.0)
         if starts == self._segment_layout:
             return
         self._segment_layout = starts

@@ -51,6 +51,10 @@ cloud services or downloaded models.
   and speed.
 - **Drills:** the swimmer demonstrates **Catch-up**, **One arm** and **Fist**
   drills. Drills change the movement only; estimates stay on the full stroke.
+- **Felt load:** the water you push back pushes back, so the arm feels heavier
+  through the pull. A **Load** bar under each arm shows that sensation, and the
+  swimmer moves to it: the hand slows through the heaviest water and the
+  recovery speeds up to keep the stroke rate. A slipping hand feels light.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
   simulated **water pressure**, slow playback and a six-phase timeline.
 - **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
@@ -190,6 +194,22 @@ At 0% the legs stop kicking (unless the Knee kick fault is enabled).
 **Head lift** to see the common fault: the face lifts forward instead of
 turning with the roll, the chest rises and the hips drop on every breath.
 
+#### Felt load
+
+Pushing water back makes the water push back on the palm and forearm, so
+through the pull the arm feels heavier, as if it were lifting a weight. The
+**Load** bar under each arm shows that sensation: empty during the reach and the
+recovery, building through the catch, heaviest as the hand passes under the
+shoulder, and released through the push. The better the hold, and the more the
+hips connect the pull, the heavier it feels; a slipping hand stays light.
+
+The swimmer moves to the load. The hand works more slowly through the heaviest
+water and the weightless recovery speeds up so the stroke rate holds: on
+**Long power** the hand leaves the water at about 81% of the cycle instead of
+77%. Watch the timeline's **Recovery** segment move as you change catch, slip or
+drive. The weight is a sensation only: it never changes buoyancy or the
+estimates, which already count the hold behind it.
+
 #### Fix first
 
 Fix first scores each candidate change with the same estimate as the header and
@@ -228,7 +248,8 @@ identical setups don't. Leaving Race pauses it. Studio remains independent.
 
 **Model limits:** steady-speed races omit dives, turns and fatigue.
 Roll, pull width, depth, entry angle, kick, breathing and drills affect
-appearance, not estimated speed. Water effects, pressure and buoyancy are visual only and never
+appearance, not estimated speed. The felt load changes arm timing, not estimated
+speed or buoyancy. Water effects, pressure and buoyancy are visual only and never
 alter results. Visual speed varies with the pulls; race progress and finish
 times use the steady-speed estimate.
 
@@ -299,7 +320,8 @@ ruff format --check .
 ```
 
 Tests cover timing, efficiency, faults, races, buoyancy, coaching advice,
-drills, breathing and validation.
+drills, breathing, felt load and validation, plus page checks with NiceGUI's
+simulated user.
 For UI changes, check both tabs, lane isolation, playback, scrubbing, cameras
 and narrow layouts in a browser.
 Restart the server after JavaScript or CSS edits.

@@ -8,7 +8,7 @@ from typing import Any
 
 from nicegui import Client, ui
 
-from long_catch.model import FINISH_START, PHASE_LABELS, PULL_START, PUSH_START
+from long_catch.model import CATCH_START, FINISH_START, LOAD_DWELL, PHASE_LABELS, PULL_START, PUSH_START
 from long_catch.swimmer import BODY, SceneIds
 from long_catch.theme import PALETTE, STATIC_DIR
 
@@ -26,6 +26,8 @@ def engine_script() -> str:
         },
         'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
+        'catchStart': CATCH_START,
+        'loadDwell': LOAD_DWELL,
         'finish': FINISH_START,
         'pull': PULL_START,
         'push': PUSH_START,

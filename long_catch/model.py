@@ -94,6 +94,46 @@ def phase_boundaries(length: float) -> tuple[float, ...]:
     return CATCH_START, PULL_START, PUSH_START, FINISH_START, exit_phase(length)
 
 
+# Felt load. The water the hand pushes back pushes back on the palm and forearm, so through the
+# pull the arm feels heavier, as if it were lifting a weight. Only the sensation grows (buoyancy
+# and the estimates are unchanged), but the arm moves to it: the hand works more slowly through
+# the heaviest water and the weightless recovery makes up the time, so the stroke rate holds.
+# A slipping hand feels light and goes through almost unslowed.
+LOAD_DWELL = 0.15  # extra time per unit of underwater path at peak load with a full hold
+
+
+def felt_load(hold_quality: float, drive_balance: float) -> float:
+    """Peak load (0–1) felt on the hand and forearm: the hold, connected to the body by the hips.
+
+    Uses the same hold and hip connection as the estimates, so a stroke that holds water in the
+    estimates also feels heavy in the arm.
+    """
+    return clamp(hold_quality, 0.0, 1.0) * (0.7 + 0.3 * clamp(drive_balance, 0.0, 1.0))
+
+
+def load_profile(phase: float, exit: float) -> float:
+    """Share (0–1) of the peak load felt at arm-path ``phase``.
+
+    Nothing during the entry and reach or in the air; the load builds as the forearm sets at the
+    catch, is heaviest as the hand passes under the shoulder, and releases through the push.
+    """
+    x = (phase % 1.0 - CATCH_START) / (exit - CATCH_START)
+    return math.sin(math.pi * x) ** 2 if 0.0 < x < 1.0 else 0.0
+
+
+def loaded_time(phase: float, exit: float, feel: float = 0.0, rush: float = 1.0) -> float:
+    """Clock phase at which the arm reaches path ``phase`` (at or before the exit).
+
+    The time the hand spends at each part of its underwater path grows with the load felt there,
+    so the catch keeps its time and every later point arrives later. ``rush`` below 1 (spinning
+    arms) squeezes the whole underwater part. The recovery fills the rest of the cycle.
+    """
+    span = exit - CATCH_START
+    x = clamp((phase - CATCH_START) / span, 0.0, 1.0)
+    held = span * (x / 2 - math.sin(2 * math.pi * x) / (4 * math.pi))  # integral of load_profile
+    return rush * (phase + LOAD_DWELL * clamp(feel, 0.0, 1.0) * held)
+
+
 def phase_to_step(phase: float, length: float = 0.5) -> Phase:
     """Map an arm phase (wrapped into [0, 1)) to its broad stroke step."""
     p = phase % 1.0
@@ -352,10 +392,16 @@ def fault_drag(faults: frozenset[str]) -> float:
     return 1.0 - keep
 
 
-def timeline_boundaries(length: float, rushed: bool = False, glide: int = 50) -> tuple[float, ...]:
-    """Phase boundaries as seen on screen; a rushed stroke squeezes the underwater part."""
+def timeline_boundaries(length: float, rushed: bool = False, glide: int = 50, feel: float = 0.0) -> tuple[float, ...]:
+    """Phase boundaries as seen on screen.
+
+    A heavy felt load (``feel``) slows the hand under water and shortens the recovery; a rushed
+    stroke squeezes the underwater part.
+    """
     bounds = phase_boundaries(length)
-    return tuple(stroke_time(b * (RUSH if rushed else 1.0), glide) for b in bounds)
+    exit = bounds[-1]
+    rush = RUSH if rushed else 1.0
+    return tuple(stroke_time(loaded_time(b, exit, feel, rush), glide) for b in bounds)
 
 
 def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
@@ -513,6 +559,7 @@ class ViewState:
             'exit': exit_phase(length),
             'faults': sorted(self.faults),
             'rush': RUSH if 'rushing' in self.faults else 1.0,
+            'feel': felt_load(m.hold_quality, s.drive / 100),
             'trail': self.trail,
             'trailSeconds': self.trail_seconds,
             'pressure': self.pressure,

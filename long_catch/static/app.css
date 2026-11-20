@@ -90,6 +90,11 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
 .lc-arm-side { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--lc-muted); }
 .lc-arm-phase { display: block; font-size: 0.9rem; font-weight: 600; white-space: nowrap; }
 .lc-arm + .lc-arm { border-left: 1px solid rgba(231, 240, 234, 0.08); }
+/* Felt load: how heavy the water feels on that hand and forearm (the engine scales the fill). */
+.lc-load { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+.lc-load-label { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--lc-muted); }
+.lc-load-track { flex: 1 1 auto; min-width: 0; height: 4px; border-radius: 2px; background: rgba(231, 240, 234, 0.12); overflow: hidden; }
+.lc-load-fill { width: 100%; height: 100%; transform: scaleX(0); transform-origin: left center; background: var(--lc-hold); }
 
 /* ---- transport dock -------------------------------------------------------------------- */
 .lc-dock {

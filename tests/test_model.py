@@ -2,6 +2,7 @@
 
 import math
 from dataclasses import astuple
+from itertools import pairwise
 
 import pytest
 
@@ -10,6 +11,7 @@ from long_catch.model import (
     CATCH_START,
     DRILLS,
     FAULTS,
+    LOAD_DWELL,
     MIN_SAVING,
     PRESETS,
     RUSH,
@@ -23,7 +25,10 @@ from long_catch.model import (
     cycle_duration,
     estimate_metrics,
     exit_phase,
+    felt_load,
     format_duration,
+    load_profile,
+    loaded_time,
     matching_preset,
     momentum_carry,
     path_length,
@@ -249,6 +254,61 @@ def test_spinning_arms_slip_and_rush_the_underwater_phase():
     assert params['slip'] > ViewState().render_params()['slip']
     assert params['rush'] == RUSH and params['faults'] == ['rushing']
     assert timeline_boundaries(0.5, rushed=True) == pytest.approx([b * RUSH for b in phase_boundaries(0.5)])
+
+
+def test_felt_load_follows_the_hold_connected_by_the_hips():
+    assert felt_load(0.0, 1.0) == 0.0
+    assert felt_load(1.0, 1.0) == 1.0
+    assert felt_load(0.9, 0.85) > felt_load(0.4, 0.85) > 0  # a slipping hand feels light
+    assert felt_load(0.9, 1.0) > felt_load(0.9, 0.0) > 0  # hip drive lets the arm lean on the water
+    assert 0.0 <= felt_load(1.5, 2.0) <= 1.0
+
+
+def test_load_builds_after_the_catch_peaks_mid_stroke_and_releases_by_the_exit():
+    exit = exit_phase(0.5)
+    samples = [load_profile(i / 1000, exit) for i in range(1000)]
+    assert all(0.0 <= s <= 1.0 for s in samples)
+    assert load_profile(0.05, exit) == 0.0  # entry and reach: nothing to push yet
+    assert load_profile(CATCH_START, exit) == 0.0 and load_profile(exit, exit) == 0.0
+    assert load_profile(0.9, exit) == 0.0  # the recovery is weightless
+    peak = max(range(1000), key=lambda i: samples[i]) / 1000
+    assert phase_to_step(peak) in {Phase.PULL, Phase.PUSH}
+    assert max(samples) == pytest.approx(1.0, abs=1e-4)
+
+
+@pytest.mark.parametrize('length', [0.0, 0.5, 1.0])
+def test_a_heavy_load_slows_the_hand_under_water_and_shortens_the_recovery(length):
+    light, heavy = timeline_boundaries(length), timeline_boundaries(length, feel=1.0)
+    assert heavy[0] == light[0] == CATCH_START  # the catch keeps its time with the kick
+    assert all(h > lo for h, lo in zip(heavy[1:], light[1:], strict=True))
+    exit = exit_phase(length)
+    assert heavy[-1] - light[-1] == pytest.approx(LOAD_DWELL * (exit - CATCH_START) / 2)
+    assert 1 - heavy[-1] > 0.15  # the recovery stays a real part of the stroke
+    # The hand slows where the load is heaviest: the pull stretches more than the finish.
+    assert heavy[2] - heavy[1] - (light[2] - light[1]) > heavy[4] - heavy[3] - (light[4] - light[3])
+
+
+def test_loaded_time_is_continuous_and_rising_with_rush_and_glide():
+    exit = exit_phase(1.0)
+    for feel, rush in [(0.0, 1.0), (1.0, 1.0), (1.0, RUSH)]:
+        times = [loaded_time(i / 1000 * exit, exit, feel, rush) for i in range(1001)]
+        assert all(b > a for a, b in pairwise(times))
+        assert max(b - a for a, b in pairwise(times)) < 2 * exit / 1000
+        assert times[-1] < 1
+    bounds = timeline_boundaries(1.0, rushed=True, glide=100, feel=1.0)
+    assert all(b > a for a, b in pairwise(bounds)) and 0 < bounds[0] and bounds[-1] < 1
+
+
+def test_felt_load_is_a_sensation_only():
+    clean, slipping = ViewState(), ViewState(settings=PRESETS['Short slipping'])
+    for view in (clean, slipping):
+        m = view.metrics()
+        assert view.render_params()['feel'] == pytest.approx(felt_load(m.hold_quality, view.settings.drive / 100))
+    assert clean.render_params()['feel'] > slipping.render_params()['feel']
+    assert ViewState(faults=frozenset({'rushing'})).render_params()['feel'] < clean.render_params()['feel']
+    # The arm feels heavier, the swimmer does not: buoyancy still follows pace alone.
+    m = clean.metrics()
+    assert clean.render_params()['rideHeight'] == waterline_pose(m.distance_per_stroke * 42 / 60)[0]
 
 
 @pytest.mark.parametrize('distance', [25, 100])

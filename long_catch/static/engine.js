@@ -152,7 +152,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
     return {
       x, out, height, elbow, recovery, elbowDir, palm, shrug: front,
-      wrist: wrist * D, under, stage,
+      wrist: wrist * D, under, stage, load: (P.feel || 0) * loadShare(p, P),
       back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),
     };
   }
@@ -162,12 +162,45 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     return p < CONFIG.pull ? p - P.frontGlide * Math.sin(Math.PI * p / CONFIG.pull) ** 2 : p;
   }
 
-  // Spinning arms race through the underwater part, leaving more of the cycle for recovery.
-  function rushed(p, P) {
-    if (P.rush >= 1) return p;
-    const exit = P.exit, early = exit * P.rush;
-    return p < early ? p * exit / early : exit + (p - early) * (1 - exit) / (1 - early);
+  // ---- felt load --------------------------------------------------------------
+  // The water the hand pushes back pushes back on the palm and forearm, so through the pull the arm
+  // feels heavier. Only the sensation grows (buoyancy and the estimates are unchanged), but the arm
+  // moves to it: the hand works more slowly through the heaviest water and the weightless recovery
+  // makes up the time. P.feel is the peak load (0-1) from Python; a slipping hand feels light.
+  // These mirror model.load_profile and model.loaded_time, which place the timeline boundaries.
+
+  // Share of the peak load at arm-path phase p: none in the reach or the air, building through the
+  // catch, heaviest as the hand passes under the shoulder, released through the push.
+  function loadShare(p, P) {
+    const x = (p - CONFIG.catchStart) / (P.exit - CONFIG.catchStart);
+    return x > 0 && x < 1 ? Math.sin(Math.PI * x) ** 2 : 0;
   }
+
+  // Clock phase at which the arm reaches path phase s (s <= exit): time at each part of the path
+  // grows with the load felt there, so the catch keeps its time. Rush < 1 (spinning arms) squeezes it all.
+  function loadedTime(s, P) {
+    const span = P.exit - CONFIG.catchStart, x = clamp((s - CONFIG.catchStart) / span, 0, 1);
+    const held = span * (x / 2 - Math.sin(2 * Math.PI * x) / (4 * Math.PI));
+    return P.rush * (s + CONFIG.loadDwell * clamp(P.feel || 0, 0, 1) * held);
+  }
+
+  // Clock phase → arm-path phase. Under water this inverts loadedTime (it rises steadily, so halving
+  // the interval converges); the recovery fills the rest of the cycle at an even pace.
+  function underwater(p, P) {
+    if (P.rush === 1 && !P.feel) return p;
+    const exit = P.exit, out = loadedTime(exit, P);
+    if (p >= out) return exit + (p - out) * (1 - exit) / (1 - out);
+    let lo = 0, hi = exit;
+    for (let i = 0; i < 32; i++) {
+      const mid = (lo + hi) / 2;
+      if (loadedTime(mid, P) < p) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  // Extra clock time the felt load adds before the hand leaves the water (rush aside).
+  const loadDelay = P => CONFIG.loadDwell * clamp(P.feel || 0, 0, 1) * (P.exit - CONFIG.catchStart) / 2;
 
   // ---- drills -----------------------------------------------------------------
   // Visual only. Each drill remaps the cycle clock onto the two arms; a waiting arm stays long in
@@ -228,7 +261,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // right. rightArm and leftArm are each arm's clock phase after any drill remap.
   // Returns -1..1: negative turns the face to the right (-y), positive to the left.
   function breathing(P, rightArm, leftArm) {
-    const t = S.cycles + S.phase, exit = P.exit, every = P.breath || 3;
+    // A loaded hand leaves the water a little later (see loadedTime); the breath waits for it.
+    const t = S.cycles + S.phase, exit = P.exit + loadDelay(P), every = P.breath || 3;
     const turnWindow = p => keyed(p, [[exit - 0.22, 0], [exit - 0.04, 1], [exit + 0.08, 1], [exit + 0.2, 0]]);
     const breathes = n => ((n % every) + every) % every === 0;  // n counts hand entries: right even, left odd
     const right = breathes(2 * Math.floor(t)) ? turnWindow(rightArm) : 0;
@@ -1173,9 +1207,21 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Arm-phase labels, cycle percentage, and timeline marker. The timeline follows the right arm, so
   // in a catch-up drill the marker parks in the entry while that arm waits in front.
-  function updateHud(right, left) {
+  // Felt-load bar under an arm's phase, in that arm's hand colour (teal holding, coral slipping).
+  function setLoad(key, selector, load, colour) {
+    const node = find(key, selector);
+    if (!node) return;
+    const scale = clamp(load, 0, 1).toFixed(2);
+    if (S.ui[key + 'At'] !== scale) { node.style.transform = `scaleX(${scale})`; S.ui[key + 'At'] = scale; }
+    if (S.ui[key + 'Colour'] !== colour) { node.style.background = colour; S.ui[key + 'Colour'] = colour; }
+  }
+
+  function updateHud(right, left, slipness) {
     setText('right', '.lc-arm-right', right.held ? 'Holding' : PHASES[right.stage]);
     setText('left', '.lc-arm-left', left.held ? 'Holding' : PHASES[left.stage]);
+    const colour = `rgb(${C.hold.map((v, i) => Math.round(255 * lerp(v, C.slip[i], slipness))).join(', ')})`;
+    setLoad('rightLoad', '.lc-load-right .lc-load-fill', right.load, colour);
+    setLoad('leftLoad', '.lc-load-left .lc-load-fill', left.load, colour);
     const shown = drillArms(S.phase, S.params)[0];
     setText('cycle', '.lc-cycle', Math.floor(shown * 100 + 1e-8) % 100 + '%');
     const marker = find('marker', '.lc-timeline-marker');
@@ -1341,8 +1387,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.head.rotation.x = clamp(lerp(steady, turn, Math.abs(breath)), -70 * D, 70 * D) + 1.5 * D * noise(3 * st, 41);
     m.head.rotation.y = -24 * D * lift;
 
-    const right = arm(rushed(strokePhase(rightArm, P), P), P, F);
-    const left = arm(rushed(strokePhase(leftArm, P), P), P, F);
+    const right = arm(underwater(strokePhase(rightArm, P), P), P, F);
+    const left = arm(underwater(strokePhase(leftArm, P), P), P, F);
     right.held = rightHeld;
     left.held = leftHeld;
     vary(right, st, 1);
@@ -1386,7 +1432,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.buoys.forEach((b, i) => {
       b.position.x = wrap((m.basePos[i] - S.offset + 4.5) / span) * span - 4.5;
     });
-    if (!externalClock) updateHud(right, left);
+    if (!externalClock) updateHud(right, left, slipness);
   }
 
   // Scrubbing the timeline seeks the right-arm phase directly.
