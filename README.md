@@ -134,7 +134,7 @@ Hosted mode requires valid authentication settings. Pages, assets and live
 connections require login. Sessions expire after 12
 hours; **Sign out → Sign out** revokes the session and its open connections.
 Cookies are Secure, HttpOnly and SameSite=Lax. Login attempts are rate-limited
-per client (the address Render's proxy appends to `X-Forwarded-For`) under a
+per client (the address Cloudflare names in `CF-Connecting-IP`) under a
 global cap, and requests started by other sites are refused, except plain links.
 Use one instance/process: sessions and limits are in memory.
 Restarts sign everyone out; credential changes require a restart.

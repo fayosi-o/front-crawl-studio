@@ -177,25 +177,25 @@ def test_login_payload_limits_and_csrf(client, credentials):
     assert client.get('/api/test').status_code == 200
 
 
-def test_rate_limit_keys_on_the_client_the_proxy_appends(client, credentials):
-    # Behind Render the socket peer is the proxy; it appends the real client to X-Forwarded-For.
-    for _ in range(5):
-        response = client.post(
-            '/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': '203.0.113.7'}
+def test_rate_limit_keys_on_the_client_cloudflare_names(client, credentials):
+    # On Render, Cloudflare names the client in CF-Connecting-IP (and refuses requests that set it
+    # themselves); X-Forwarded-For starts with whatever the client sent and ends with Render's proxies.
+    def attempt(cloudflare, forwarded):
+        return client.post(
+            '/login',
+            data={'username': 'x', 'password': ''},
+            headers={'cf-connecting-ip': cloudflare, 'x-forwarded-for': f'{forwarded}, 104.23.0.1, 10.28.0.1'},
         )
-        assert response.status_code == 401
-    blocked = client.post('/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': '203.0.113.7'})
-    assert blocked.status_code == 429
-    # A forged first entry does not change who the proxy says is calling.
-    forged = client.post(
-        '/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': '198.51.100.1, 203.0.113.7'}
-    )
-    assert forged.status_code == 429
-    # Someone else behind the same proxy can still sign in.
+
+    for i in range(5):
+        assert attempt('203.0.113.7', f'198.51.100.{i}').status_code == 401
+    # A different forged X-Forwarded-For does not give the same client fresh guesses.
+    assert attempt('203.0.113.7', '198.51.100.99').status_code == 429
+    # Someone else behind the same Render proxies can still sign in.
     other = client.post(
         '/login',
         data={'username': credentials[0].username, 'password': credentials[1]},
-        headers={'x-forwarded-for': '203.0.113.99'},
+        headers={'cf-connecting-ip': '203.0.113.99', 'x-forwarded-for': '203.0.113.99, 104.23.0.1, 10.28.0.1'},
         follow_redirects=False,
     )
     assert other.status_code == 303
@@ -203,8 +203,8 @@ def test_rate_limit_keys_on_the_client_the_proxy_appends(client, credentials):
 
 def test_global_backstop_caps_logins_whatever_the_header_says(client, credentials):
     for i in range(20):
-        client.post('/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': f'192.0.2.{i}'})
-    assert client.post('/login', data={}, headers={'x-forwarded-for': '192.0.2.200'}).status_code == 429
+        client.post('/login', data={'username': 'x', 'password': ''}, headers={'cf-connecting-ip': f'192.0.2.{i}'})
+    assert client.post('/login', data={}, headers={'cf-connecting-ip': '192.0.2.200'}).status_code == 429
     assert client.get('/health').status_code == 200
 
 

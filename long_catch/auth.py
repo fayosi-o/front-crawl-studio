@@ -108,12 +108,14 @@ class PrivateAccess:
 
     @staticmethod
     def client_id(request: HTTPConnection) -> str:
-        """Who is logging in, for the per-client limit. Behind Render's proxy the socket peer is the
-        proxy, which appends the real client to X-Forwarded-For; earlier entries can be forged, so take
-        the last one. Anyone can still send the header, which is why a global limit backs this up."""
-        forwarded = request.headers.get('x-forwarded-for', '')
-        if forwarded:
-            return forwarded.split(',')[-1].strip()[:64]
+        """Who is logging in, for the per-client limit. On Render, Cloudflare sets CF-Connecting-IP to
+        the address that connected to it and refuses requests that bring their own. X-Forwarded-For is
+        no use there: a client can forge its first entries, and the last ones are Render's own proxies,
+        shared by everyone. Without the header (a local run) the socket peer is the client. Anything
+        that reaches the app other than through Cloudflare could send the header, hence the global limit."""
+        cloudflare = request.headers.get('cf-connecting-ip', '').strip()
+        if cloudflare:
+            return cloudflare[:64]
         return request.client.host if request.client else ''
 
     @staticmethod
