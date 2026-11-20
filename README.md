@@ -204,9 +204,10 @@ shoulder, and released through the push. The better the hold, and the more the
 hips connect the pull, the heavier it feels; a slipping hand stays light.
 
 The swimmer moves to the load. The hand works more slowly through the heaviest
-water and the weightless recovery speeds up so the stroke rate holds: on
-**Long power** the hand leaves the water at about 81% of the cycle instead of
-77%. Watch the timeline's **Recovery** segment move as you change catch, slip or
+water, speeds up out of the back as the load lets go, and the weightless
+recovery makes up the rest so the stroke rate holds: on **Long power** the hand
+is about a quarter slower under the shoulder, about a quarter faster at the
+exit, and leaves the water at about 82% of the cycle instead of 77%. Watch the timeline's **Recovery** segment move as you change catch, slip or
 drive. The weight is a sensation only: it never changes buoyancy or the
 estimates, which already count the hold behind it.
 

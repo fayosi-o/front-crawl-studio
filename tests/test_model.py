@@ -12,6 +12,7 @@ from long_catch.model import (
     DRILLS,
     FAULTS,
     LOAD_DWELL,
+    LOAD_RELEASE,
     MIN_SAVING,
     PRESETS,
     RUSH,
@@ -282,7 +283,7 @@ def test_a_heavy_load_slows_the_hand_under_water_and_shortens_the_recovery(lengt
     assert heavy[0] == light[0] == CATCH_START  # the catch keeps its time with the kick
     assert all(h > lo for h, lo in zip(heavy[1:], light[1:], strict=True))
     exit = exit_phase(length)
-    assert heavy[-1] - light[-1] == pytest.approx(LOAD_DWELL * (exit - CATCH_START) / 2)
+    assert heavy[-1] - light[-1] == pytest.approx(LOAD_DWELL * (exit - CATCH_START) * (0.5 - LOAD_RELEASE / 3))
     assert 1 - heavy[-1] > 0.15  # the recovery stays a real part of the stroke
     # The hand slows where the load is heaviest: the pull stretches more than the finish.
     assert heavy[2] - heavy[1] - (light[2] - light[1]) > heavy[4] - heavy[3] - (light[4] - light[3])

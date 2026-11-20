@@ -152,7 +152,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
     return {
       x, out, height, elbow, recovery, elbowDir, palm, shrug: front,
-      wrist: wrist * D, under, stage, load: (P.feel || 0) * loadShare(p, P),
+      wrist: wrist * D, under, stage, load: (P.feel || 0) * loadShare(p, P), pace: loadPace(p, P),
       back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),
     };
   }
@@ -176,11 +176,21 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     return x > 0 && x < 1 ? Math.sin(Math.PI * x) ** 2 : 0;
   }
 
+  // Clock time per unit of arm path at path phase p: above 1 where the load slows the hand, below 1
+  // as it lets go. The water reaction multiplies the measured hand speed by this, because a loaded
+  // hand moves slowly by holding the water, not by pushing it less.
+  function loadPace(p, P) {
+    const x = (p - CONFIG.catchStart) / (P.exit - CONFIG.catchStart);
+    if (!(x > 0 && x < 1)) return 1;
+    return 1 + CONFIG.loadDwell * clamp(P.feel || 0, 0, 1) * (Math.sin(Math.PI * x) ** 2 - CONFIG.loadRelease * x * x);
+  }
+
   // Clock phase at which the arm reaches path phase s (s <= exit): time at each part of the path
-  // grows with the load felt there, so the catch keeps its time. Rush < 1 (spinning arms) squeezes it all.
+  // grows with the load felt there and shrinks again as the load lets go through the push, so the
+  // catch keeps its time. Rush < 1 (spinning arms) squeezes it all.
   function loadedTime(s, P) {
     const span = P.exit - CONFIG.catchStart, x = clamp((s - CONFIG.catchStart) / span, 0, 1);
-    const held = span * (x / 2 - Math.sin(2 * Math.PI * x) / (4 * Math.PI));
+    const held = span * (x / 2 - Math.sin(2 * Math.PI * x) / (4 * Math.PI) - CONFIG.loadRelease * x ** 3 / 3);
     return P.rush * (s + CONFIG.loadDwell * clamp(P.feel || 0, 0, 1) * held);
   }
 
@@ -200,7 +210,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   // Extra clock time the felt load adds before the hand leaves the water (rush aside).
-  const loadDelay = P => CONFIG.loadDwell * clamp(P.feel || 0, 0, 1) * (P.exit - CONFIG.catchStart) / 2;
+  const loadDelay = P => CONFIG.loadDwell * clamp(P.feel || 0, 0, 1) * (P.exit - CONFIG.catchStart) * (0.5 - CONFIG.loadRelease / 3);
 
   // ---- drills -----------------------------------------------------------------
   // Visual only. Each drill remaps the cycle clock onto the two arms; a waiting arm stays long in
@@ -759,6 +769,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const joint = m[pr.joint];
       joint.localToWorld(pr.pos.set(...pr.at));
       if (pr.known) pr.vel.subVectors(pr.pos, pr.prev).divideScalar(dt);
+      if (pr.hand && m.pace) pr.vel.multiplyScalar(m.pace[pr.joint.slice(-1)]);
       pr.prev.copy(pr.pos);
       const wasKnown = pr.known;
       pr.known = true;
@@ -1266,6 +1277,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       joint.localToWorld(p.pos.set(...p.at));
       if (dt > 0 && p.known) {
         p.velocity.subVectors(p.pos, p.prev).divideScalar(dt).clampLength(0, 3);
+        if (p.hand) p.velocity.multiplyScalar(m.pace[p.joint.slice(-1)]);
         const downbeat = Math.max(0, -p.velocity.z);
         // The pool is still: include body travel, sideways drift and vertical motion.
         p.velocity.x += s.speed;
@@ -1389,6 +1401,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
     const right = arm(underwater(strokePhase(rightArm, P), P), P, F);
     const left = arm(underwater(strokePhase(leftArm, P), P), P, F);
+    m.pace = {R: right.pace, L: left.pace};
     right.held = rightHeld;
     left.held = leftHeld;
     vary(right, st, 1);

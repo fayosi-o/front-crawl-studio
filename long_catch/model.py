@@ -97,9 +97,11 @@ def phase_boundaries(length: float) -> tuple[float, ...]:
 # Felt load. The water the hand pushes back pushes back on the palm and forearm, so through the
 # pull the arm feels heavier, as if it were lifting a weight. Only the sensation grows (buoyancy
 # and the estimates are unchanged), but the arm moves to it: the hand works more slowly through
-# the heaviest water and the weightless recovery makes up the time, so the stroke rate holds.
-# A slipping hand feels light and goes through almost unslowed.
-LOAD_DWELL = 0.15  # extra time per unit of underwater path at peak load with a full hold
+# the heaviest water, speeds up out of the back as the load lets go, and the weightless recovery
+# makes up the rest of the time, so the stroke rate holds. A slipping hand feels light and goes
+# through almost unslowed.
+LOAD_DWELL = 0.36  # extra time per unit of underwater path at full load with a full hold
+LOAD_RELEASE = 0.75  # share of that time won back by the end of the push, as the load lets go
 
 
 def felt_load(hold_quality: float, drive_balance: float) -> float:
@@ -124,13 +126,16 @@ def load_profile(phase: float, exit: float) -> float:
 def loaded_time(phase: float, exit: float, feel: float = 0.0, rush: float = 1.0) -> float:
     """Clock phase at which the arm reaches path ``phase`` (at or before the exit).
 
-    The time the hand spends at each part of its underwater path grows with the load felt there,
-    so the catch keeps its time and every later point arrives later. ``rush`` below 1 (spinning
-    arms) squeezes the whole underwater part. The recovery fills the rest of the cycle.
+    The time the hand spends at each part of its underwater path grows with the load felt there
+    and shrinks again as the load lets go through the push, so the catch keeps its time, the hand
+    is slowest under the shoulder and fastest at the exit, and every point still arrives later.
+    ``rush`` below 1 (spinning arms) squeezes the whole underwater part. The recovery fills the
+    rest of the cycle.
     """
     span = exit - CATCH_START
     x = clamp((phase - CATCH_START) / span, 0.0, 1.0)
-    held = span * (x / 2 - math.sin(2 * math.pi * x) / (4 * math.pi))  # integral of load_profile
+    # Integral of load_profile, less the release (LOAD_RELEASE * x^2).
+    held = span * (x / 2 - math.sin(2 * math.pi * x) / (4 * math.pi) - LOAD_RELEASE * x**3 / 3)
     return rush * (phase + LOAD_DWELL * clamp(feel, 0.0, 1.0) * held)
 
 

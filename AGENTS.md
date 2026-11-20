@@ -25,7 +25,8 @@ serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
   is also visual only: it must never feed back into the pose, phase, or metrics.
 - The felt load is a sensation: the water the hand pushes back makes the arm
   feel heavier (`model.felt_load`, `load_profile`). It slows the hand through
-  the heaviest water and shortens the recovery (`model.loaded_time`, mirrored
+  the heaviest water, speeds it up as the load lets go (`LOAD_DWELL`,
+  `LOAD_RELEASE`) and shortens the recovery (`model.loaded_time`, mirrored
   by `underwater` in `engine.js`), so the timeline shows it, but it never
   changes buoyancy or the estimates. The HUD's Load bars show it per arm.
 - The default stroke is a distance stroke: a two-beat kick (contralateral
