@@ -201,7 +201,7 @@ More slip reduces distance per stroke, and extra drive cannot rescue a poor catc
   coasts, so a long glide pays off only with a good streamline.
 - **Body and legs.** Roll between about 35° and 55° is free; flatter or further
   adds drag. Still legs sink a little; a kick lifts them and wins back part of
-  the **Sinking legs** cost. A six-beat kick adds a little speed for a lot of
+  the **Sinking legs** cost, which grows with pace (drag rises with speed squared; the legs sink deeper on screen too). A six-beat kick adds a little speed for a lot of
   effort, a big two-beat kick only adds drag, and **Head lift** costs more the
   more often you breathe.
 - **Pull shape.** The high-elbow power diamond holds best. A hand wide of the

@@ -1403,6 +1403,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Sinking legs, less the share a kick holds up (model.KICK_LIFT): 0 without the fault.
   const legSink = (P, F) => (F.sinking ? 1 - CONFIG.kickLift * P.kick : 0);
+  // The legs also sink deeper the faster the swimmer goes (model.sink_scale: drag grows with speed squared).
+  const sinkAtPace = (P, F) => legSink(P, F)
+    * clamp((P.speed / CONFIG.sinkRefSpeed) ** 2, CONFIG.sinkSpeedRange[0], CONFIG.sinkSpeedRange[1]);
   // Lopsided pull: the right arm catches late and weak and slips, while the left holds.
   const lopsided = P => ({...P, catch: P.catch * CONFIG.lopsidedCatch, slip: clamp(P.slip + 0.2, 0, 1)});
   const slipShare = P => smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
@@ -1447,7 +1450,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const turnEarly = (v, share) => lerp(v, -Math.sign(early), share * Math.abs(early));
     const bodyRoll = roll * turnEarly(rollAt(body - 0.04 * sharp), 0.7) + 6 * D * breath;
     // Head lift: each breath lifts the head forward, tips the chest up and lets the hips sink.
-    const lift = F.headlift ? Math.abs(breath) : 0, sink = legSink(P, F);
+    const lift = F.headlift ? Math.abs(breath) : 0, sink = sinkAtPace(P, F);
     const pitch = -14 * D * sink - 8 * D * lift, legPitch = -24 * D * sink - 10 * D * lift;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 * D * Math.sin(w * (body - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);

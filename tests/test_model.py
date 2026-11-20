@@ -44,6 +44,7 @@ from long_catch.model import (
     pull_shape,
     rate_slip,
     roll_drag,
+    sink_scale,
     stroke_phase,
     stroke_time,
     timeline_boundaries,
@@ -197,7 +198,7 @@ def test_effort_counts_the_stroke_not_the_drag():
         assert ViewState(faults=frozenset({key})).metrics().effort == pytest.approx(clean.effort, rel=0.05)
     assert PRESETS['Short slipping'].metrics().effort < clean.effort
     # Height does not change the work of the same stroke.
-    assert StrokeSettings(height=200).metrics().effort == pytest.approx(clean.effort)
+    assert StrokeSettings(height=200).metrics().effort == pytest.approx(clean.effort, rel=0.01)
 
 
 @pytest.mark.parametrize('glide', [0, 50, 100])
@@ -286,7 +287,9 @@ def test_head_lift_costs_more_the_more_often_you_breathe():
 def test_height_scales_the_stroke_and_the_swimmer():
     tall, short = StrokeSettings(height=200).metrics(), StrokeSettings(height=150).metrics()
     base = StrokeSettings().metrics()
-    assert tall.distance_per_stroke / base.distance_per_stroke == pytest.approx(200 / 180)
+    assert tall.distance_per_stroke / base.distance_per_stroke == pytest.approx(
+        200 / 180, rel=0.01
+    )  # a faster swimmer's legs drag a touch more
     assert short.distance_per_stroke < base.distance_per_stroke < tall.distance_per_stroke
     assert ViewState(settings=StrokeSettings(height=200)).render_params()['scale'] == pytest.approx(200 / 180)
     for height in (149, 201):
@@ -622,3 +625,13 @@ def test_advice_apply_keeps_unrelated_view_options():
     after = tip.apply(view)
     assert after.faults == frozenset({'crossover'})
     assert (after.split, after.drill, after.trail, after.settings) == (True, 'fist', 'hands', view.settings)
+
+
+def test_sinking_legs_cost_more_at_a_faster_pace():
+    def cost(rate: int) -> float:
+        settings = StrokeSettings(rate=rate, kick=0)
+        sunk = ViewState(settings=settings, faults=frozenset({'sinking'})).metrics()
+        return 1 - sunk.distance_per_stroke / settings.metrics().distance_per_stroke
+
+    assert cost(30) < cost(42) < cost(60)
+    assert sink_scale(0.5) < 1.0 < sink_scale(1.4)

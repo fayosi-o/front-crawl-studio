@@ -67,6 +67,8 @@ KICK_THRUST = 0.05  # distance a full six-beat kick adds
 KICK_DRAG = 0.02  # drag of a full-size kick
 LEG_SINK = 0.025  # drag of still, sinking legs
 KICK_LIFT = 0.5  # share of the Sinking legs cost a full kick wins back
+SINK_REF_SPEED = 0.95  # m/s at which the legs' sinking costs its listed drag (the default stroke)
+SINK_SPEED_RANGE = (0.7, 1.5)  # how far a slow or fast pace scales it
 HEADLIFT_BREATH = 3  # breathing pattern at which Head lift costs its listed drag
 
 # Effort: the work rate of a stroke against an all-out sprint (EFFORT_SPRINT). Pushing the drag
@@ -313,10 +315,15 @@ def kick_thrust(kick: float, beats: int, knee_kick: bool = False) -> float:
     return KICK_THRUST * clamp(kick, 0.0, 1.0) * share * (0.3 if knee_kick else 1.0)
 
 
-def kick_drag(kick: float) -> float:
-    """Fraction of distance lost by the legs: still legs sink, a big kick leaves the streamline."""
+def sink_scale(speed: float) -> float:
+    """How much heavier sinking legs drag at this pace: water resistance grows with speed squared."""
+    return clamp((speed / SINK_REF_SPEED) ** 2, *SINK_SPEED_RANGE)
+
+
+def kick_drag(kick: float, sink: float = 1.0) -> float:
+    """Fraction of distance lost by the legs: still legs sink (more so at pace), a big kick leaves the streamline."""
     k = clamp(kick, 0.0, 1.0)
-    return 1.0 - (1.0 - LEG_SINK * (1.0 - k) ** 2) * (1.0 - KICK_DRAG * k * k)
+    return 1.0 - (1.0 - LEG_SINK * sink * (1.0 - k) ** 2) * (1.0 - KICK_DRAG * k * k)
 
 
 def work_rate(speed: float, hold_quality: float, stroke_rate: float, kick: float, beats: int) -> float:
@@ -513,11 +520,12 @@ DRILLS: dict[DrillName, Drill] = {
 }
 
 
-def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None) -> float:
+def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None, sink: float = 1.0) -> float:
     """Combined fractional distance loss from drag-type faults.
 
     Head lift costs more the more often the swimmer breathes, and a strong kick wins back part
-    of the Sinking legs cost by lifting the legs.
+    of the Sinking legs cost by lifting the legs. ``sink`` scales the Sinking legs cost with pace
+    (see ``sink_scale``).
     """
     s = settings or StrokeSettings()
     keep = 1.0
@@ -526,14 +534,15 @@ def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None) -
         if key == 'headlift':
             drag *= HEADLIFT_BREATH / s.breath
         elif key == 'sinking':
-            drag *= 1.0 - KICK_LIFT * s.kick / 100
+            drag *= sink * (1.0 - KICK_LIFT * s.kick / 100)
         keep *= 1.0 - drag
     return 1.0 - keep
 
 
-def body_drag(settings: StrokeSettings, faults: frozenset[str] = frozenset()) -> float:
-    """Fraction of distance lost to the body's drag: faults, body roll and the legs."""
-    parts = (fault_drag(faults, settings), roll_drag(settings.roll), kick_drag(settings.kick / 100))
+def body_drag(settings: StrokeSettings, faults: frozenset[str] = frozenset(), speed: float = SINK_REF_SPEED) -> float:
+    """Fraction of distance lost to the body's drag: faults, body roll and the legs (heavier when faster)."""
+    sink = sink_scale(speed)
+    parts = (fault_drag(faults, settings, sink), roll_drag(settings.roll), kick_drag(settings.kick / 100, sink))
     return 1.0 - math.prod(1.0 - part for part in parts)
 
 
@@ -639,11 +648,13 @@ def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, fl
     length = path_length(s.rate)
     # Metres per stroke at REFERENCE_RATE: a long path carries further only when the hand holds.
     quality = 0.60 + 0.75 * hold * connection - 0.32 * slip + LONG_STROKE_M * length**2 * hold
-    drag = body_drag(s, faults)
-    drive = drive_seconds(length, 'earlyexit' in faults, 'rushing' in faults)
-    momentum = momentum_carry(s.rate, s.glide, drive, drag)
     kick = kick_thrust(s.kick / 100, s.beats, 'kneekick' in faults)
     push = math.prod(1.0 - FAULTS[k].push for k in faults)
+    # The pace before the body's drag sets how hard the legs' sinking drags.
+    pace = quality * math.sqrt(REFERENCE_RATE / s.rate) * (1.0 + kick) * push * s.height / REFERENCE_HEIGHT
+    drag = body_drag(s, faults, pace * s.rate / 60.0)
+    drive = drive_seconds(length, 'earlyexit' in faults, 'rushing' in faults)
+    momentum = momentum_carry(s.rate, s.glide, drive, drag)
     distance_per_stroke = clamp(
         quality
         * math.sqrt(REFERENCE_RATE / s.rate)  # thrust against drag: see REFERENCE_RATE

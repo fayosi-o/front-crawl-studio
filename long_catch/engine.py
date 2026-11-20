@@ -18,6 +18,8 @@ from long_catch.model import (
     PHASE_LABELS,
     PULL_START,
     PUSH_START,
+    SINK_REF_SPEED,
+    SINK_SPEED_RANGE,
 )
 from long_catch.swimmer import BODY, SceneIds
 from long_catch.theme import PALETTE, STATIC_DIR
@@ -43,6 +45,8 @@ def engine_script() -> str:
         'pull': PULL_START,
         'push': PUSH_START,
         'kickLift': KICK_LIFT,
+        'sinkRefSpeed': SINK_REF_SPEED,
+        'sinkSpeedRange': list(SINK_SPEED_RANGE),
         'lopsidedCatch': LOPSIDED_CATCH,
         'arm': [BODY.upper_arm, BODY.forearm],
     }
