@@ -5,6 +5,7 @@ Everything here is UI-free so it can be unit tested.
 
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass, field, replace
 from enum import IntEnum
@@ -29,15 +30,50 @@ HOLDING_THRESHOLD = 0.7
 
 # Momentum between strokes: the body coasts on a passive-drag time constant once
 # the hand stops driving, so long gaps between strokes bleed speed that the next
-# catch must win back from slower water.
-GLIDE_DECAY_S = 1.6  # seconds for coasting speed to fall to 1/e
-PROPULSIVE_S = 0.85  # seconds of each stroke in which the hand drives the body
+# catch must win back from slower water. A draggy body coasts for less time.
+GLIDE_DECAY_S = 1.6  # seconds for a streamlined body's coasting speed to fall to 1/e
+PROPULSIVE_S = 0.85  # seconds the hand drives the body on a mid-length underwater path
 
-# Below this rate the stroke lengthens: a slow, patient stroke reaches further and
-# holds the water for longer, worth up to LONG_STROKE_M extra metres at the slowest rate.
-LONG_STROKE_FROM = 42.0
-LONG_STROKE_SPAN = 20.0
-LONG_STROKE_M = 1.2
+# Thrust against drag. Each stroke gives the body a push, and the water resists with a drag that
+# grows with the square of speed, so at a steady pace (push per stroke × strokes per second =
+# drag) speed grows only with the square root of the stroke rate: every extra stroke per minute
+# buys a little less, and distance per stroke falls as the rate rises. REFERENCE_RATE is where a
+# stroke's quality reads directly as metres per stroke.
+REFERENCE_RATE = 42.0
+
+# Stroke length: one curve over the whole rate range. A slower stroke has a longer underwater path
+# (the hand stays in longer and finishes further back), and that longer path also carries further
+# when the hand holds the water, worth up to LONG_STROKE_M extra metres at the slowest rate.
+SHORT_PATH_RATE = 72.0  # spm at which the path is shortest
+LONG_PATH_RATE = 22.0  # spm at which the path is longest
+LONG_STROKE_M = 0.65
+
+# A quick turnover leaves the hand less time to set the catch, so above RATE_SLIP_FROM it slips
+# more, up to RATE_SLIP at the top rate. A very good catch keeps most of its hold.
+RATE_SLIP_FROM = 50.0
+RATE_SLIP = 0.35
+
+# Swimmer height: longer levers cover more distance per stroke for the same effort.
+REFERENCE_HEIGHT = 180  # cm
+
+# Body roll outside this band costs drag: too flat fights the water with the shoulders and shortens
+# the reach, too far wastes time and balance.
+ROLL_BAND = (35, 55)  # degrees
+ROLL_COST = 0.04  # distance lost at the ends of the roll range (20° and 62°)
+
+# Kick. Still legs sink a little and drag; a kick lifts them. A six-beat kick adds some thrust,
+# a two-beat kick mostly balances; either way a big kick leaves the streamline and costs effort.
+KICK_THRUST = 0.05  # distance a full six-beat kick adds
+KICK_DRAG = 0.02  # drag of a full-size kick
+LEG_SINK = 0.025  # drag of still, sinking legs
+KICK_LIFT = 0.5  # share of the Sinking legs cost a full kick wins back
+HEADLIFT_BREATH = 3  # breathing pattern at which Head lift costs its listed drag
+
+# Effort: the work rate of a stroke against an all-out sprint (EFFORT_SPRINT). Pushing the drag
+# takes power that grows with the cube of speed, a slipping hand wastes some of it moving water,
+# swinging the arms over faster costs more, and a big, frequent kick is expensive for its thrust.
+TURNOVER_POWER = 0.4
+KICK_POWER = 0.6
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
@@ -79,19 +115,42 @@ FINISH_START = 0.66
 FRONT_GLIDE_SHIFT = 0.08  # maximum timing shift, as a fraction of the full arm cycle
 
 
+# With the Early exit fault the hand leaves at the waist: it keeps only this share of the finish.
+EARLY_EXIT_KEEP = 0.25
+
+
 def path_length(stroke_rate: float) -> float:
-    """1.0 = long underwater path (low rate), 0.0 = compact path (high rate)."""
-    return clamp((60.0 - stroke_rate) / 22.0, 0.0, 1.0)
+    """Underwater path length: 1.0 at the slowest rate (long path), 0.0 at the fastest (compact).
+
+    The one stroke-length curve: it sets where the hand leaves the water (``exit_phase``) and how
+    much extra distance a long stroke carries in the estimates.
+    """
+    return clamp((SHORT_PATH_RATE - stroke_rate) / (SHORT_PATH_RATE - LONG_PATH_RATE), 0.0, 1.0)
 
 
-def exit_phase(length: float) -> float:
-    """Phase where the hand leaves the water; longer strokes stay in longer."""
-    return 0.70 + 0.08 * clamp(length, 0.0, 1.0)
+def exit_phase(length: float, early: bool = False) -> float:
+    """Phase where the hand leaves the water; longer strokes stay in longer.
+
+    ``early`` (the Early exit fault) lifts the hand out at the waist, soon after the finish starts.
+    """
+    exit = 0.70 + 0.08 * clamp(length, 0.0, 1.0)
+    return FINISH_START + EARLY_EXIT_KEEP * (exit - FINISH_START) if early else exit
 
 
-def phase_boundaries(length: float) -> tuple[float, ...]:
+def phase_boundaries(length: float, early: bool = False) -> tuple[float, ...]:
     """Start of catch, pull, push, finish, and recovery for a given path length."""
-    return CATCH_START, PULL_START, PUSH_START, FINISH_START, exit_phase(length)
+    return CATCH_START, PULL_START, PUSH_START, FINISH_START, exit_phase(length, early)
+
+
+def drive_seconds(length: float, early: bool = False, rushed: bool = False) -> float:
+    """Seconds the hand drives the body in each stroke, from the start of the pull to the exit.
+
+    A hand's drive takes about the same time at any rate, so this is ``PROPULSIVE_S`` scaled by the
+    length of the driving path against a mid-length one: a longer path drives for longer, an early
+    exit cuts it short, and spinning arms hurry through it.
+    """
+    path = exit_phase(length, early) - PULL_START
+    return PROPULSIVE_S * path / (exit_phase(0.5) - PULL_START) * (RUSH if rushed else 1.0)
 
 
 # Felt load. The water the hand pushes back pushes back on the palm and forearm, so through the
@@ -186,22 +245,91 @@ def stroke_time(phase: float, glide: int = 50) -> float:
     return (lo + hi) / 2
 
 
-def glide_seconds(stroke_rate: float, glide: int = 50) -> float:
-    """Unpropelled coast in each stroke: the time between one push ending and the next catch."""
+def glide_seconds(stroke_rate: float, glide: int = 50, drive: float = PROPULSIVE_S) -> float:
+    """Unpropelled coast in each stroke: the time between one push ending and the next catch.
+
+    ``drive`` is the seconds the hand drives the body (see ``drive_seconds``).
+    """
     delay = stroke_time(CATCH_START, glide) - CATCH_START
-    return max(0.0, 60.0 / stroke_rate - PROPULSIVE_S + delay * cycle_duration(stroke_rate))
+    return max(0.0, 60.0 / stroke_rate - drive + delay * cycle_duration(stroke_rate))
 
 
-def momentum_carry(stroke_rate: float, glide: int = 50) -> float:
+def momentum_carry(stroke_rate: float, glide: int = 50, drive: float = PROPULSIVE_S, drag: float = 0.0) -> float:
     """Fraction of peak speed still carried when the next stroke catches (0–1).
 
     A low turnover leaves a long coast, so the next hand meets slower water
     and spends part of its pull re-accelerating the body. A higher turnover
-    keeps the body and the water around it moving between strokes.
+    keeps the body and the water around it moving between strokes. A draggy
+    body (``drag``, the fraction of distance its drag costs) slows faster in
+    the coast: drag that costs a fraction d of the distance is (1 - d)^-2 times
+    the streamlined drag, so the coast's time constant shrinks by (1 - d)^2.
     """
     if stroke_rate <= 0:
         raise ValueError('stroke_rate must be positive')
-    return math.exp(-glide_seconds(stroke_rate, glide) / GLIDE_DECAY_S)
+    decay = GLIDE_DECAY_S * (1.0 - clamp(drag, 0.0, 0.9)) ** 2
+    return math.exp(-glide_seconds(stroke_rate, glide, drive) / decay)
+
+
+def rate_slip(stroke_rate: float, catch_quality: float) -> float:
+    """Slip (0–1) added by a quick turnover: nothing up to RATE_SLIP_FROM, then growing to the top
+    rate. A hand that sets its catch well keeps most of its hold."""
+    x = clamp((stroke_rate - RATE_SLIP_FROM) / (SHORT_PATH_RATE - RATE_SLIP_FROM), 0.0, 1.0)
+    return RATE_SLIP * x * x * clamp(1.15 - catch_quality, 0.0, 1.0)
+
+
+def pull_shape(width: int, depth: int) -> float:
+    """Share (0–1) of the hold that the pull's shape keeps; ``width`` and ``depth`` in percent.
+
+    The high-elbow "power diamond" under the body holds best. A hand wide of the shoulder sweeps
+    sideways, a deep straight arm presses down before it pushes back, and the extremes (a hand
+    crossing far under the body, or one held tight against it) lose a little too.
+    """
+    w, d = width / 100, depth / 100
+    wide = max(0.0, (w - 0.5) / 0.5) ** 2
+    narrow = max(0.0, (0.15 - w) / 0.15) ** 2
+    deep = max(0.0, (d - 0.7) / 0.3) ** 2
+    shallow = max(0.0, (0.3 - d) / 0.3) ** 2
+    return 1.0 - 0.14 * wide - 0.05 * narrow - 0.10 * deep - 0.06 * shallow
+
+
+def roll_drag(roll: float) -> float:
+    """Fraction of distance lost to body roll outside ``ROLL_BAND``; none inside it."""
+    lo, hi = ROLL_BAND
+    roll_lo, roll_hi = SETTING_RANGES['roll']
+    if roll < lo:
+        return ROLL_COST * ((lo - roll) / (lo - roll_lo)) ** 2
+    if roll > hi:
+        return ROLL_COST * ((roll - hi) / (roll_hi - hi)) ** 2
+    return 0.0
+
+
+def kick_thrust(kick: float, beats: int, knee_kick: bool = False) -> float:
+    """Fraction of distance the kick adds; ``kick`` is the amplitude (0–1).
+
+    A six-beat kick drives; a two-beat kick mostly times the roll and keeps a quarter of that
+    thrust. Kicking from the knees wastes most of it.
+    """
+    share = 0.25 + 0.75 * (beats - 2) / 4
+    return KICK_THRUST * clamp(kick, 0.0, 1.0) * share * (0.3 if knee_kick else 1.0)
+
+
+def kick_drag(kick: float) -> float:
+    """Fraction of distance lost by the legs: still legs sink, a big kick leaves the streamline."""
+    k = clamp(kick, 0.0, 1.0)
+    return 1.0 - (1.0 - LEG_SINK * (1.0 - k) ** 2) * (1.0 - KICK_DRAG * k * k)
+
+
+def work_rate(speed: float, hold_quality: float, stroke_rate: float, kick: float, beats: int) -> float:
+    """Power a stroke puts in, in arbitrary units (see ``EFFORT_SPRINT`` for the scale).
+
+    ``speed`` is the pace the stroke's own push would make in a streamlined body, relative to the
+    swimmer's height (m/s per 180 cm): a draggy body slows the swimmer without making the stroke
+    any easier, and a taller swimmer is not charged for a longer stroke.
+    """
+    arms = speed**3 / (0.3 + 0.4 * clamp(hold_quality, 0.0, 1.0))  # a slipping hand wastes some on the water
+    turnover = TURNOVER_POWER * (stroke_rate / 60.0) ** 3
+    legs = KICK_POWER * clamp(kick, 0.0, 1.0) ** 2 * beats / 6
+    return arms + turnover + legs
 
 
 def format_duration(seconds: float) -> str:
@@ -223,6 +351,7 @@ class Metrics:
     strokes_per_25: float
     seconds_per_25: float
     momentum: float = 1.0  # 0–1: speed carried into the next catch (see momentum_carry)
+    effort: float = 0.0  # 0–1: work rate against an all-out sprint (see work_rate)
 
     @property
     def holding(self) -> bool:
@@ -245,45 +374,6 @@ class Metrics:
         return self.strokes_per_25 + self.seconds_per_25
 
 
-def estimate_metrics(
-    catch_quality: float,
-    slip: float,
-    drive_balance: float,
-    stroke_rate: float,
-    drag: float = 0.0,
-    glide: int = 50,
-) -> Metrics:
-    """Estimate stroke efficiency from fractional inputs (0–1) and a rate in spm.
-
-    Drive only scales the benefit of a good hold, so it cannot rescue a poor
-    catch or heavy slip. Slip also costs distance directly, rates above 56 spm
-    shorten the stroke, rates below 42 spm lengthen it only as far as the hand
-    holds water, low rates and longer glides lose momentum between strokes,
-    and ``drag`` (from faults) removes a fixed fraction.
-    """
-    hold_quality = clamp(0.6 * catch_quality + 0.4 * (1.0 - slip), 0.0, 1.0)
-    # Drive multiplies the hold rather than adding to it.
-    connection = 0.7 + 0.3 * drive_balance
-    rate_penalty = max(0.0, stroke_rate - 56.0) / 80.0
-    reach = clamp((LONG_STROKE_FROM - stroke_rate) / LONG_STROKE_SPAN, 0.0, 1.0) ** 1.5
-    momentum = momentum_carry(stroke_rate, glide)
-    distance_per_stroke = clamp(
-        (0.55 + 0.75 * hold_quality * connection - 0.40 * slip - rate_penalty + LONG_STROKE_M * reach * hold_quality)
-        * (0.80 + 0.20 * momentum)
-        * (1.0 - drag),
-        0.45,
-        2.20,
-    )
-    strokes_per_25 = 25.0 / distance_per_stroke
-    return Metrics(
-        hold_quality=hold_quality,
-        distance_per_stroke=distance_per_stroke,
-        strokes_per_25=strokes_per_25,
-        seconds_per_25=strokes_per_25 * 60.0 / stroke_rate,
-        momentum=momentum,
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class Fault:
     """A common stroke error that can be switched on to show its shape and cost."""
@@ -291,9 +381,10 @@ class Fault:
     label: str
     hint: str  # what the fault looks like
     cue: str  # coaching cue that fixes it
-    drag: float = 0.0  # fraction of distance per stroke lost
+    drag: float = 0.0  # fraction of distance per stroke lost to body drag (also shortens the coast)
     slip: float = 0.0  # added to slip (0–1)
     catch: float = 0.0  # removed from catch quality (0–1)
+    push: float = 0.0  # fraction of each stroke's push lost
 
 
 FAULTS: dict[str, Fault] = {
@@ -348,11 +439,35 @@ FAULTS: dict[str, Fault] = {
     ),
     'headlift': Fault(
         'Head lift',
-        'The head lifts forward to breathe, so the chest rises, the hips drop and each breath stalls the stroke.',
+        'The head lifts forward to breathe, so the chest rises, the hips drop and each breath stalls the stroke. '
+        'The more often you breathe, the more it costs.',
         'Turn to breathe with one goggle in the water; the roll makes the room.',
-        drag=0.06,
+        drag=0.06,  # at a breath every HEADLIFT_BREATH strokes
+    ),
+    'earlyexit': Fault(
+        'Early exit',
+        'The hand lifts out at the waist, cutting off the end of the push, its fastest part.',
+        'Push all the way past the hip; brush the thigh with the thumb before you lift.',
+        push=0.07,
+    ),
+    'droppedelbow': Fault(
+        'Dropped elbow',
+        'The elbow sinks below the hand at the catch, so the palm presses down and slides instead of pushing back.',
+        'Keep the elbow near the surface and tip the hand and forearm down beneath it.',
+        catch=0.30,
+        slip=0.08,
+    ),
+    'lopsided': Fault(
+        'Lopsided pull',
+        'The right arm catches late and presses down while the left holds, so the pull is uneven '
+        'and the body yaws off line.',
+        'Match the right catch to the left; practise one-arm drill on the weaker side.',
+        catch=0.12,
+        drag=0.03,
     ),
 }
+# The right arm's catch with the Lopsided pull fault, as a share of the left arm's (engine.js).
+LOPSIDED_CATCH = 0.55
 
 # With 'rushing' on, the underwater part of the cycle is squeezed into this
 # fraction of its normal time, so the hand visibly hurries through the pull.
@@ -389,21 +504,39 @@ DRILLS: dict[DrillName, Drill] = {
 }
 
 
-def fault_drag(faults: frozenset[str]) -> float:
-    """Combined fractional distance loss from drag-type faults."""
+def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None) -> float:
+    """Combined fractional distance loss from drag-type faults.
+
+    Head lift costs more the more often the swimmer breathes, and a strong kick wins back part
+    of the Sinking legs cost by lifting the legs.
+    """
+    s = settings or StrokeSettings()
     keep = 1.0
     for key in faults:
-        keep *= 1.0 - FAULTS[key].drag
+        drag = FAULTS[key].drag
+        if key == 'headlift':
+            drag *= HEADLIFT_BREATH / s.breath
+        elif key == 'sinking':
+            drag *= 1.0 - KICK_LIFT * s.kick / 100
+        keep *= 1.0 - drag
     return 1.0 - keep
 
 
-def timeline_boundaries(length: float, rushed: bool = False, glide: int = 50, feel: float = 0.0) -> tuple[float, ...]:
+def body_drag(settings: StrokeSettings, faults: frozenset[str] = frozenset()) -> float:
+    """Fraction of distance lost to the body's drag: faults, body roll and the legs."""
+    parts = (fault_drag(faults, settings), roll_drag(settings.roll), kick_drag(settings.kick / 100))
+    return 1.0 - math.prod(1.0 - part for part in parts)
+
+
+def timeline_boundaries(
+    length: float, rushed: bool = False, glide: int = 50, feel: float = 0.0, early: bool = False
+) -> tuple[float, ...]:
     """Phase boundaries as seen on screen.
 
     A heavy felt load (``feel``) slows the hand under water and shortens the recovery; a rushed
-    stroke squeezes the underwater part.
+    stroke squeezes the underwater part; an early exit (``early``) cuts the finish short.
     """
-    bounds = phase_boundaries(length)
+    bounds = phase_boundaries(length, early)
     exit = bounds[-1]
     rush = RUSH if rushed else 1.0
     return tuple(stroke_time(loaded_time(b, exit, feel, rush), glide) for b in bounds)
@@ -441,6 +574,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'beats': (2, 6),
     'glide': (0, 100),
     'breath': (2, 5),
+    'height': (150, 200),
 }
 # Settings that move in coarser steps than 1 (kicks per arm cycle: 2, 4, or 6).
 SETTING_STEPS: dict[str, int] = {'beats': 2}
@@ -448,7 +582,7 @@ SETTING_STEPS: dict[str, int] = {'beats': 2}
 
 @dataclass(frozen=True, slots=True)
 class StrokeSettings:
-    """User-facing settings: percentages 0–100, rate in spm, roll and entry in degrees."""
+    """User-facing settings: percentages 0–100, rate in spm, roll and entry in degrees, height in cm."""
 
     rate: int = 42
     catch: int = 92
@@ -462,6 +596,7 @@ class StrokeSettings:
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
     glide: int = 50  # front-end timing: 0 = earlier catch, 50 = normal, 100 = longer glide
     breath: int = 3  # hand entries per breath: odd counts alternate sides, even counts breathe right
+    height: int = REFERENCE_HEIGHT  # the swimmer's height in cm; scales the stroke's length
 
     def __post_init__(self) -> None:
         for name, (lo, hi) in SETTING_RANGES.items():
@@ -475,7 +610,83 @@ class StrokeSettings:
 
     def metrics(self) -> Metrics:
         """Estimates for these settings alone, ignoring any faults."""
-        return estimate_metrics(self.catch / 100, self.slip / 100, self.drive / 100, self.rate, glide=self.glide)
+        return estimate_metrics(self)
+
+
+def effective_hold(settings: StrokeSettings, faults: frozenset[str] = frozenset()) -> tuple[float, float]:
+    """Catch quality and slip as fractions after hold-type faults and a quick turnover."""
+    catch = clamp(settings.catch / 100 - sum(FAULTS[k].catch for k in faults), 0.0, 1.0)
+    slip = settings.slip / 100 + sum(FAULTS[k].slip for k in faults) + rate_slip(settings.rate, catch)
+    return catch, clamp(slip, 0.0, 1.0)
+
+
+def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, float, float, float]:
+    """Hold quality, distance per stroke, momentum carry and work rate (see ``estimate_metrics``)."""
+    s = settings
+    catch, slip = effective_hold(s, faults)
+    hold = clamp(0.6 * catch + 0.4 * (1.0 - slip), 0.0, 1.0) * pull_shape(s.width, s.depth)
+    # Drive multiplies the hold rather than adding to it.
+    connection = 0.7 + 0.3 * s.drive / 100
+    length = path_length(s.rate)
+    # Metres per stroke at REFERENCE_RATE: a long path carries further only when the hand holds.
+    quality = 0.60 + 0.75 * hold * connection - 0.32 * slip + LONG_STROKE_M * length**2 * hold
+    drag = body_drag(s, faults)
+    drive = drive_seconds(length, 'earlyexit' in faults, 'rushing' in faults)
+    momentum = momentum_carry(s.rate, s.glide, drive, drag)
+    kick = kick_thrust(s.kick / 100, s.beats, 'kneekick' in faults)
+    push = math.prod(1.0 - FAULTS[k].push for k in faults)
+    distance_per_stroke = clamp(
+        quality
+        * math.sqrt(REFERENCE_RATE / s.rate)  # thrust against drag: see REFERENCE_RATE
+        * (0.80 + 0.20 * momentum)
+        * (1.0 + kick)
+        * push
+        * (1.0 - drag)
+        * s.height
+        / REFERENCE_HEIGHT,
+        0.40,
+        2.60,
+    )
+    speed = distance_per_stroke * s.rate / 60.0
+    streamlined = speed / (1.0 - drag) * REFERENCE_HEIGHT / s.height
+    power = work_rate(streamlined, hold, s.rate, s.kick / 100, s.beats)
+    return hold, distance_per_stroke, momentum, power
+
+
+# The all-out sprint that sets the effort scale: top rate, full six-beat kick, default technique.
+EFFORT_SPRINT = StrokeSettings(rate=72, kick=100, beats=6)
+
+
+@functools.cache
+def _sprint_power() -> float:
+    return _stroke(EFFORT_SPRINT, frozenset())[3]
+
+
+def estimate_metrics(settings: StrokeSettings, faults: frozenset[str] = frozenset()) -> Metrics:
+    """Estimate a stroke's efficiency and effort from its settings and active faults.
+
+    - Hold: catch and slip, after faults and the extra slip of a quick turnover, kept or lost by
+      the pull's shape. Drive multiplies the hold, so it cannot rescue a poor catch or heavy slip,
+      and slip also costs distance directly.
+    - Length: a slower stroke's longer underwater path carries further, only as far as the hand
+      holds the water.
+    - Thrust against drag: distance per stroke falls with the square root of the rate, so a higher
+      rate is faster but each extra stroke buys less.
+    - Momentum: low rates, longer glides and a draggy body lose speed between strokes.
+    - Drag: faults, roll outside its band, still legs and a big kick each cost a fraction; a kick
+      adds a little thrust; an early exit loses part of each push. Height scales the stroke.
+    - Effort: the work rate against an all-out sprint (``EFFORT_SPRINT``), capped at 1.
+    """
+    hold, distance_per_stroke, momentum, power = _stroke(settings, faults)
+    strokes_per_25 = 25.0 / distance_per_stroke
+    return Metrics(
+        hold_quality=hold,
+        distance_per_stroke=distance_per_stroke,
+        strokes_per_25=strokes_per_25,
+        seconds_per_25=strokes_per_25 * 60.0 / settings.rate,
+        momentum=momentum,
+        effort=clamp(power / _sprint_power(), 0.0, 1.0),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,17 +735,16 @@ class ViewState:
         return replace(self, faults=frozenset(faults))
 
     def effective_hold(self) -> tuple[float, float]:
-        """Catch quality and slip as fractions after hold-type faults."""
-        s = self.settings
-        catch = s.catch / 100 - sum(FAULTS[k].catch for k in self.faults)
-        slip = s.slip / 100 + sum(FAULTS[k].slip for k in self.faults)
-        return clamp(catch, 0.0, 1.0), clamp(slip, 0.0, 1.0)
+        """Catch quality and slip as fractions after hold-type faults and a quick turnover."""
+        return effective_hold(self.settings, self.faults)
+
+    def exit_phase(self) -> float:
+        """Phase where the hand leaves the water, after the Early exit fault."""
+        return exit_phase(path_length(self.settings.rate), 'earlyexit' in self.faults)
 
     def metrics(self) -> Metrics:
         """Estimates for the settings with every active fault applied."""
-        s = self.settings
-        catch, slip = self.effective_hold()
-        return estimate_metrics(catch, slip, s.drive / 100, s.rate, fault_drag(self.faults), s.glide)
+        return estimate_metrics(self.settings, self.faults)
 
     def render_params(self, metrics: Metrics | None = None) -> dict[str, int | float | str | bool | list[str]]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
@@ -542,6 +752,7 @@ class ViewState:
         m = metrics if metrics is not None else self.metrics()
         length = path_length(s.rate)
         catch, slip = self.effective_hold()
+        drive = drive_seconds(length, 'earlyexit' in self.faults, 'rushing' in self.faults)
         speed = m.distance_per_stroke * s.rate / 60.0
         ride_height, hip_drop = waterline_pose(speed)
         return {
@@ -564,7 +775,8 @@ class ViewState:
             'playing': self.playing,
             'playback': self.playback,
             'length': length,
-            'exit': exit_phase(length),
+            'exit': self.exit_phase(),
+            'scale': s.height / REFERENCE_HEIGHT,  # the swimmer's size against the 180 cm model
             'faults': sorted(self.faults),
             'rush': RUSH if 'rushing' in self.faults else 1.0,
             'feel': felt_load(m.hold_quality, s.drive / 100),
@@ -575,14 +787,15 @@ class ViewState:
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
             # Share of each stroke spent coasting; the engine shapes the speed surge from it.
-            'glide': glide_seconds(s.rate, s.glide) * s.rate / 60.0,
+            'glide': glide_seconds(s.rate, s.glide, drive) * s.rate / 60.0,
             'rideHeight': ride_height,
             'hipDrop': hip_drop,
         }
 
 
-# Example strokes, ordered from most to least efficient (keys 1–4 in the UI).
-# The first three are distance strokes built on a two- or four-beat kick.
+# Example strokes, ordered from most to least efficient by SWOLF (strokes plus seconds per 25 m,
+# lower first; keys 1–4 in the UI). The first three are distance strokes built on a two- or
+# four-beat kick. Presets set the stroke, not the swimmer: they keep the swimmer's height.
 PRESETS: dict[str, StrokeSettings] = {
     'Long power': StrokeSettings(rate=42, catch=92, roll=46, slip=8, width=35, drive=85, kick=45, beats=2),
     'Long light': StrokeSettings(rate=44, catch=88, roll=44, slip=10, width=40, drive=70, kick=30, beats=2),
@@ -591,9 +804,14 @@ PRESETS: dict[str, StrokeSettings] = {
 }
 
 
+def preset_for(name: str, settings: StrokeSettings) -> StrokeSettings:
+    """Preset ``name`` for the swimmer in ``settings``: the preset's stroke at their height."""
+    return PRESETS[name].with_values(height=settings.height)
+
+
 def matching_preset(settings: StrokeSettings) -> str | None:
-    """Name of the preset these settings equal, or None for a custom stroke."""
-    return next((name for name, preset in PRESETS.items() if preset == settings), None)
+    """Name of the preset whose stroke these settings equal (at any height), or None if custom."""
+    return next((name for name in PRESETS if preset_for(name, settings) == settings), None)
 
 
 # ---- "fix first" coaching -------------------------------------------------------------------

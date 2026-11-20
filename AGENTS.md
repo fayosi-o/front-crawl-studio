@@ -45,8 +45,21 @@ These instructions are platform-neutral. Windows notes are at the end;
   by `underwater` in `engine.js`), so the timeline shows it, but it never
   changes buoyancy or the estimates. The HUD's Load bars show it per arm.
 - The default stroke is a distance stroke: a two-beat kick (contralateral
-  downbeat with each catch drives the hip roll). Pull width, kick timing and
-  breathing pattern are visual only.
+  downbeat with each catch drives the hip roll).
+- The estimates (`model.estimate_metrics`) take the whole `StrokeSettings` and
+  the active faults: hold (catch and slip after faults and `rate_slip`, kept by
+  `pull_shape`), stroke length (`path_length`, one curve for the whole rate
+  range), thrust against drag (distance per stroke falls with the square root of
+  the rate), momentum (`drive_seconds`, `momentum_carry` with the body's drag),
+  body drag (`body_drag`: faults, `roll_drag`, `kick_drag`), `kick_thrust`,
+  each fault's lost `push`, and height. Effort (`work_rate`) is scaled to
+  `EFFORT_SPRINT` and counts the stroke's own push, so drag faults don't lower
+  it. Entry angle and the breathing pattern on its own are visual only;
+  breathing matters through **Head lift**, and a kick through **Sinking legs**.
+- Height scales the stroke (estimates) and the whole swimmer (`scale` in the
+  render params). Presets set the stroke, not the swimmer: `preset_for` keeps
+  the height and `matching_preset` ignores it. Presets run from most to least
+  efficient by SWOLF.
 - Drills are data in `model.DRILLS` and visual only: `engine.js` remaps the
   cycle clock onto each arm (`drillArms`), and catch-up also doubles the cycle
   (`cycleScale`) and shifts the body timing (`bodyPhase`). Races always swim
@@ -56,8 +69,10 @@ These instructions are platform-neutral. Windows notes are at the end;
 
 ### Adding a stroke fault
 
-Faults are data in `model.FAULTS` (label, hint, cue, metric cost) and reach the
-browser as `render_params()['faults']`. A new fault needs:
+Faults are data in `model.FAULTS` (label, hint, cue, and a cost as drag, slip,
+catch or lost push) and reach the browser as `render_params()['faults']`. Early
+exit also moves the exit (`exit_phase(..., early=True)`); Lopsided pull weakens
+only the right arm in the engine (`LOPSIDED_CATCH`). A new fault needs:
 
 1. an entry in `model.FAULTS`;
 2. an icon in `app.FAULT_ICONS`;
@@ -71,10 +86,14 @@ browser as `render_params()['faults']`. A new fault needs:
 - More drive must not compensate for a poor catch or heavy slip.
 - Every fault must cost estimated distance per stroke.
 - A lower stroke rate must lower momentum carry (longer glide between the push
-  and the next catch). Below 42 spm the stroke also lengthens in proportion to
-  the hold, so a patient 22 spm stroke covers about 1.97 m per stroke (≈12.7
-  strokes per 25 m and ≈2:19 per 100 m on the default settings); a slipping
-  hand gains little.
+  and the next catch). A slower stroke also lengthens in proportion to the hold,
+  so a patient 22 spm stroke covers about 2.17 m per stroke (≈11.5 strokes per
+  25 m and ≈2:06 per 100 m on the default settings); a slipping hand gains much
+  less.
+- A higher rate must be faster for a good catch but buy less per extra stroke,
+  with no dip or jump in pace across the range, and must cost more effort. Above
+  50 spm a weak catch slips, so its best rate is below the top of the range.
+- A draggy body must lose more speed in the glide than a streamlined one.
 - Muscle highlighting is an illustrative overlay. Don't present numbers as
   measured, and don't add disclaimer text to the UI.
 

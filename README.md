@@ -39,16 +39,17 @@ cloud services or downloaded models.
 
 ## Features
 
-- **Stroke controls:** twelve settings, four presets and nine combinable faults
-  with coaching cues, including **Head lift** (lifting the face forward to
-  breathe). The default distance stroke combines kick-led hip roll, a two-beat
-  kick, short glide, bilateral breathing every three strokes and an
-  adjustable-width high-elbow "power diamond" pull. All faults start off.
+- **Stroke controls:** thirteen settings (including the swimmer's height), four
+  presets and twelve combinable faults with coaching cues, including **Head
+  lift**, **Early exit**, **Dropped elbow** and **Lopsided pull**. The default
+  distance stroke combines kick-led hip roll, a two-beat kick, short glide,
+  bilateral breathing every three strokes and an adjustable-width high-elbow
+  "power diamond" pull. All faults start off.
 - **Fix first:** a coaching card that ranks the single changes worth the most
   time per 100 m at your current stroke rate (clear a fault, set the catch
   earlier, hold the water, connect the hips, shorten an over-long glide).
-  **Apply** makes that one change. The card also shows pace per 100 m, SWOLF
-  and speed.
+  **Apply** makes that one change. The card also shows pace per 100 m, SWOLF,
+  speed and **effort**.
 - **Drills:** the swimmer demonstrates **Catch-up**, **One arm** and **Fist**
   drills. Drills change the movement only; estimates stay on the full stroke.
 - **Felt load:** the water you push back pushes back, so the arm feels heavier
@@ -57,9 +58,9 @@ cloud services or downloaded models.
   recovery speeds up to keep the stroke rate. A slipping hand feels light.
 - **Inspection:** orbit and split cameras, hand/foot trails, muscle highlighting,
   simulated **water pressure**, slow playback and a six-phase timeline.
-- **Feedback:** live distance-per-stroke, stroke-count, pace and momentum-carry
-  estimates for rates from 22 to 72 spm. Hands turn teal when holding water and
-  coral when slipping; amber highlights muscle emphasis.
+- **Feedback:** live distance-per-stroke, stroke-count, pace, momentum-carry and
+  effort estimates for rates from 22 to 72 spm. Hands turn teal when holding
+  water and coral when slipping; amber highlights muscle emphasis.
 - **Water and motion:** a rolling swell, bow wave, V-shaped wake and fine
   scrolling surface ripples, plus stroke-driven ripples, spray and bubbles. The
   surface stays clear from above and catches more light when viewed across it.
@@ -152,7 +153,8 @@ both tabs, logout and private-tab access, including on iPhone.
 1. Pick one of four presets; edits change its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
    Expand **Motion details** for glide length, roll, pull width, depth, entry angle, kick size,
-   kick timing (2-, 4- or 6-beat) and breathing (every 2–5 strokes).
+   kick timing (2-, 4- or 6-beat), breathing (every 2–5 strokes) and the
+   swimmer's height (150–200 cm; presets keep it).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.
 4. Drag to orbit, scroll to zoom, or enable **Split view** (Top, Side, Front or
    Below). Add hand/foot trails, or enable **Water pressure** to see warm clouds
@@ -171,10 +173,39 @@ the studio estimates.
 
 Each hand entry counts as one stroke; a full arm cycle contains two.
 More slip reduces distance per stroke, and extra drive cannot rescue a poor catch.
-A low rate lengthens the unpropelled glide and reduces momentum carry, so pace
-slows. Below 42 spm a well-held stroke also reaches further: on the default
-settings, 22 spm covers about 1.95 m per stroke (≈12.8 strokes per 25 m,
-≈2:19 per 100 m). A slipping hand gains little from slowing down.
+
+#### How the estimates work
+
+- **Thrust against drag.** Each stroke pushes the body and the water resists
+  with drag that grows with the square of speed, so a higher rate is faster but
+  each extra stroke per minute buys less. On the default stroke 42 spm swims
+  about 1:46 per 100 m, 56 spm about 1:39 and 72 spm about 1:33.
+- **Effort.** Rate is not free: effort is the stroke's work rate against an
+  all-out sprint (72 spm with a full six-beat kick). The default stroke works at
+  about 43%, 56 spm at 56% and 72 spm at 76%. Drag faults slow you without making
+  the stroke easier; a slipping hand feels light and does less work.
+- **Quick turnover slips.** Above 50 spm the hand has less time to set the
+  catch, so it slips more, unless the catch is very good. A weak catch is
+  fastest around 60 spm and slower again at the top rate.
+- **Stroke length.** One curve sets the underwater path for every rate: slower
+  strokes stay in longer, finish further back and, when the hand holds the water,
+  carry further. On the default settings 22 spm covers about 2.17 m per stroke
+  (≈11.5 strokes per 25 m, ≈2:06 per 100 m). A slipping hand gains much less
+  from slowing down.
+- **Momentum.** The hand drives for about 0.85 s per stroke (longer on a long
+  path, shorter with an early exit or spinning arms); the rest is coast. A low
+  rate or long glide coasts longer, and a draggy body slows faster while it
+  coasts, so a long glide pays off only with a good streamline.
+- **Body and legs.** Roll between about 35° and 55° is free; flatter or further
+  adds drag. Still legs sink a little; a kick lifts them and wins back part of
+  the **Sinking legs** cost. A six-beat kick adds a little speed for a lot of
+  effort, a big two-beat kick only adds drag, and **Head lift** costs more the
+  more often you breathe.
+- **Pull shape.** The high-elbow power diamond holds best. A hand wide of the
+  shoulder, a deep straight arm, or the extremes of a hand crossing far under the
+  body or held tight against it hold less water.
+- **Height.** A taller swimmer covers more distance per stroke for the same
+  effort (distance per stroke scales with height against 180 cm).
 
 **Glide length** adjusts the front-end hold independently of rate: 50% keeps the
 normal stroke, lower values catch earlier, and higher values hold longer.
@@ -209,7 +240,7 @@ The swimmer moves to the load. The hand works more slowly through the heaviest
 water, speeds up out of the back as the load lets go, and the weightless
 recovery makes up the rest so the stroke rate holds: on **Long power** the hand
 is about a quarter slower under the shoulder, about a quarter faster at the
-exit, and leaves the water at about 82% of the cycle instead of 77%. Watch the timeline's **Recovery** segment move as you change catch, slip or
+exit, and leaves the water at about 80% of the cycle instead of 75%. Watch the timeline's **Recovery** segment move as you change catch, slip or
 drive. The weight is a sensation only: it never changes buoyancy or the
 estimates, which already count the hold behind it.
 
@@ -221,7 +252,8 @@ active fault, one 15-point step of catch, slip or drive, and a glide longer than
 50%. It never changes the stroke rate, which is a pacing choice rather than a
 technique fix. When nothing saves at least half a second per 100 m, the card
 says so. **SWOLF** is strokes plus seconds for one 25 m length; lower is more
-efficient.
+efficient. The four presets run from most to least efficient by SWOLF.
+**Effort** is the stroke's work rate against an all-out sprint.
 
 #### Drills
 
@@ -249,10 +281,10 @@ only; races always swim the full stroke.
 Setup, distance or swimmer-count changes reset the race; lane selection and
 identical setups don't. Leaving Race pauses it. Studio remains independent.
 
-**Model limits:** steady-speed races omit dives, turns and fatigue.
-Roll, pull width, depth, entry angle, kick, breathing and drills affect
-appearance, not estimated speed. The felt load changes arm timing, not estimated
-speed or buoyancy. Water effects, pressure and buoyancy are visual only and never
+**Model limits:** steady-speed races omit dives, turns and fatigue, and effort
+does not slow a swimmer over a race. Entry angle and drills affect appearance,
+not estimated speed; breathing matters only with **Head lift**. The felt load
+changes arm timing, not estimated speed or buoyancy. Water effects, pressure and buoyancy are visual only and never
 alter results. Visual speed varies with the pulls; race progress and finish
 times use the steady-speed estimate.
 

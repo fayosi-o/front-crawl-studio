@@ -11,8 +11,10 @@ from nicegui import Client, ui
 from long_catch.model import (
     CATCH_START,
     FINISH_START,
+    KICK_LIFT,
     LOAD_DWELL,
     LOAD_RELEASE,
+    LOPSIDED_CATCH,
     PHASE_LABELS,
     PULL_START,
     PUSH_START,
@@ -40,6 +42,8 @@ def engine_script() -> str:
         'finish': FINISH_START,
         'pull': PULL_START,
         'push': PUSH_START,
+        'kickLift': KICK_LIFT,
+        'lopsidedCatch': LOPSIDED_CATCH,
         'arm': [BODY.upper_arm, BODY.forearm],
     }
     source = (STATIC_DIR / 'engine.js').read_text(encoding='utf-8')

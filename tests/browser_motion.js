@@ -105,8 +105,13 @@ async page => {
       assert(clean.maxJump < 0.03, 'Body reaction jumps between frames');
       const cross = run({faults: ['crossover']});
       assert(cross.yTravel > 0.003, 'Crossover does not move the body across the pool');
+      // Poor grip: each pull barely surges the body. The engine settles near the speed Python sends,
+      // so compare travel with each stroke's own estimate, as the page does (Short slipping vs Long power).
       const slip = run({slip: 1, catch: 0.1});
-      assert(slip.distance < clean.distance, 'Poor grip does not reduce visual propulsion');
+      assert(slip.speedMax - slip.speedMin < 0.5 * (clean.speedMax - clean.speedMin),
+        'Poor grip does not reduce visual propulsion');
+      const slipping = run({...presets[2], playing: false}), long = run({...presets[3], playing: false});
+      assert(slipping.distance < long.distance, 'A slipping stroke travels as far as a holding one');
       const sunk = run({faults: ['sinking']});
       assert(sunk.distance < clean.distance, 'Sinking legs do not increase resistance');
       const kicks = [2, 4, 6].map(beats => ({
@@ -143,8 +148,8 @@ async page => {
         run(preset, 30, 6);
         for (const frontGlide of [-0.08, 0.08]) run({...preset, frontGlide, catchDelay: catchDelay(frontGlide)}, 30, 6);
       }
-      run({faults: ['crossover', 'overrotation', 'overreach', 'flathips', 'sinking', 'snaking', 'kneekick', 'rushing'],
-        rush: 0.72}, 30, 12);
+      run({faults: ['crossover', 'overrotation', 'overreach', 'flathips', 'sinking', 'snaking', 'kneekick', 'rushing',
+        'earlyexit', 'droppedelbow', 'lopsided'], rush: 0.72, exit: 0.68}, 30, 12);
       run({}, 30, 60);
       const paused = JSON.stringify(pose());
       for (let i = 0; i < 10; i++) engine.advance(0);

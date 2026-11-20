@@ -76,6 +76,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const rec = f => exit + (1 - exit) * f;  // fraction f of the way through the recovery
     const midRec = rec(0.4), lateRec = rec(0.7), preEntry = rec(0.88);
     const over = F.overreach ? 1 : 0, cross = F.crossover ? 1 : 0;
+    // Early exit lifts the hand out at the waist (Python moves P.exit forward); a dropped elbow
+    // sinks below the hand at the catch so the palm presses down instead of back.
+    const early = F.earlyexit ? 1 : 0, sag = F.droppedelbow ? 1 : 0;
     // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
     const tilt = deg => [0.56 * Math.cos(deg * D), -0.56 * Math.sin(deg * D)];
     const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
@@ -83,7 +86,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // forward under the surface. An over-reaching swimmer spears in at full stretch instead.
     const entryX = lerp(0.36, enterX + 0.08, over), entryH = lerp(-0.01, enterH + 0.03, over);
     const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over;
-    const finishX = -lerp(0.40, 0.50, L), exitX = -lerp(0.42, 0.52, L);
+    const finishX = -lerp(0.40, 0.50, L) + 0.16 * early, exitX = -lerp(0.42, 0.52, L) + 0.16 * early;
     let x = keyed(p, [
       [0, entryX], [0.11, enterX + 0.08 * over], [0.16, glideX - 0.01 + 0.08 * over],
       [0.22, lerp(0.30, 0.40, c) + 0.08 * over],
@@ -109,8 +112,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // under the elbow so the forearm and hand form one near-vertical paddle facing backwards.
     const height = keyed(p, [
       [0, entryH], [0.11, enterH + 0.03 * over], [0.16, glideH + 0.05 * over],
-      [0.22, lerp(-0.16, -0.22, c) + 0.03 * over],
-      [0.30, lerp(-0.26, -0.40, c) - 0.05 * d],
+      [0.22, lerp(-0.16, -0.22, c) + 0.03 * over + 0.04 * sag],
+      [0.30, lerp(-0.26, -0.40, c) - 0.05 * d + 0.04 * sag],
       [push, -0.32 - 0.08 * d], [fin, -0.06 - 0.02 * d], [exit, 0.0],
       [midRec, 0.10], [lateRec, 0.10], [preEntry, 0.06], [1, entryH],
     ]);
@@ -128,11 +131,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Narrow pulls flare the elbow out to the side; wide pulls point it back and up. Through the
     // push the guide stays mostly outward: with the body rolled onto the pulling side, world-up
     // points under the chest, so a large up share would fold the elbow inward.
-    const dropped = lerp(-0.6, 0.35, c);
+    const dropped = lerp(-0.6, 0.35, c) - 0.5 * sag;
     const elbowDir = [0, 1, 2].map(i => keyed(p, [
       [0, [0.15, 0.75, 0.65][i]], [0.12, [0.15, 0.75, 0.65][i]],
-      [0.22, [lerp(-0.1, 0.35, c), 0.8, dropped][i]],
-      [0.36, [lerp(0.15, -0.2, w), 1.0, lerp(0.1, 0.45, w)][i]],
+      [0.22, [lerp(-0.1, 0.35, c) - 0.25 * sag, 0.8, dropped][i]],
+      [0.36, [lerp(0.15, -0.2, w) - 0.15 * sag, 1.0, lerp(0.1, 0.45, w) - 0.4 * sag][i]],
       [push, [0.0, 0.95, 0.25][i]], [fin, [-0.3, 0.6, 0.7][i]], [1, [0.15, 0.75, 0.65][i]],
     ]));
     // Palm direction for the forearm twist. Down and slightly out at entry, back through the catch
@@ -146,6 +149,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       [preEntry, [0, 0.45, -1][i]], [1, [0.1, 0.3, -1][i]],
     ]));
     palm[1] -= 0.9 * s * bump(p, 0.14, fin);
+    // A dropped elbow leaves the palm facing the floor through the catch: it presses down, not back.
+    palm[0] += 0.45 * sag * bump(p, 0.14, 0.42);
+    palm[2] -= 0.35 * sag * bump(p, 0.14, 0.42);
     // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
     const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
@@ -786,7 +792,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       const q = Math.max(0, pr.vel.dot(pr.n));
       // A slipping hand moves fast but builds little pressure: the water slides off it instead.
-      const hold = pr.hand ? 1 - 0.9 * slipness : 1;
+      const hold = pr.hand ? 1 - 0.9 * (m.slip ? m.slip[pr.joint.slice(-1)] : slipness) : 1;
       const rate = Math.min(320, 90 * probeGain(pr, P) * hold * q * q);
       for (let i = spawnCount(rate * dt); i > 0; i--) {
         const push = 0.55 * q * rand(0.6, 1.1);
@@ -1291,7 +1297,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         }
         const q = p.velocity.dot(p.normal);
         const wet = smooth(clamp(-(p.pos.z + s.height) / 0.06, 0, 1));
-        const grip = p.hand ? (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) : 0.2 * P.kick;
+        const grip = p.hand ? m.grip[p.joint.slice(-1)] : 0.2 * P.kick;
         const load = -probeGain(p, P) * wet * grip * q * Math.abs(q);
         const fx = load * p.normal.x, fy = load * p.normal.y, fz = load * p.normal.z;
         if (p.hand) forward += fx;
@@ -1314,8 +1320,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // 16% of the reference arm load; exposed thighs and bent knees also add a little resistance.
     const legDrag = ['R', 'L'].reduce((sum, side) => sum + Math.sin(m['leg' + side].rotation.y) ** 2
       + Math.sin(m['knee' + side].rotation.y) ** 2, 0);
-    // A lifted head drops the hips for the length of each breath.
-    const dragShape = 1 + 2 * P.hipDrop + (S.faults.sinking ? 0.35 : 0)
+    // A lifted head drops the hips for the length of each breath; a kick holds sinking legs up a little.
+    const dragShape = 1 + 2 * P.hipDrop + 0.35 * legSink(P, S.faults)
       + (S.faults.headlift ? 0.5 * Math.abs(breath) : 0) + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
@@ -1346,11 +1352,20 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     body.updateMatrixWorld(true);
   }
 
+  // Sinking legs, less the share a kick holds up (model.KICK_LIFT): 0 without the fault.
+  const legSink = (P, F) => (F.sinking ? 1 - CONFIG.kickLift * P.kick : 0);
+  // Lopsided pull: the right arm catches late and weak and slips, while the left holds.
+  const lopsided = P => ({...P, catch: P.catch * CONFIG.lopsidedCatch, slip: clamp(P.slip + 0.2, 0, 1)});
+  const slipShare = P => smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
+  const gripOf = (P, slipness) => (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch);
+
   function poseSwimmer(P, m, scaled, resetMotion) {
     // Measure the prescribed stroke in a neutral frame, never the previous steering response.
     const previousX = m.chest.parent.position.x;
     m.chest.parent.rotation.set(0, 0, 0);
     m.chest.parent.position.copy(m.bodyOrigin);
+    // The swimmer's height scales the whole body about its centre (1 = the 180 cm model).
+    m.chest.parent.scale.setScalar(P.scale || 1);
     if (scaled > 0) {
       // A catch-up drill stretches the cycle (cycleScale) so each arm keeps its normal speed.
       const next = S.phase + scaled / ((120 / P.rate) * (P.cycleScale || 1));
@@ -1378,8 +1393,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p - P.catchDelay), sharp);
     const bodyRoll = roll * rollAt(body - 0.04 * sharp) + 6 * D * breath;
     // Head lift: each breath lifts the head forward, tips the chest up and lets the hips sink.
-    const lift = F.headlift ? Math.abs(breath) : 0;
-    const pitch = (F.sinking ? -14 * D : 0) - 8 * D * lift, legPitch = (F.sinking ? -24 * D : 0) - 10 * D * lift;
+    const lift = F.headlift ? Math.abs(breath) : 0, sink = legSink(P, F);
+    const pitch = -14 * D * sink - 8 * D * lift, legPitch = -24 * D * sink - 10 * D * lift;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 * D * Math.sin(w * (body - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
@@ -1390,7 +1405,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Keep only small pose variation here; the common body parent carries buoyancy and pull lift.
     const heave = 0.003 * noise(1.5 * st, 21);
     m.chest.position.z = heave + S.ride.height;
-    m.pelvis.position.z = 0.36 * Math.sin(pitch) - (F.sinking ? 0.05 : 0)
+    m.pelvis.position.z = 0.36 * Math.sin(pitch) - 0.05 * sink
       + 0.6 * heave + S.ride.height - S.ride.hips;
     // The head stays steady while the body rolls beneath it (the neck takes up half the roll),
     // then turns with the roll to breathe, one goggle staying in the water. A head lifter turns
@@ -1399,16 +1414,21 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.head.rotation.x = clamp(lerp(steady, turn, Math.abs(breath)), -70 * D, 70 * D) + 1.5 * D * noise(3 * st, 41);
     m.head.rotation.y = -24 * D * lift;
 
-    const right = arm(underwater(strokePhase(rightArm, P), P), P, F);
+    // Both arms keep the same timing; only the lopsided right arm's shape and grip change.
+    const PR = F.lopsided ? lopsided(P) : P;
+    const right = arm(underwater(strokePhase(rightArm, P), P), PR, F);
     const left = arm(underwater(strokePhase(leftArm, P), P), P, F);
     m.pace = {R: right.pace, L: left.pace};
     right.held = rightHeld;
     left.held = leftHeld;
+    if (F.lopsided) right.load *= CONFIG.lopsidedCatch;  // the weak arm feels light
     vary(right, st, 1);
     vary(left, st + 0.5, 5);
     shapeHands(m, P);
-    const slipness = smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
-    poseArm(m, 'R', right, P, slipness, bodyRoll, pitch);
+    const slipness = slipShare(P), slipR = slipShare(PR);
+    m.slip = {R: slipR, L: slipness};
+    m.grip = {R: gripOf(PR, slipR), L: gripOf(P, slipness)};
+    poseArm(m, 'R', right, PR, slipR, bodyRoll, pitch);
     poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
     poseLegs(m, P, F, st, body);
     moveThroughWater(m, P, scaled, slipness, breath, previousX, resetMotion);

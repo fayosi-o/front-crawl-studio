@@ -34,6 +34,7 @@ from long_catch.model import (
     format_duration,
     matching_preset,
     path_length,
+    preset_for,
     timeline_boundaries,
 )
 from long_catch.swimmer import SwimmerBuilder
@@ -41,6 +42,7 @@ from long_catch.theme import PALETTE, stylesheet
 
 STEP = 0.05  # fraction of a cycle moved by each step button or arrow key
 TRAIL_STEP = 0.5  # seconds per notch of the trail-length slider
+NARROW_SEGMENT = 0.05  # timeline segments shorter than this share of the cycle hide their label
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,10 +63,16 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'rate',
         'Stroke rate',
         ' spm',
-        'Hand entries per minute. Lower rates lengthen the underwater path but coast longer between strokes.',
+        'Hand entries per minute. Lower rates lengthen the underwater path but coast longer between strokes; '
+        'higher rates go faster for more effort, and above about 50 spm a weak catch starts to slip.',
     ),
     SliderSpec('catch', 'Catch quality', '%', 'How early and firmly the forearm sets against the water.'),
-    SliderSpec('roll', 'Body roll', '°', 'Peak rotation of the chest about the long axis.'),
+    SliderSpec(
+        'roll',
+        'Body roll',
+        '°',
+        'Peak rotation of the chest about the long axis. About 35–55° costs nothing; flatter or further adds drag.',
+    ),
     SliderSpec(
         'glide',
         'Glide length',
@@ -80,7 +88,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'Pull width',
         '%',
         'Where the hand travels under water: in under the body with the elbow out (power diamond), '
-        'or wide of the shoulder with a straighter arm.',
+        'or wide of the shoulder with a straighter arm. A hand wide of the shoulder sweeps sideways and holds less.',
         'under body',
         'wide of shoulder',
     ),
@@ -88,7 +96,8 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'depth',
         'Stroke depth',
         '%',
-        'How deep the hand travels under the body during the pull.',
+        'How deep the hand travels under the body during the pull. A deep, straight arm presses down '
+        'before it pushes back; a hand held tight to the body has a short lever.',
         'close to body',
         'deep',
     ),
@@ -107,7 +116,8 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'kick',
         'Kick amplitude',
         '%',
-        'Kick size. Submerged downbeats add a little visual thrust and balance; large, bent kicks add drag.',
+        'Kick size. A kick lifts the legs; still legs sink and drag. A six-beat kick adds a little speed '
+        'for a lot of effort, and a big kick leaves the streamline.',
         'still legs',
         'strong flutter',
     ),
@@ -126,9 +136,17 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'Breathing',
         ' strokes',
         'Hand entries per breath. Odd counts alternate sides (bilateral breathing); '
-        'even counts always breathe to the right.',
+        'even counts always breathe to the right. With a head lift, every breath costs time.',
         'every 2',
         'every 5',
+    ),
+    SliderSpec(
+        'height',
+        'Swimmer height',
+        ' cm',
+        'Standing height. Longer levers cover more distance per stroke for the same effort. Presets keep it.',
+        'shorter',
+        'taller',
     ),
 )
 # Import-time checks that the UI tables stay in step with the model.
@@ -154,6 +172,9 @@ FAULT_ICONS = {
     'kneekick': 'directions_bike',
     'rushing': 'fast_forward',
     'headlift': 'arrow_upward',
+    'earlyexit': 'exit_to_app',
+    'droppedelbow': 'vertical_align_bottom',
+    'lopsided': 'balance',
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 
@@ -165,6 +186,11 @@ PACE: tuple[tuple[str, str, str], ...] = (
     ('pace', 'Pace / 100 m', 'Steady-speed time for 100 m, without dives or turns.'),
     ('swolf', 'SWOLF', 'Strokes plus seconds for one 25 m length. Lower is more efficient.'),
     ('speed', 'Speed', 'Average swimming speed.'),
+    (
+        'effort',
+        'Effort',
+        'Estimated work rate against an all-out sprint: the push at this pace, hand slip, arm turnover and the kick.',
+    ),
 )
 
 STATS: tuple[tuple[str, str, str], ...] = (
@@ -230,7 +256,7 @@ def stroke_controls(
     for spec in SLIDERS:
         if spec.key in MAIN_SLIDERS:
             build(spec)
-    with ui.expansion('Motion details', caption='Glide, roll, width, depth, entry, kick and breathing').classes(
+    with ui.expansion('Motion details', caption='Glide, roll, width, depth, entry, kick, breathing and height').classes(
         'lc-motion-details w-full'
     ):
         for spec in SLIDERS:
@@ -588,7 +614,7 @@ class LongCatchPage:
 
     def apply_preset(self, name: str) -> None:
         """Move every slider to the preset, then apply it as a single state change."""
-        preset = PRESETS[name]
+        preset = preset_for(name, self.view.settings)
         self._move_sliders(preset)
         self.update(settings=preset)
 
@@ -636,6 +662,7 @@ class LongCatchPage:
         self.pace['pace'].text = format_duration(metrics.seconds_per_100)
         self.pace['swolf'].text = f'{metrics.swolf:.0f}'
         self.pace['speed'].text = f'{metrics.speed:.2f} m/s'
+        self.pace['effort'].text = f'{metrics.effort:.0%}'
         tips = advice(self.view)
         layout = (tips, self.view.settings)
         if layout == self._advice_layout:
@@ -764,13 +791,18 @@ class LongCatchPage:
         hand under water and shortens the recovery, and spinning arms squeeze the pull."""
         s = self.view.settings
         feel = felt_load(metrics.hold_quality, s.drive / 100)
-        bounds = timeline_boundaries(path_length(s.rate), 'rushing' in self.view.faults, s.glide, feel)
+        faults = self.view.faults
+        bounds = timeline_boundaries(path_length(s.rate), 'rushing' in faults, s.glide, feel, 'earlyexit' in faults)
         starts = (0.0, *bounds, 1.0)
         if starts == self._segment_layout:
             return
         self._segment_layout = starts
         for segment, (start, end) in zip(self.segments, pairwise(starts), strict=True):
             segment.style(f'left:{start * 100:.2f}%; width:{(end - start) * 100:.2f}%')
+            if end - start < NARROW_SEGMENT:
+                segment.classes(add='lc-seg-narrow')
+            else:
+                segment.classes(remove='lc-seg-narrow')
 
 
 class RaceMode:
@@ -961,7 +993,8 @@ class RaceMode:
 
     def preset_changed(self, name: str | None) -> None:
         if not self.applying and name is not None:
-            self.swimmers[self.selected] = replace(self.swimmers[self.selected], settings=PRESETS[name])
+            view = self.swimmers[self.selected]
+            self.swimmers[self.selected] = replace(view, settings=preset_for(name, view.settings))
             self._render()
 
     def slider_changed(self, spec: SliderSpec, raw: Any) -> None:

@@ -85,3 +85,32 @@ async def test_timeline_shows_the_felt_load_slowing_the_pull(engine_calls):
         slipping = ViewState(settings=PRESETS['Short slipping'])
         light = timeline_boundaries(path_length(slipping.settings.rate), feel=slipping.render_params()['feel'])
         assert recovery_start(user) == pytest.approx(light[-1], abs=1e-4)
+
+
+async def test_presets_keep_the_swimmers_height_and_the_coach_shows_effort(engine_calls):
+    pages: list[LongCatchPage] = []
+
+    async def root() -> None:
+        page = LongCatchPage()
+        pages.append(page)
+        page.build()
+        await page.start()
+
+    async with user_simulation(root) as user:
+        await user.open('/')
+        await asyncio.sleep(0.05)
+        (page,) = pages
+        page.sliders['height'].value = 192
+        assert page.view.settings.height == 192
+        user.find('Short slipping').click()
+        await asyncio.sleep(0.05)
+        assert page.view.settings == PRESETS['Short slipping'].with_values(height=192)
+        assert page.preset_badge.text == 'Preset'
+        assert page.pace['effort'].text == f'{page.view.metrics().effort:.0%}'
+        assert sent_params(engine_calls, 'set')[-1]['scale'] == pytest.approx(192 / 180)
+
+        user.find('Early exit').click()  # the finish is too short to label on the timeline
+        await asyncio.sleep(0.05)
+        (finish,) = user.find(marker=None, content='Finish').elements
+        assert 'lc-seg-narrow' in finish.parent_slot.parent.classes
+        assert recovery_start(user) < timeline_boundaries(path_length(56))[-1]

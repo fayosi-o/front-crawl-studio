@@ -10,13 +10,17 @@ from long_catch.model import (
     ADVICE_STEP,
     CATCH_START,
     DRILLS,
+    EFFORT_SPRINT,
     FAULTS,
+    FINISH_START,
     LOAD_DWELL,
     LOAD_RELEASE,
     MIN_SAVING,
     PRESETS,
+    PROPULSIVE_S,
     RUSH,
     Advice,
+    Metrics,
     Phase,
     RaceConfig,
     StrokeSettings,
@@ -24,6 +28,7 @@ from long_catch.model import (
     advice,
     arm_phases,
     cycle_duration,
+    drive_seconds,
     estimate_metrics,
     exit_phase,
     felt_load,
@@ -35,11 +40,21 @@ from long_catch.model import (
     path_length,
     phase_boundaries,
     phase_to_step,
+    preset_for,
+    pull_shape,
+    rate_slip,
+    roll_drag,
     stroke_phase,
     stroke_time,
     timeline_boundaries,
     waterline_pose,
 )
+
+
+def est(catch: float = 0.92, slip: float = 0.08, drive: float = 0.85, rate: int = 42, **other: int) -> Metrics:
+    """Estimates for fractional catch, slip and drive at ``rate`` (other settings as given or default)."""
+    settings = StrokeSettings(catch=round(catch * 100), slip=round(slip * 100), drive=round(drive * 100), rate=rate)
+    return estimate_metrics(settings.with_values(**other))
 
 
 def test_cycle_duration_rejects_non_positive_rate():
@@ -79,10 +94,13 @@ def test_push_is_distinct_from_pull_and_finish_without_extending_the_cycle():
     assert cycle_duration(40) == 3.0
 
 
-def test_path_length_shortens_with_rate():
-    assert path_length(32) == 1.0
+def test_path_length_is_one_curve_over_the_whole_rate_range():
+    assert path_length(22) == 1.0
     assert path_length(72) == 0.0
-    assert path_length(38) > path_length(54)
+    lengths = [path_length(rate) for rate in range(22, 73)]
+    assert lengths == sorted(lengths, reverse=True) and len(set(lengths)) == len(lengths)
+    params = ViewState(settings=StrokeSettings(rate=30)).render_params()
+    assert params['length'] == path_length(30) and params['exit'] == exit_phase(path_length(30))
 
 
 def test_format_duration_carries_rounded_seconds_into_the_next_minute():
@@ -90,36 +108,96 @@ def test_format_duration_carries_rounded_seconds_into_the_next_minute():
 
 
 def test_more_slip_reduces_distance_per_stroke():
-    low_slip = estimate_metrics(0.9, 0.1, 0.7, 40)
-    high_slip = estimate_metrics(0.9, 0.7, 0.7, 40)
-    assert high_slip.distance_per_stroke < low_slip.distance_per_stroke
+    for rate in (22, 42, 72):
+        assert est(0.9, 0.7, 0.7, rate).distance_per_stroke < est(0.9, 0.1, 0.7, rate).distance_per_stroke
 
 
 def test_better_catch_improves_distance_per_stroke():
-    poor = estimate_metrics(0.3, 0.1, 0.7, 40)
-    good = estimate_metrics(0.9, 0.1, 0.7, 40)
-    assert good.distance_per_stroke > poor.distance_per_stroke
+    assert est(0.9, 0.1, 0.7, 40).distance_per_stroke > est(0.3, 0.1, 0.7, 40).distance_per_stroke
 
 
 def test_drive_cannot_rescue_poor_catch_and_slip():
-    poor_full_drive = estimate_metrics(0.3, 0.7, 1.0, 40)
-    good_no_drive = estimate_metrics(0.9, 0.1, 0.0, 40)
-    assert poor_full_drive.distance_per_stroke < good_no_drive.distance_per_stroke
+    for rate in (22, 42, 72):
+        assert est(0.3, 0.7, 1.0, rate).distance_per_stroke < est(0.9, 0.1, 0.0, rate).distance_per_stroke
 
 
 def test_low_rate_loses_momentum_and_distance_in_the_glide():
-    slow, quick = estimate_metrics(0.9, 0.1, 0.7, 30), estimate_metrics(0.9, 0.1, 0.7, 50)
+    slow, quick = est(0.9, 0.1, 0.7, 30), est(0.9, 0.1, 0.7, 50)
     assert 0 < slow.momentum < quick.momentum <= 1
-    assert slow.seconds_per_25 > estimate_metrics(0.9, 0.1, 0.7, 42).seconds_per_25
+    assert slow.seconds_per_25 > est(0.9, 0.1, 0.7, 42).seconds_per_25
     assert momentum_carry(200) == 1.0
+    carries = [StrokeSettings(rate=rate).metrics().momentum for rate in range(22, 73)]
+    assert carries == sorted(carries)
 
 
 def test_slow_long_stroke_reaches_further_only_when_holding_water():
     m = StrokeSettings(rate=22).metrics()
-    assert m.strokes_per_25 == pytest.approx(12.8, abs=0.2)
-    assert m.seconds_per_25 * 4 == pytest.approx(138, abs=2)
-    slipping = estimate_metrics(0.3, 0.7, 1.0, 22).distance_per_stroke
-    assert slipping < estimate_metrics(0.3, 0.7, 1.0, 42).distance_per_stroke + 0.3 < m.distance_per_stroke
+    assert m.distance_per_stroke == pytest.approx(2.17, abs=0.02)
+    assert m.strokes_per_25 == pytest.approx(11.5, abs=0.2)
+    assert m.seconds_per_100 == pytest.approx(126, abs=2)
+    gain = m.distance_per_stroke - StrokeSettings().metrics().distance_per_stroke
+    slipping_gain = est(0.3, 0.7, 1.0, 22).distance_per_stroke - est(0.3, 0.7, 1.0, 42).distance_per_stroke
+    assert 0 < slipping_gain < 0.6 * gain  # a slipping hand gains much less from the long stroke
+
+
+def test_thrust_against_drag_gives_diminishing_returns_for_rate():
+    speeds = [StrokeSettings(rate=rate).metrics().speed for rate in range(22, 73)]
+    gains = [b - a for a, b in pairwise(speeds)]
+    assert all(gain > 0 for gain in gains)  # a good stroke still goes faster at a higher rate,
+    assert sum(gains[20:]) / 30 < 0.6 * sum(gains[:20]) / 20  # but each stroke above 42 spm buys less,
+    assert all(abs(later - earlier) < 0.08 * earlier for earlier, later in pairwise(gains))  # with no dip or jump
+    distances = [StrokeSettings(rate=rate).metrics().distance_per_stroke for rate in range(22, 73)]
+    assert distances == sorted(distances, reverse=True)
+    # Rate is not free: the work rate climbs steeply towards the top rate.
+    efforts = [StrokeSettings(rate=rate).metrics().effort for rate in (22, 42, 56, 72)]
+    assert efforts == sorted(efforts) and efforts[-1] - efforts[-2] > efforts[1] - efforts[0]
+
+
+def test_a_quick_turnover_slips_a_poor_catch_so_its_best_rate_is_lower():
+    assert rate_slip(50, 0.5) == 0 == rate_slip(30, 0.0)
+    assert rate_slip(72, 0.5) > rate_slip(72, 0.95) > rate_slip(60, 0.95) > 0
+    poor = [StrokeSettings(rate=rate, catch=50, slip=30).metrics().speed for rate in range(22, 73)]
+    best = 22 + poor.index(max(poor))
+    assert 50 < best < 72
+    fast = ViewState(settings=StrokeSettings(rate=72, catch=50)).render_params()
+    assert fast['slip'] > ViewState(settings=StrokeSettings(rate=50, catch=50)).render_params()['slip']
+
+
+def test_drive_time_follows_the_underwater_path():
+    assert drive_seconds(0.5) == pytest.approx(PROPULSIVE_S)
+    assert drive_seconds(1.0) > drive_seconds(0.5) > drive_seconds(0.0)
+    assert drive_seconds(0.5, early=True) < drive_seconds(0.5)
+    assert drive_seconds(0.5, rushed=True) == pytest.approx(RUSH * PROPULSIVE_S)
+    # A shorter drive leaves a longer coast at the same rate.
+    assert momentum_carry(42, drive=drive_seconds(0.5, early=True)) < momentum_carry(42, drive=drive_seconds(0.5))
+
+
+def test_a_draggy_body_loses_more_speed_in_the_glide():
+    assert momentum_carry(42, drag=0.2) < momentum_carry(42, drag=0.05) < momentum_carry(42)
+    clean = ViewState()
+    for key in ('sinking', 'snaking', 'crossover'):
+        assert clean.with_fault(key, True).metrics().momentum < clean.metrics().momentum
+    # The penalty for a long glide grows with drag.
+    long_glide = clean.settings.with_values(glide=100)
+
+    def glide_loss(faults: frozenset[str]) -> float:
+        short, long = ViewState(faults=faults), ViewState(settings=long_glide, faults=faults)
+        return short.metrics().momentum - long.metrics().momentum
+
+    assert glide_loss(frozenset({'sinking'})) > glide_loss(frozenset())
+
+
+def test_effort_counts_the_stroke_not_the_drag():
+    clean = StrokeSettings().metrics()
+    assert 0.3 < clean.effort < 0.6
+    assert EFFORT_SPRINT.metrics().effort == pytest.approx(1.0)
+    assert all(0 <= v.metrics().effort <= 1 for v in (ViewState(faults=frozenset(FAULTS)), ViewState()))
+    # Drag slows the swimmer without making the stroke easier; a slipping hand feels light.
+    for key in ('crossover', 'sinking', 'snaking'):
+        assert ViewState(faults=frozenset({key})).metrics().effort == pytest.approx(clean.effort, rel=0.05)
+    assert PRESETS['Short slipping'].metrics().effort < clean.effort
+    # Height does not change the work of the same stroke.
+    assert StrokeSettings(height=200).metrics().effort == pytest.approx(clean.effort)
 
 
 @pytest.mark.parametrize('glide', [0, 50, 100])
@@ -153,19 +231,84 @@ def test_longer_glide_delays_catch_and_costs_momentum_at_the_same_rate():
         StrokeSettings(glide=101)
 
 
-def test_pull_width_and_kick_timing_are_visual_only():
-    base = StrokeSettings()
-    other = base.with_values(width=100, beats=6)
-    assert base.metrics() == other.metrics()
-    params = ViewState(settings=other, pressure=True).render_params()
-    assert (params['width'], params['beats'], params['pressure']) == (1, 6, True)
+def test_pull_shape_keeps_the_hold_in_the_power_diamond():
+    assert pull_shape(35, 50) == 1.0 == pull_shape(20, 30) == pull_shape(50, 70)
+    assert pull_shape(100, 50) < pull_shape(85, 50) < 1.0  # a wide hand sweeps sideways
+    assert pull_shape(35, 100) < 1.0 and pull_shape(35, 0) < 1.0 and pull_shape(0, 50) < 1.0
+    base = StrokeSettings().metrics()
+    for change in ({'width': 90}, {'depth': 100}):
+        m = StrokeSettings(**change).metrics()
+        assert m.hold_quality < base.hold_quality and m.distance_per_stroke < base.distance_per_stroke
+    params = ViewState(settings=StrokeSettings(width=100), pressure=True).render_params()
+    assert (params['width'], params['pressure']) == (1, True)
+
+
+def test_roll_outside_its_band_costs_drag():
+    assert roll_drag(35) == roll_drag(46) == roll_drag(55) == 0.0
+    assert roll_drag(20) == pytest.approx(0.04) and roll_drag(62) == pytest.approx(0.04)
+    assert roll_drag(30) < roll_drag(25) and roll_drag(58) < roll_drag(60)
+    base = StrokeSettings().metrics().distance_per_stroke
+    assert StrokeSettings(roll=20).metrics().distance_per_stroke < base
+    assert StrokeSettings(roll=62).metrics().distance_per_stroke < base
+    assert StrokeSettings(roll=50).metrics().distance_per_stroke == base
+
+
+def test_kick_lifts_the_legs_and_a_six_beat_kick_drives_at_a_cost():
+    still, moderate = StrokeSettings(kick=0).metrics(), StrokeSettings(kick=45).metrics()
+    assert still.speed < moderate.speed  # still legs sink and drag
+    six = StrokeSettings(kick=100, beats=6).metrics()
+    assert six.speed > moderate.speed and six.effort > moderate.effort + 0.1
+    assert StrokeSettings(kick=100, beats=2).metrics().speed < moderate.speed  # a big two-beat kick only drags
     for beats in (3, 8):
         with pytest.raises(ValueError):
             StrokeSettings(beats=beats)
+    assert ViewState(settings=StrokeSettings(beats=6)).render_params()['beats'] == 6
+
+
+def test_a_kick_wins_back_part_of_the_sinking_legs_cost():
+    def cost(kick: int) -> float:
+        settings = StrokeSettings(kick=kick)
+        sunk = ViewState(settings=settings, faults=frozenset({'sinking'})).metrics()
+        return 1 - sunk.distance_per_stroke / settings.metrics().distance_per_stroke
+
+    assert cost(0) > cost(45) > cost(100) > 0
+
+
+def test_head_lift_costs_more_the_more_often_you_breathe():
+    def cost(breath: int) -> float:
+        settings = StrokeSettings(breath=breath)
+        lifted = ViewState(settings=settings, faults=frozenset({'headlift'})).metrics()
+        return lifted.seconds_per_100 - settings.metrics().seconds_per_100
+
+    assert cost(2) > cost(3) > cost(4) > cost(5) > 0
+
+
+def test_height_scales_the_stroke_and_the_swimmer():
+    tall, short = StrokeSettings(height=200).metrics(), StrokeSettings(height=150).metrics()
+    base = StrokeSettings().metrics()
+    assert tall.distance_per_stroke / base.distance_per_stroke == pytest.approx(200 / 180)
+    assert short.distance_per_stroke < base.distance_per_stroke < tall.distance_per_stroke
+    assert ViewState(settings=StrokeSettings(height=200)).render_params()['scale'] == pytest.approx(200 / 180)
+    for height in (149, 201):
+        with pytest.raises(ValueError):
+            StrokeSettings(height=height)
+
+
+def test_presets_keep_the_swimmers_height():
+    tall = StrokeSettings(height=192)
+    for name in PRESETS:
+        assert preset_for(name, tall).height == 192
+        assert matching_preset(preset_for(name, tall)) == name
+    assert matching_preset(tall) == 'Long power'
+
+
+def test_presets_run_from_most_to_least_efficient_by_swolf():
+    swolf = [settings.metrics().swolf for settings in PRESETS.values()]
+    assert swolf == sorted(swolf) and len(set(swolf)) == len(swolf)
 
 
 def test_outputs_are_finite_and_consistent():
-    result = estimate_metrics(0.9, 0.1, 0.7, 40)
+    result = est(0.9, 0.1, 0.7, 40)
     assert all(math.isfinite(value) for value in astuple(result))
     assert result.strokes_per_25 == pytest.approx(25 / result.distance_per_stroke)
     assert result.seconds_per_25 == pytest.approx(result.strokes_per_25 * 60 / 40)
@@ -210,12 +353,9 @@ def test_matching_preset_identifies_unchanged_presets_only():
     assert metrics['Long power'] > metrics['Compact connected'] > metrics['Short slipping']
 
 
-def test_kick_control_is_visual_only_and_normalized():
-    still = StrokeSettings(kick=0)
-    strong = still.with_values(kick=100)
-    assert still.metrics() == strong.metrics()
-    assert ViewState(settings=still).render_params()['kick'] == 0
-    assert ViewState(settings=strong).render_params()['kick'] == 1
+def test_kick_control_is_normalized_for_the_engine():
+    assert ViewState(settings=StrokeSettings(kick=0)).render_params()['kick'] == 0
+    assert ViewState(settings=StrokeSettings(kick=100)).render_params()['kick'] == 1
 
 
 def test_entry_angle_is_visual_only_and_passed_in_degrees():
@@ -227,11 +367,8 @@ def test_entry_angle_is_visual_only_and_passed_in_degrees():
         StrokeSettings(entry=41)
 
 
-def test_stroke_depth_is_visual_only_and_normalized():
-    shallow = StrokeSettings(depth=0)
-    deep = shallow.with_values(depth=100)
-    assert shallow.metrics() == deep.metrics()
-    assert ViewState(settings=deep).render_params()['depth'] == 1
+def test_stroke_depth_is_normalized_and_validated():
+    assert ViewState(settings=StrokeSettings(depth=100)).render_params()['depth'] == 1
     with pytest.raises(ValueError):
         StrokeSettings(depth=101)
 
@@ -384,7 +521,7 @@ def test_pace_swolf_and_speed_follow_the_estimates():
 
 
 @pytest.mark.parametrize('breath', [2, 3, 4, 5])
-def test_breathing_pattern_is_visual_only_and_reaches_the_engine(breath):
+def test_breathing_pattern_costs_nothing_without_a_head_lift_and_reaches_the_engine(breath):
     settings = StrokeSettings(breath=breath)
     assert settings.metrics() == StrokeSettings().metrics()
     assert ViewState(settings=settings).render_params()['breath'] == breath
@@ -402,6 +539,29 @@ def test_head_lift_fault_costs_distance_and_has_a_cue():
     assert lifted.metrics().distance_per_stroke < clean.metrics().distance_per_stroke
     assert FAULTS['headlift'].cue
     assert lifted.render_params()['faults'] == ['headlift']
+
+
+def test_early_exit_cuts_the_finish_short_on_the_timeline_and_in_the_estimates():
+    clean, early = ViewState(), ViewState(faults=frozenset({'earlyexit'}))
+    length = path_length(42)
+    assert FINISH_START < early.exit_phase() < clean.exit_phase() == exit_phase(length)
+    assert early.render_params()['exit'] == early.exit_phase()
+    bounds = timeline_boundaries(length, early=True)
+    assert bounds[:-1] == timeline_boundaries(length)[:-1] and bounds[-1] < timeline_boundaries(length)[-1]
+    assert early.metrics().momentum < clean.metrics().momentum  # a shorter drive leaves a longer coast
+    assert early.metrics().distance_per_stroke < clean.metrics().distance_per_stroke
+
+
+def test_dropped_elbow_and_lopsided_pull_weaken_the_catch():
+    clean = ViewState()
+    for key in ('droppedelbow', 'lopsided'):
+        view = clean.with_fault(key, True)
+        assert view.render_params()['catch'] < clean.render_params()['catch']
+        assert view.metrics().hold_quality < clean.metrics().hold_quality
+        assert view.render_params()['faults'] == [key] and FAULTS[key].cue
+    # A dropped elbow costs more than one weaker arm.
+    dropped, lopsided = (clean.with_fault(k, True).metrics().seconds_per_100 for k in ('droppedelbow', 'lopsided'))
+    assert dropped > lopsided > clean.metrics().seconds_per_100
 
 
 def test_drills_are_visual_only_and_validated():
