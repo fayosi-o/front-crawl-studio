@@ -1,7 +1,7 @@
 # Long Catch agent instructions
 
 Long Catch is a silent front-crawl teaching app: Python 3.12 and NiceGUI serve
-a procedural 3D swimmer. Locally it runs at `127.0.0.1:8080` with no login; on
+a procedural 3D swimmer. Locally it runs on a random free port (8100–8899; `LONG_CATCH_PORT` pins one) with no login; on
 Render it runs behind a login (see "Running the server"). See `README.md` for
 features.
 
@@ -145,8 +145,9 @@ which finds Playwright and an installed Chromium itself and prints `PASS` or
 ## Running the server
 
 `python main.py` never exits. Never run it in a synchronous or attached shell;
-that blocks the agent session. Without `PORT`, it binds to `127.0.0.1:8080`
-with no login.
+that blocks the agent session. Without `PORT`, it binds to `127.0.0.1` on a
+random free port with no login; start it with `LONG_CATCH_PORT=8080` for the
+browser checks.
 
 Setting `PORT` or `RENDER` switches on hosted mode: the server binds to
 `0.0.0.0` on `PORT`, requires a login, and refuses to start unless

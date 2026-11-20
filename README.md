@@ -101,7 +101,7 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-Open <http://127.0.0.1:8080>. Stop with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+It picks a free local port (8100–8899) and prints the address; open that, or set `LONG_CATCH_PORT=8080` to pin one. Stop with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 To relaunch, activate the environment and run `python main.py`.
 
 ### Deploy to Render

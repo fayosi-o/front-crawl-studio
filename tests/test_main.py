@@ -1,12 +1,27 @@
 import os
+import socket
 import subprocess
 import sys
 
-from main import server_address
+from main import LOCAL_PORTS, free_port, server_address
 
 
-def test_server_address_stays_local_without_port():
-    assert server_address({}) == ('127.0.0.1', 8080)
+def test_server_address_stays_local_on_a_free_port_without_port():
+    host, port = server_address({})
+    assert host == '127.0.0.1'
+    assert port in LOCAL_PORTS
+
+
+def test_free_port_skips_a_port_in_use():
+    with socket.socket() as taken:
+        taken.bind(('127.0.0.1', 0))
+        taken.listen()
+        busy = taken.getsockname()[1]
+        assert all(free_port() != busy for _ in range(50))
+
+
+def test_server_address_can_be_pinned_locally():
+    assert server_address({'LONG_CATCH_PORT': '8080'}) == ('127.0.0.1', 8080)
 
 
 def test_server_address_uses_render_port():
