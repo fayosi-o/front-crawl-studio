@@ -11,7 +11,8 @@
       "Bash(git push *)",
       "Bash(mkdir *)",
       "Bash(git -C * push *)",
-      "Bash(git -c * push *)"
+      "Bash(git -c * push *)",
+      "mcp__plugin_playwright_playwright__*"
     ]
   }
 }
