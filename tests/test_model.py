@@ -554,7 +554,7 @@ def test_early_exit_cuts_the_finish_short_on_the_timeline_and_in_the_estimates()
 
 def test_dropped_elbow_and_lopsided_pull_weaken_the_catch():
     clean = ViewState()
-    for key in ('droppedelbow', 'lopsided'):
+    for key in ('droppedelbow', 'lopsided', 'earlyroll'):
         view = clean.with_fault(key, True)
         assert view.render_params()['catch'] < clean.render_params()['catch']
         assert view.metrics().hold_quality < clean.metrics().hold_quality

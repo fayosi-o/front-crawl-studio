@@ -72,7 +72,10 @@ These instructions are platform-neutral. Windows notes are at the end;
 Faults are data in `model.FAULTS` (label, hint, cue, and a cost as drag, slip,
 catch or lost push) and reach the browser as `render_params()['faults']`. Early
 exit also moves the exit (`exit_phase(..., early=True)`); Lopsided pull weakens
-only the right arm in the engine (`LOPSIDED_CATCH`). A new fault needs:
+only the right arm in the engine (`LOPSIDED_CATCH`); Early rotation turns the
+shoulders to the next side during the push (`turnEarly` in `poseSwimmer`, capped
+and zero outside the push: a phase shift of the whole roll flipped the recovery
+elbow with a six-beat kick). A new fault needs:
 
 1. an entry in `model.FAULTS`;
 2. an icon in `app.FAULT_ICONS`;

@@ -465,6 +465,15 @@ FAULTS: dict[str, Fault] = {
         catch=0.12,
         drag=0.03,
     ),
+    'earlyroll': Fault(
+        'Early rotation',
+        'The body rolls to the next side while the hand is still pulling, with the shoulders turning ahead of '
+        'the hips, so the catch has nothing solid to push against and the torso twists.',
+        'Hold the roll until the catch is set: pull with the body still, then let the hips turn the stroke over.',
+        catch=0.18,
+        slip=0.06,
+        drag=0.02,
+    ),
 }
 # The right arm's catch with the Lopsided pull fault, as a share of the left arm's (engine.js).
 LOPSIDED_CATCH = 0.55

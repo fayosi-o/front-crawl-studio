@@ -1440,14 +1440,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // side, on its own timing (see bodyPhase).
     const body = bodyPhase(S.phase, P), sharp = P.drill === 'catchup' ? 1 : kickTiming(P, F);
     const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p - P.catchDelay), sharp);
-    const bodyRoll = roll * rollAt(body - 0.04 * sharp) + 6 * D * breath;
+    // Early rotation: while an arm is still pushing, the body is already rolling to the next side, the
+    // shoulders well ahead of the hips (twice the turn), so the torso twists. `early` is non-zero only
+    // in the push (positive for the right arm), so the recovery and entry keep their normal roll.
+    const early = F.earlyroll ? bump(rightArm, 0.45, 0.8) - bump(leftArm, 0.45, 0.8) : 0;
+    const turnEarly = (v, share) => lerp(v, -Math.sign(early), share * Math.abs(early));
+    const bodyRoll = roll * turnEarly(rollAt(body - 0.04 * sharp), 0.7) + 6 * D * breath;
     // Head lift: each breath lifts the head forward, tips the chest up and lets the hips sink.
     const lift = F.headlift ? Math.abs(breath) : 0, sink = legSink(P, F);
     const pitch = -14 * D * sink - 8 * D * lift, legPitch = -24 * D * sink - 10 * D * lift;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 * D * Math.sin(w * (body - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
-    m.pelvis.rotation.set(roll * hipShare * rollAt(body + lead * (1 - sharp)), legPitch, -1.8 * yaw);
+    m.pelvis.rotation.set(roll * hipShare * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
     m.pelvis.position.x = -0.36 * Math.cos(pitch);

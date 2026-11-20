@@ -40,8 +40,9 @@ cloud services or downloaded models.
 ## Features
 
 - **Stroke controls:** thirteen settings (including the swimmer's height), four
-  presets and twelve combinable faults with coaching cues, including **Head
-  lift**, **Early exit**, **Dropped elbow** and **Lopsided pull**. The default
+  presets and thirteen combinable faults with coaching cues, including **Head
+  lift**, **Early exit**, **Dropped elbow**, **Lopsided pull** and **Early
+  rotation**. The default
   distance stroke combines kick-led hip roll, a two-beat kick, short glide,
   bilateral breathing every three strokes, an adjustable-width high-elbow
   "power diamond" pull and a relaxed, elbow-led recovery: the hand leaves the

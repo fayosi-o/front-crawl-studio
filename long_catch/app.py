@@ -175,6 +175,7 @@ FAULT_ICONS = {
     'earlyexit': 'exit_to_app',
     'droppedelbow': 'vertical_align_bottom',
     'lopsided': 'balance',
+    'earlyroll': 'sync',
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 
