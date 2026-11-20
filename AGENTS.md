@@ -219,7 +219,16 @@ These problems cost real time before. Plan around them.
     by 60–90° in one step. A `tanh` on the positive side fixed it;
   - a fallback guide that can itself run along the arm: the "out and a little
     forward" hint is parallel to a 100%-width pull, so it now blends in "up"
-    as its remainder shrinks.
+    as its remainder shrinks;
+  - a minimum share toward that hint enforced on a clear guide that points
+    away from it: the elbow then swings half a turn whenever either one turns
+    past the other (wide pulls at 55–62° roll did, by up to 0.34 m and 80° in
+    one step). The minimum now applies only to a short guide (fading out by a
+    quarter of its length), and pulls wider than 50% turn their elbow guide
+    back, which stays square to an arm reaching out to the side. Gating the
+    minimum on the hint's stability instead, or raising the "up" blend, made
+    other settings flip: judge any change here on hundreds of random settings,
+    not a handful.
 - `keyed` eases to a stop at every keyframe. From the deepest point of the push
   to full extension in front, `arm()` uses `flowing` (a monotone cubic that
   keeps moving through keys and never overshoots), so the hand never pauses at
@@ -240,7 +249,13 @@ These problems cost real time before. Plan around them.
   catch, slip, width, depth, exit and faults. Flag elbow moves over 0.06 m or
   hand turns over about 25–40° in one step. Find the wrists as the two
   3-child groups that travel furthest; the elbow is `wrist.parent`. Accept
-  smooth humps of about 0.03 m per step.
+  smooth humps of about 0.03 m per step. For the arm solver, also sweep a few
+  hundred random settings (width, roll, catch, slip, depth, entry, rate, faults,
+  drills) and compare counts with the committed code: one fix often moves a
+  flip to other settings. Known leftovers are stacked faults at near-maximum
+  roll with a very wide pull (for example Over-rotation plus Dropped elbow at
+  77% width and 60° roll), and the forearm-twist fold when the palm target runs
+  along the forearm under extreme roll.
 - Temporary debug hooks (for example `window.__dbg`) must be removed before
   committing. Run `node --check long_catch/static/engine.js` after every edit.
 

@@ -167,13 +167,15 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // points out and up and stays ahead of the hand; a weak catch lets it drop and trail.
     // Narrow pulls flare the elbow out to the side; wide pulls point it back and up. Through the
     // push the guide stays mostly outward: with the body rolled onto the pulling side, world-up
-    // points under the chest, so a large up share would fold the elbow inward.
-    const dropped = lerp(-0.6, 0.35, c) - 0.5 * sag;
+    // points under the chest, so a large up share would fold the elbow inward. A pull wider than
+    // half way reaches out to the side, along that outward guide (under heavy roll exactly along
+    // it), so the guide turns back for it: back stays square to an arm reaching out.
+    const dropped = lerp(-0.6, 0.35, c) - 0.5 * sag, reachOut = smooth(clamp((w - 0.5) / 0.5, 0, 1));
     const elbowDir = [0, 1, 2].map(i => keyed(p, [
       [0, [0.15, 0.75, 0.65][i]], [0.12, [0.15, 0.75, 0.65][i]],
       [0.22, [lerp(-0.1, 0.35, c) - 0.25 * sag, 0.8, dropped][i]],
-      [0.36, [lerp(0.15, -0.2, w) - 0.15 * sag, 1.0, lerp(0.1, 0.45, w) - 0.4 * sag][i]],
-      [push, [0.0, 0.95, 0.25][i]], [fin, [-0.3, 0.6, 0.7][i]], [1, [0.15, 0.75, 0.65][i]],
+      [0.36, [lerp(0.15, -0.2, w) - 0.15 * sag - 0.6 * reachOut, 1.0 - 0.3 * reachOut, lerp(0.1, 0.45, w) - 0.4 * sag][i]],
+      [push, [-0.6 * reachOut, 0.95 - 0.3 * reachOut, 0.25][i]], [fin, [-0.3, 0.6, 0.7][i]], [1, [0.15, 0.75, 0.65][i]],
     ]));
     // Palm direction for the forearm twist. Down and slightly out at entry, back through the catch
     // and push, pinkie-first and facing the thigh at release, then facing back and out (thumb down)
@@ -1130,6 +1132,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // A guide nearly along the shoulder-hand line (hand tucked under the chest, or a wide shallow
     // pull) leaves almost no bend direction, and its remainder can swap fore and aft. Keep a soft
     // minimum share toward "out and a little forward" so the bend direction never passes through zero.
+    // Only a short guide needs it: a clear one (a quarter or more of its length left off the arm)
+    // keeps its own direction. Enforced on a clear guide that points away from the hint, the minimum
+    // swung the elbow half a turn whenever either one turned past the other, and under heavy roll
+    // with a wide pull the hint itself turns fast (see below).
+    const guide = r.pole.length();
     r.hint.set(0.5, sgn, 0);
     r.hint.addScaledVector(r.axis, -r.hint.dot(r.axis));
     // A wide pull points the arm itself out and forward, along that guide; its remainder then shrinks
@@ -1137,7 +1144,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const spread = r.hint.length(), up = smooth(clamp((0.42 - spread) / 0.42, 0, 1));
     r.normal.set(0, 0, 1).addScaledVector(r.axis, -r.axis.z);
     r.hint.addScaledVector(r.normal, up).normalize();
-    const share = r.pole.dot(r.hint), floor = 0.25;
+    const share = r.pole.dot(r.hint), floor = lerp(0.25, -2, smooth(clamp(guide / 0.25, 0, 1)));
     const kept = 0.5 * (share + floor + Math.sqrt((share - floor) ** 2 + 0.01));
     r.pole.addScaledVector(r.hint, kept - share).normalize();
     if (a.recovery > 0) {
