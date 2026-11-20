@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from itertools import pairwise
@@ -39,6 +40,7 @@ from long_catch.swimmer import SwimmerBuilder
 from long_catch.theme import PALETTE, stylesheet
 
 STEP = 0.05  # fraction of a cycle moved by each step button or arrow key
+TRAIL_STEP = 0.5  # seconds per notch of the trail-length slider
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,13 +175,28 @@ STATS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def bounded_number(value: Any, low: float, high: float, step: float = 1) -> float | None:
+    """A browser value clamped to [low, high] and snapped to the control's ``step``, or None if it is
+    not a finite number. A client can send anything over the socket, not only what the control allows.
+    Whole-number bounds and step give an int."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return low + step * round((min(high, max(low, number)) - low) / step)
+
+
 def section_title(text: str) -> ui.label:
     """Small uppercase heading used at the top of each panel card."""
     return ui.label(text).classes('lc-section-title')
 
 
 def stroke_slider(
-    spec: SliderSpec, value: int, on_change: Callable[[float], None], prefix: str = ''
+    spec: SliderSpec, value: int, on_change: Callable[[Any], None], prefix: str = ''
 ) -> tuple[ui.slider, ui.label]:
     """Shared stroke control for the studio and the selected race swimmer."""
     lo, hi = SETTING_RANGES[spec.key]
@@ -200,7 +217,7 @@ def stroke_slider(
 
 
 def stroke_controls(
-    settings: StrokeSettings, on_change: Callable[[SliderSpec, float], None], prefix: str = ''
+    settings: StrokeSettings, on_change: Callable[[SliderSpec, Any], None], prefix: str = ''
 ) -> tuple[dict[str, ui.slider], dict[str, ui.label]]:
     """Keep the main pace controls visible and group detailed stroke settings."""
     sliders, values = {}, {}
@@ -451,7 +468,7 @@ class LongCatchPage:
         with ui.element('div').classes('lc-card'):
             with ui.row().classes('lc-card-head'):
                 section_title('View')
-                split = ui.switch('Split view', on_change=lambda e: self.update(split=e.value))
+                split = ui.switch('Split view', on_change=lambda e: self.set_switch('split', e.value))
                 split.classes('lc-split-toggle').tooltip('Shortcut: V')
             self.angle_toggle = ui.toggle(
                 ANGLE_LABELS, value=self.view.angle, on_change=lambda e: self.update(angle=e.value)
@@ -474,15 +491,15 @@ class LongCatchPage:
                 self.trail_slider = ui.slider(
                     min=lo,
                     max=hi,
-                    step=0.5,
+                    step=TRAIL_STEP,
                     value=self.view.trail_seconds,
-                    on_change=lambda e: self.update(trail_seconds=float(e.value)),
+                    on_change=lambda e: self.set_trail_seconds(e.value),
                 ).props('aria-label="Trail length"')
                 with ui.row().classes('lc-control-range'):
                     ui.label('short wisp')
                     ui.label('long trail')
             pressure = ui.switch(
-                'Water pressure', value=self.view.pressure, on_change=lambda e: self.update(pressure=e.value)
+                'Water pressure', value=self.view.pressure, on_change=lambda e: self.set_switch('pressure', e.value)
             )
             pressure.classes('lc-pressure-toggle').tooltip(
                 'Simulated pressure: clouds build where the palm, forearm and feet load the water, '
@@ -540,11 +557,25 @@ class LongCatchPage:
             self.view = new
             self._render()
 
-    def on_slider(self, spec: SliderSpec, value: float) -> None:
+    def on_slider(self, spec: SliderSpec, raw: Any) -> None:
         """Update the value pill; apply the change unless a preset is moving the sliders."""
-        self.slider_values[spec.key].text = f'{value:.0f}{spec.unit}'
+        value = bounded_number(raw, *SETTING_RANGES[spec.key], spec.step)
+        if value is None:
+            return
+        self.slider_values[spec.key].text = f'{value}{spec.unit}'
         if not self._applying_preset:
-            self.update(settings=self.view.settings.with_values(**{spec.key: int(value)}))
+            self.update(settings=self.view.settings.with_values(**{spec.key: value}))
+
+    def set_trail_seconds(self, raw: Any) -> None:
+        """Ghost-trail length from its slider, kept on the slider's range and notches."""
+        seconds = bounded_number(raw, *TRAIL_SECONDS, TRAIL_STEP)
+        if seconds is not None:
+            self.update(trail_seconds=seconds)
+
+    def set_switch(self, name: str, value: Any) -> None:
+        """A view switch (split view, water pressure); only true or false from the browser count."""
+        if isinstance(value, bool):
+            self.update(**{name: value})
 
     def _move_sliders(self, settings: StrokeSettings) -> None:
         """Move every slider to ``settings`` without triggering one update per slider."""
@@ -831,7 +862,7 @@ class RaceMode:
                 ui.toggle(
                     {speed: f'{speed:g}x' for speed in RACE_PLAYBACK_SPEEDS},
                     value=1.0,
-                    on_change=lambda e: self.engine.call('setSpeed', e.value),
+                    on_change=lambda e: self.set_speed(e.value),
                 ).props('no-caps').tooltip('Race playback speed; finish times stay in simulated seconds')
                 LongCatchPage._icon_button(
                     'center_focus_strong', 'Reset race cameras', lambda: self.engine.call('resetCamera')
@@ -899,11 +930,19 @@ class RaceMode:
             scene.props(f'fps={60 if active and i < self.count else 1}')
         self.engine.call('setActive', active)
 
-    def change_distance(self, value: int) -> None:
+    def set_speed(self, value: Any) -> None:
+        if value in RACE_PLAYBACK_SPEEDS:
+            self.engine.call('setSpeed', value)
+
+    def change_distance(self, value: Any) -> None:
+        if value not in RACE_DISTANCES:
+            return
         self.distance = value
         self._render()
 
-    def change_count(self, value: int) -> None:
+    def change_count(self, value: Any) -> None:
+        if value not in (1, 2):
+            return
         self.count = value
         if value == 1:
             self.selected = 0
@@ -915,8 +954,8 @@ class RaceMode:
         LongCatchPage._enable(self.copy_button, value == 2)
         self._render()
 
-    def select_lane(self, value: int) -> None:
-        if not self.applying:
+    def select_lane(self, value: Any) -> None:
+        if not self.applying and value in (0, 1):
             self.selected = value
             self._render_editor()
 
@@ -925,10 +964,11 @@ class RaceMode:
             self.swimmers[self.selected] = replace(self.swimmers[self.selected], settings=PRESETS[name])
             self._render()
 
-    def slider_changed(self, spec: SliderSpec, value: float) -> None:
-        if not self.applying:
+    def slider_changed(self, spec: SliderSpec, raw: Any) -> None:
+        value = bounded_number(raw, *SETTING_RANGES[spec.key], spec.step)
+        if not self.applying and value is not None:
             view = self.swimmers[self.selected]
-            self.swimmers[self.selected] = replace(view, settings=view.settings.with_values(**{spec.key: int(value)}))
+            self.swimmers[self.selected] = replace(view, settings=view.settings.with_values(**{spec.key: value}))
             self._render()
 
     def faults_changed(self, values: list[str]) -> None:

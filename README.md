@@ -133,7 +133,9 @@ the site and sign in again.
 Hosted mode requires valid authentication settings. Pages, assets and live
 connections require login. Sessions expire after 12
 hours; **Sign out → Sign out** revokes the session and its open connections.
-Cookies are Secure, HttpOnly and SameSite=Lax. Login attempts are rate-limited.
+Cookies are Secure, HttpOnly and SameSite=Lax. Login attempts are rate-limited
+per client (the address Render's proxy appends to `X-Forwarded-For`) under a
+global cap, and requests started by other sites are refused, except plain links.
 Use one instance/process: sessions and limits are in memory.
 Restarts sign everyone out; credential changes require a restart.
 
@@ -326,14 +328,11 @@ simulated user.
 For UI changes, check both tabs, lane isolation, playback, scrubbing, cameras
 and narrow layouts in a browser.
 Restart the server after JavaScript or CSS edits.
-With an existing `playwright-cli` installation and the server running, run the
-water-motion and pinned-estimate browser checks from `tests`:
+With the server running, run the water-motion and pinned-estimate browser
+checks in `tests/browser_*.js`:
 
 ```bash
-playwright-cli -s=motion open http://127.0.0.1:8080/
-playwright-cli -s=motion run-code --filename=browser_motion.js
-playwright-cli -s=motion run-code --filename=browser_estimates.js
-playwright-cli -s=motion close
+node tools/browser_checks.js   # needs Node, Playwright and Chromium; pass a URL for another port
 ```
 
 Water animation caches wave shapes, bounds ripple calculations and skips

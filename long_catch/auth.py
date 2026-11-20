@@ -15,11 +15,14 @@ from urllib.parse import parse_qs
 
 from argon2 import PasswordHasher, Type, extract_parameters
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
-from starlette.requests import HTTPConnection, Request
+from starlette.requests import ClientDisconnect, HTTPConnection, Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 SESSION_SECONDS = 12 * 60 * 60
+MAX_FORM_BYTES = 8192
+BODY_SECONDS = 10.0  # a login body that trickles in slower than this is dropped
+VERIFY_WAIT_SECONDS = 10.0  # longest wait for a turn at the password check
 COOKIE = '__Host-long-catch'
 LOGIN_FORM = """<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -103,6 +106,24 @@ class PrivateAccess:
     def same_origin(request: HTTPConnection) -> bool:
         return request.headers.get('origin') == f'https://{request.headers.get("host")}'
 
+    @staticmethod
+    def client_id(request: HTTPConnection) -> str:
+        """Who is logging in, for the per-client limit. Behind Render's proxy the socket peer is the
+        proxy, which appends the real client to X-Forwarded-For; earlier entries can be forged, so take
+        the last one. Anyone can still send the header, which is why a global limit backs this up."""
+        forwarded = request.headers.get('x-forwarded-for', '')
+        if forwarded:
+            return forwarded.split(',')[-1].strip()[:64]
+        return request.client.host if request.client else ''
+
+    @staticmethod
+    def cross_site(request: HTTPConnection) -> bool:
+        """A request another site started, other than a plain page navigation (following a link to the
+        app from elsewhere stays allowed; the SameSite cookie is not sent on anything else anyway)."""
+        if request.headers.get('sec-fetch-site') != 'cross-site':
+            return False
+        return request.scope.get('method') not in {'GET', 'HEAD'} or request.headers.get('sec-fetch-mode') != 'navigate'
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope['type'] not in {'http', 'websocket'}:
             await self.app(scope, receive, send)
@@ -131,6 +152,9 @@ class PrivateAccess:
                 message = {**message, 'headers': headers}
             await send(message)
 
+        if scope['type'] == 'http' and self.cross_site(request):
+            await Response(status_code=403)(scope, receive, secure_send)
+            return
         session = self.session(request)
         if scope['type'] == 'websocket':
             if session is None or not self.same_origin(request):
@@ -177,15 +201,24 @@ class PrivateAccess:
         now = time.monotonic()
         while self.attempts and self.attempts[0][0] <= now - 60:
             self.attempts.popleft()
-        ip = request.client.host if request.client else ''
-        if len(self.attempts) >= 20 or sum(address == ip for _, address in self.attempts) >= 5:
+        client = self.client_id(request)
+        if len(self.attempts) >= 20 or sum(address == client for _, address in self.attempts) >= 5:
             return HTMLResponse('Too many attempts. Try again in a minute.', 429, headers={'Retry-After': '60'})
-        self.attempts.append((now, ip))
+        self.attempts.append((now, client))
+        declared = request.headers.get('content-length')
+        if declared is not None and (not declared.isdigit() or int(declared) > MAX_FORM_BYTES):
+            return Response(status_code=413 if declared.isdigit() else 400)
         body = bytearray()
-        async for chunk in request.stream():
-            body.extend(chunk)
-            if len(body) > 8192:
-                return Response(status_code=413)
+        try:
+            async with asyncio.timeout(BODY_SECONDS):
+                async for chunk in request.stream():
+                    body.extend(chunk)
+                    if len(body) > MAX_FORM_BYTES:
+                        return Response(status_code=413)
+        except TimeoutError:
+            return Response(status_code=408)
+        except ClientDisconnect:
+            return Response(status_code=400)
         try:
             fields = parse_qs(body.decode('utf-8', errors='replace'), max_num_fields=10)
         except ValueError:
@@ -195,11 +228,17 @@ class PrivateAccess:
         assert self.config is not None
         valid = False
         if len(username) <= 256 and len(password) <= 1024:
-            async with self.verifier:
-                try:
-                    valid = await asyncio.to_thread(PasswordHasher().verify, self.config.password_hash, password)
-                except VerificationError:
-                    valid = False
+            try:
+                async with asyncio.timeout(VERIFY_WAIT_SECONDS):
+                    await self.verifier.acquire()
+            except TimeoutError:
+                return HTMLResponse('Busy. Try again in a moment.', 503, headers={'Retry-After': '5'})
+            try:
+                valid = await asyncio.to_thread(PasswordHasher().verify, self.config.password_hash, password)
+            except VerificationError:
+                valid = False
+            finally:
+                self.verifier.release()
             valid = hmac.compare_digest(username.encode(), self.config.username.encode()) and valid
         if not valid:
             return HTMLResponse('<p>Invalid username or password.</p><a href="/login">Try again</a>', 401)

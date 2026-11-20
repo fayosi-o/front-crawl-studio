@@ -1,12 +1,13 @@
-// From this directory: playwright-cli run-code --filename=browser_estimates.js.
+// Run with `node tools/browser_checks.js [URL]` from the repository root (default http://127.0.0.1:8080/).
 async page => {
+  const url = page.context().__studioUrl || 'http://127.0.0.1:8080/';
   const view = await page.context().newPage();
   const errors = [];
   view.on('pageerror', error => errors.push(error.message));
   const assert = (ok, message) => { if (!ok) throw Error(message); };
   try {
     await view.setViewportSize({width: 1440, height: 900});
-    await view.goto('http://127.0.0.1:8080/');
+    await view.goto(url);
     await view.waitForFunction(() => window.LongCatch?.ready());
     const header = view.locator('.lc-header');
     const values = () => header.locator('.lc-stat-value').allTextContents();

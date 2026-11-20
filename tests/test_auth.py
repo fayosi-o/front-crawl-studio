@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 import time
 
@@ -9,6 +10,7 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from long_catch import auth
 from long_catch.auth import COOKIE, SESSION_SECONDS, AuthConfig, PrivateAccess
 
 
@@ -173,3 +175,101 @@ def test_login_payload_limits_and_csrf(client, credentials):
     assert client.post('/logout', headers={'origin': 'https://evil.example'}).status_code == 403
     assert client.post('/api/test', headers={'origin': 'https://evil.example'}).status_code == 403
     assert client.get('/api/test').status_code == 200
+
+
+def test_rate_limit_keys_on_the_client_the_proxy_appends(client, credentials):
+    # Behind Render the socket peer is the proxy; it appends the real client to X-Forwarded-For.
+    for _ in range(5):
+        response = client.post(
+            '/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': '203.0.113.7'}
+        )
+        assert response.status_code == 401
+    blocked = client.post('/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': '203.0.113.7'})
+    assert blocked.status_code == 429
+    # A forged first entry does not change who the proxy says is calling.
+    forged = client.post(
+        '/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': '198.51.100.1, 203.0.113.7'}
+    )
+    assert forged.status_code == 429
+    # Someone else behind the same proxy can still sign in.
+    other = client.post(
+        '/login',
+        data={'username': credentials[0].username, 'password': credentials[1]},
+        headers={'x-forwarded-for': '203.0.113.99'},
+        follow_redirects=False,
+    )
+    assert other.status_code == 303
+
+
+def test_global_backstop_caps_logins_whatever_the_header_says(client, credentials):
+    for i in range(20):
+        client.post('/login', data={'username': 'x', 'password': ''}, headers={'x-forwarded-for': f'192.0.2.{i}'})
+    assert client.post('/login', data={}, headers={'x-forwarded-for': '192.0.2.200'}).status_code == 429
+    assert client.get('/health').status_code == 200
+
+
+def test_cross_site_requests_are_refused_but_links_to_the_app_work(client):
+    navigate = {'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate'}
+    assert client.get('/', headers=navigate, follow_redirects=False).status_code == 303
+    assert client.get('/', headers={**navigate, 'sec-fetch-mode': 'cors'}).status_code == 403
+    assert client.post('/login', data={}, headers=navigate).status_code == 403
+
+
+def test_oversized_login_is_refused_from_its_declared_length(client):
+    response = client.post('/login', content=b'username=x', headers={'content-length': '100000'})
+    assert response.status_code == 413
+
+
+def raw_login(access, then, headers=(), hold_verifier=False):
+    """POST /login straight to the middleware: a short form arrives, then the client finishes (``'end'``),
+    stalls (``'stall'``) or hangs up (``'disconnect'``). Returns the status and the response headers."""
+    scope = {
+        'type': 'http',
+        'http_version': '1.1',
+        'method': 'POST',
+        'scheme': 'https',
+        'path': '/login',
+        'raw_path': b'/login',
+        'query_string': b'',
+        'root_path': '',
+        'server': ('testserver', 443),
+        'client': ('203.0.113.5', 50000),
+        'headers': [(b'host', b'testserver'), (b'origin', b'https://testserver'), *headers],
+    }
+    chunks = [{'type': 'http.request', 'body': b'username=x&password=y', 'more_body': then != 'end'}]
+    sent = []
+
+    async def receive():
+        if chunks:
+            return chunks.pop(0)
+        if then == 'disconnect':
+            return {'type': 'http.disconnect'}
+        await asyncio.Event().wait()  # the rest of the body never comes
+
+    async def send(message):
+        sent.append(message)
+
+    async def run():
+        if hold_verifier:
+            await access.verifier.acquire()  # someone else's password check is running
+        try:
+            await access(scope, receive, send)
+        finally:
+            if hold_verifier:
+                access.verifier.release()
+
+    asyncio.run(run())
+    return sent[0]['status'], dict(sent[0]['headers'])
+
+
+def test_login_reads_and_waits_are_bounded(access, monkeypatch):
+    monkeypatch.setattr(auth, 'BODY_SECONDS', 0.05)
+    monkeypatch.setattr(auth, 'VERIFY_WAIT_SECONDS', 0.05)
+    assert raw_login(access, 'end', headers=[(b'content-length', b'12x')])[0] == 400
+    assert raw_login(access, 'stall')[0] == 408
+    assert raw_login(access, 'disconnect')[0] == 400
+    status, headers = raw_login(access, 'end', hold_verifier=True)
+    assert status == 503 and headers[b'retry-after'] == b'5'
+    # A finished check gives the slot back.
+    assert raw_login(access, 'end')[0] == 401
+    assert not access.verifier.locked()

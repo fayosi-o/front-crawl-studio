@@ -1,5 +1,6 @@
-// From this directory: playwright-cli run-code --filename=browser_motion.js.
+// Run with `node tools/browser_checks.js [URL]` from the repository root (default http://127.0.0.1:8080/).
 async page => {
+  const url = page.context().__studioUrl || 'http://127.0.0.1:8080/';
   const view = await page.context().newPage();
   const errors = [];
   view.on('pageerror', error => errors.push(error.message));
@@ -34,7 +35,7 @@ async page => {
     });
   });
   try {
-    await view.goto('http://127.0.0.1:8080/');
+    await view.goto(url);
     await view.waitForFunction(() => window.__motionStart && window.LongCatch.ready());
     const presets = [];
     for (const name of ['Long light', 'Compact connected', 'Short slipping', 'Long power']) {

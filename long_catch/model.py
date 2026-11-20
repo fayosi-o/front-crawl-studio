@@ -499,6 +499,9 @@ class ViewState:
     drill: DrillName = 'off'
 
     def __post_init__(self) -> None:
+        for name in ('playing', 'split', 'pressure'):
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f'{name} must be true or false')
         if self.emphasis not in EMPHASES:
             raise ValueError(f'unknown emphasis {self.emphasis!r}')
         if self.drill not in DRILLS:

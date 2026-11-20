@@ -192,6 +192,9 @@ def test_view_options_validate_and_trail_reaches_the_engine():
         {'trail_seconds': 9.0},
         {'emphasis': 'legs'},
         {'playback': 3.0},
+        {'pressure': list(range(1000))},
+        {'split': 'yes'},
+        {'playing': None},
     ):
         with pytest.raises(ValueError):
             ViewState(**bad)

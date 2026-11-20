@@ -10,7 +10,8 @@
   that PID. Never kill by name.
 - To look at the app, use the built-in browser pane or the Playwright MCP
   tools at http://127.0.0.1:8080/. Run the scripted browser checks with
-  `playwright-cli`, as in "Checks".
+  `node tools/browser_checks.js` (no `NODE_PATH` needed), or with
+  `playwright-cli` as in "Checks".
 - Node is installed here for the checks only.
 - The first `import nicegui` after a while can take several minutes of slow
   disk reads (CPU time stays under a second), so the first `pytest` run or

@@ -116,6 +116,10 @@ playwright-cli close
 Each prints `"checks":"passed"` or the assertion that failed. Don't copy the
 scripts to another port; restart the server on 8080 instead.
 
+Or run both from the repository root with `node tools/browser_checks.js [URL]`,
+which finds Playwright and an installed Chromium itself and prints `PASS` or
+`FAIL` for each; pass a URL to check a server on another port.
+
 ## Running the server
 
 `python main.py` never exits. Never run it in a synchronous or attached shell;
