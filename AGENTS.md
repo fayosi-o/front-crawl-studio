@@ -1,7 +1,12 @@
 # Long Catch agent instructions
 
-Long Catch is a silent, local front-crawl teaching app: Python 3.12 and NiceGUI
-serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
+Long Catch is a silent front-crawl teaching app: Python 3.12 and NiceGUI serve
+a procedural 3D swimmer. Locally it runs at `127.0.0.1:8080` with no login; on
+Render it runs behind a login (see "Running the server"). See `README.md` for
+features.
+
+These instructions are platform-neutral. Windows notes are at the end;
+`CLAUDE.md` adds macOS notes for Claude Code.
 
 ## Architecture
 
@@ -15,6 +20,16 @@ serve a procedural 3D swimmer at `127.0.0.1:8080`. See `README.md` for features.
   Python stays the single owner of settings.
 - `long_catch/swimmer.py` builds the scene once and records the ids of objects
   the engine animates.
+- `long_catch/engine.py` inlines `engine.js` and `race.js` into the page and
+  holds `BrowserEngine` (the studio swimmer) and `RaceEngine` (the race).
+  Both send through the client they were created on, so a handler that
+  deletes its own button can still reach the browser.
+- `long_catch/static/race.js` runs one race clock that drives several
+  independent instances of the studio engine, one per lane.
+- `long_catch/theme.py` holds the colour palette and stylesheet shared by the
+  scene, engine and page.
+- `long_catch/auth.py` is the login for hosted mode only: an in-memory
+  session middleware (`PrivateAccess`) added by `main.py`. Locally it is off.
 - Scene coordinates: head towards +x, z up, right side towards -y, water
   surface at z = 0.
 - Natural motion in `engine.js` (breathing, heave, small per-stroke noise) is
@@ -57,15 +72,17 @@ browser as `render_params()['faults']`. A new fault needs:
 - Every fault must cost estimated distance per stroke.
 - A lower stroke rate must lower momentum carry (longer glide between the push
   and the next catch). Below 42 spm the stroke also lengthens in proportion to
-  the hold, so a patient 22 spm stroke covers about 1.95 m (≈12.8 strokes and
-  ≈2:19 per 100 m on the default settings); a slipping hand gains little.
+  the hold, so a patient 22 spm stroke covers about 1.97 m per stroke (≈12.7
+  strokes per 25 m and ≈2:19 per 100 m on the default settings); a slipping
+  hand gains little.
 - Muscle highlighting is an illustrative overlay. Don't present numbers as
   measured, and don't add disclaimer text to the UI.
 
 ## Hard constraints
 
-- Python 3.12 and NiceGUI with `ui.scene`; no Node.js, npm, React, databases,
-  CDNs, or downloaded models. Render hosting is configured by `render.yaml`;
+- Python 3.12 and NiceGUI with `ui.scene`. The app must not use Node.js, npm,
+  React, databases, CDNs, or downloaded models. Node and Playwright are
+  allowed for the checks only (`node --check` and the browser checks). Render hosting is configured by `render.yaml`;
   don't add other cloud services unless asked.
 - No sound, voice, speech, microphone, AudioContext, mute, or volume features.
 - The swimmer is a simple volumetric human built from primitives: not a stick
@@ -74,19 +91,42 @@ browser as `render_params()['faults']`. A new fault needs:
 
 ## Checks
 
-Use Git Bash (or WSL) for the virtual environment, not PowerShell:
+Activate the virtual environment first (see the platform notes), then:
 
 ```bash
-source .venv/Scripts/activate
 ruff check . && ruff format --check .
 python -m pytest -q
+node --check long_catch/static/engine.js
 ```
+
+The browser checks are `tests/browser_estimates.js` (the header estimates
+following studio and race edits, and the header layout from 1440 px down to
+320 px) and `tests/browser_motion.js` (the
+swimmer's motion, water reaction and a full 25 m race). Both open
+`http://127.0.0.1:8080/`, so restart that server on the current code first,
+then from `tests/`:
+
+```bash
+playwright-cli open about:blank
+playwright-cli run-code --filename=browser_estimates.js
+playwright-cli run-code --filename=browser_motion.js
+playwright-cli close
+```
+
+Each prints `"checks":"passed"` or the assertion that failed. Don't copy the
+scripts to another port; restart the server on 8080 instead.
 
 ## Running the server
 
 `python main.py` never exits. Never run it in a synchronous or attached shell;
-that blocks the agent session. Without `PORT`, it binds to `127.0.0.1:8080`;
-when Render sets `PORT`, it binds to `0.0.0.0` on that port.
+that blocks the agent session. Without `PORT`, it binds to `127.0.0.1:8080`
+with no login.
+
+Setting `PORT` or `RENDER` switches on hosted mode: the server binds to
+`0.0.0.0` on `PORT`, requires a login, and refuses to start unless
+`APP_USERNAME`, `APP_PASSWORD_HASH` (an Argon2 hash) and `SESSION_SECRET` (32+
+characters) are set. Render sets these; never set `PORT` or `RENDER` locally.
+`/health` stays public. The README's "Deploy to Render" section has the setup.
 
 - Start it detached, check it with one HTTP request to
   `http://127.0.0.1:8080/`, then move on. Don't poll it.
@@ -98,22 +138,13 @@ when Render sets `PORT`, it binds to `0.0.0.0` on that port.
 
 ## Browser automation
 
-On Windows, `playwright-cli` resolves to a `.ps1` script that PowerShell's
-execution policy blocks. Never call it from PowerShell. Run it through Git
-Bash or WSL so the `sh` shim is used instead:
+Use whichever browser tool your agent has: a built-in browser, the Playwright
+MCP tools, or `playwright-cli`.
 
-```bash
-bash -lc "playwright-cli open http://127.0.0.1:8080/"
-```
-
-If `node` itself is blocked in the agent shell, use the shared VS Code browser
-(`runPlaywrightCode`) instead. For screenshots at a fixed size, open a new page
-with `page.context().newPage()` and call `setViewportSize` on it.
-
-- The shared tab is usually hidden. Hidden tabs throttle
-  `requestAnimationFrame`, so clicks time out waiting for "stable" and the
-  estimates don't update. Forced clicks there give false results. For any
-  UI check, open a fresh visible page with `newPage()` and `setViewportSize`.
+- Hidden tabs throttle `requestAnimationFrame`, so clicks time out waiting for
+  "stable" and the estimates don't update. Forced clicks there give false
+  results. For any UI check or fixed-size screenshot, open a fresh visible
+  page with `page.context().newPage()` and call `setViewportSize` on it.
 - There is no global `THREE`. In page scripts, make vectors with
   `scene.position.clone()` and quaternions with `scene.quaternion.clone()`.
 - Drive the engine deterministically instead of waiting on animation:
@@ -139,9 +170,9 @@ These problems cost real time before. Plan around them.
   setting value per call) and return compact summaries, not per-frame logs.
 - Restarting the server reloads the page and kills any in-flight evaluate.
   Finish or abandon a sweep before editing `engine.js` and restarting.
-- Start each server in a new async shell id. Stop the old one by PID first
-  (`Get-NetTCPConnection -LocalPort 8080 -State Listen`), then wait about 6 s
-  before `page.goto`, or you get "connection refused".
+- Start each server in a new background shell. Stop the old one by its PID
+  first (see the platform notes), then wait about 6 s before `page.goto`, or
+  you get "connection refused".
 
 ### Judging visual effects
 
@@ -183,15 +214,27 @@ These problems cost real time before. Plan around them.
 - Temporary debug hooks (for example `window.__dbg`) must be removed before
   committing. Run `node --check long_catch/static/engine.js` after every edit.
 
-### Shell quirks
-
-- In PowerShell, `git push` writes progress to stderr, which shows up as a
-  red `NativeCommandError` even when the push succeeded. Read the
-  `old..new main -> main` line before assuming it failed.
-
 ## Git and deployment
 
 - Commit and push finished work straight to `main` without asking first.
   Pushing to `main` deploys to Render, so push only after every check in
-  "Checks" passes, including `node tools/browser_checks.js`.
+  "Checks" passes, including both browser checks.
 - Never force-push `main`, rewrite its history, or push secrets.
+
+## Windows notes
+
+- Use Git Bash or WSL for the virtual environment, not PowerShell:
+  `source .venv/Scripts/activate`.
+- Find the server's PID with
+  `Get-NetTCPConnection -LocalPort 8080 -State Listen`, then stop it by that
+  PID.
+- `playwright-cli` resolves to a `.ps1` script that PowerShell's execution
+  policy blocks. Never call it from PowerShell; run it through Git Bash or WSL
+  so the `sh` shim is used, for example
+  `bash -lc "playwright-cli open http://127.0.0.1:8080/"`.
+- If `node` itself is blocked in the agent shell, use the shared VS Code
+  browser (`runPlaywrightCode`). Its tab is usually hidden, so open a fresh
+  visible page as described in "Browser automation".
+- In PowerShell, `git push` writes progress to stderr, which shows up as a
+  red `NativeCommandError` even when the push succeeded. Read the
+  `old..new main -> main` line before assuming it failed.
