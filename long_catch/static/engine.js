@@ -62,6 +62,28 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     return keys[keys.length - 1][1];
   }
 
+  // A smooth curve through keyframes [[phase, value], ...] that keeps moving through each key instead
+  // of easing to a stop at it, as `keyed` does. A monotone cubic (harmonic-mean slopes) never
+  // overshoots a key, so a hand kept above the water stays above it. It starts and ends at rest, and
+  // a key where the value turns back (a peak) is passed at rest in that coordinate only.
+  function flowing(p, keys) {
+    const n = keys.length;
+    if (p <= keys[0][0]) return keys[0][1];
+    if (p >= keys[n - 1][0]) return keys[n - 1][1];
+    let i = 0;
+    while (p > keys[i + 1][0]) i++;
+    const slope = j => (keys[j + 1][1] - keys[j][1]) / (keys[j + 1][0] - keys[j][0]);
+    const tangent = j => {
+      if (j === 0 || j === n - 1) return 0;
+      const a = slope(j - 1), b = slope(j);
+      return a * b > 0 ? 2 * a * b / (a + b) : 0;
+    };
+    const [p0, v0] = keys[i], [p1, v1] = keys[i + 1], h = p1 - p0, t = (p - p0) / h, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * v0 + (t3 - 2 * t2 + t) * h * tangent(i)
+      + (3 * t2 - 2 * t3) * v1 + (t3 - t2) * h * tangent(i + 1);
+  }
+  const flowingVector = (p, keys) => [0, 1, 2].map(i => flowing(p, keys.map(([q, v]) => [q, v[i]])));
+
   // ---- arm path ---------------------------------------------------------------
 
   // Wrist target path for one arm at phase p, plus overlay and colouring values.
@@ -86,12 +108,21 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // forward under the surface. An over-reaching swimmer spears in at full stretch instead.
     const entryX = lerp(0.36, enterX + 0.08, over), entryH = lerp(-0.01, enterH + 0.03, over);
     const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over;
-    const finishX = -lerp(0.40, 0.50, L) + 0.16 * early, exitX = -lerp(0.42, 0.52, L) + 0.16 * early;
-    let x = keyed(p, [
-      [0, entryX], [0.11, enterX + 0.08 * over], [0.16, glideX - 0.01 + 0.08 * over],
-      [0.22, lerp(0.30, 0.40, c) + 0.08 * over],
-      [pull, pullX], [fin, finishX], [exit, exitX],
-      [midRec, -0.10], [lateRec, 0.16], [preEntry, 0.30], [1, entryX],
+    // The release sweeps the hand back, up and out past the thigh, so it leaves the water moving.
+    const finishX = -lerp(0.40, 0.50, L) + 0.16 * early, exitX = -lerp(0.45, 0.55, L) + 0.16 * early;
+    // From the deepest point of the push to the arm's full extension in front the hand follows flowing
+    // curves (see `flowing`; phases past 1 belong to the next cycle), so it never pauses at a
+    // keyframe: it rises and turns out past the hip as the push ends, comes out of the water still
+    // moving, and over the water the elbow leads: the relaxed hand trails behind it at first, then the
+    // forearm swings forward past the head.
+    const REACHED = 0.11, ahead = p < REACHED ? p + 1 : p, from = start => p >= start || p < REACHED;
+    const lift = rec(0.15);
+    let x = from(fin) ? flowing(ahead, [
+      [fin, finishX], [exit, exitX], [lift, exitX + 0.09], [midRec, -0.17], [lateRec, 0.12],
+      [preEntry, 0.30], [1, entryX], [1 + REACHED, enterX + 0.08 * over],
+    ]) : keyed(p, [
+      [REACHED, enterX + 0.08 * over], [0.16, glideX - 0.01 + 0.08 * over],
+      [0.22, lerp(0.30, 0.40, c) + 0.08 * over], [pull, pullX],
     ]);
     // One uninterrupted sweep: pull under the chest, then extend back toward the hip.
     // The slight timing bias puts peak rearward hand speed in the push, not at a stop under the shoulder.
@@ -100,30 +131,36 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // "power diamond" of the hand, forearm, and upper arm); a wide one keeps the hand outside the
     // shoulder line with a straighter arm. Both open slightly out at the catch first.
     // A crossover hand enters past the head's centre line, then sweeps back out during the pull.
-    const out = keyed(p, [
-      [0, 0.02], [0.11, 0.03], [0.16, 0.04], [0.22, 0.05 + 0.05 * w + 0.03 * (1 - c)],
+    // Over the water the hand swings out wide of the shoulder, under the elbow, and back in to enter
+    // in line with the shoulder.
+    const out = (from(push) ? flowing(ahead, [
+      [push, lerp(-0.13, 0.11, w)], [fin, lerp(-0.06, 0.09, w)], [exit, lerp(0.05, 0.13, w)], [lift, 0.13],
+      [midRec, 0.30], [lateRec, 0.26], [preEntry, 0.09], [1, 0.02], [1 + REACHED, 0.03],
+    ]) : keyed(p, [
+      [REACHED, 0.03], [0.16, 0.04], [0.22, 0.05 + 0.05 * w + 0.03 * (1 - c)],
       [0.36, lerp(-0.15, 0.12, w)], [push, lerp(-0.13, 0.11, w)],
-      [fin, lerp(-0.06, 0.09, w)], [exit, lerp(0.0, 0.10, w)],
-      [midRec, 0.20], [lateRec, 0.16], [preEntry, 0.06], [1, 0.02],
-    ]) - cross * keyed(p, [
+    ])) - cross * keyed(p, [
       [0, 0.33], [0.16, 0.31], [0.30, 0.15], [push, 0.02], [exit, 0], [lateRec, 0.08], [preEntry, 0.24], [1, 0.33],
     ]);
     // Distance-style catch: the hand tips down in front while the elbow stays high, then hangs
     // under the elbow so the forearm and hand form one near-vertical paddle facing backwards.
-    const height = keyed(p, [
-      [0, entryH], [0.11, enterH + 0.03 * over], [0.16, glideH + 0.05 * over],
+    // Over the water the wrist stays low, so the relaxed hand hanging from it skims the surface.
+    const height = from(push) ? flowing(ahead, [
+      [push, -0.32 - 0.08 * d], [fin, -0.08 - 0.02 * d], [exit, 0.02], [lift, 0.07], [midRec, 0.08],
+      [lateRec, 0.08], [preEntry, 0.05], [1, entryH], [1 + REACHED, enterH + 0.03 * over],
+    ]) : keyed(p, [
+      [REACHED, enterH + 0.03 * over], [0.16, glideH + 0.05 * over],
       [0.22, lerp(-0.16, -0.22, c) + 0.03 * over + 0.04 * sag],
       [0.30, lerp(-0.26, -0.40, c) - 0.05 * d + 0.04 * sag],
-      [push, -0.32 - 0.08 * d], [fin, -0.06 - 0.02 * d], [exit, 0.0],
-      [midRec, 0.10], [lateRec, 0.10], [preEntry, 0.06], [1, entryH],
+      [push, -0.32 - 0.08 * d],
     ]);
-    // Recovery is elbow-led and compact: the elbow lifts highest while the relaxed forearm hangs
-    // beneath it, close to the body, then swings forward past the head to the entry.
-    const elbow = [
-      keyed(p, [[exit, -0.24], [midRec, -0.04], [lateRec, 0.10], [preEntry, 0.14], [1, 0.16]]),
-      keyed(p, [[exit, 0.12], [midRec, 0.18], [lateRec, 0.18], [preEntry, 0.14], [1, 0.10]]),
-      keyed(p, [[exit, 0.16], [midRec, 0.30], [lateRec, 0.26], [preEntry, 0.18], [1, 0.10]]),
-    ];
+    // Recovery is elbow-led and relaxed: the elbow lifts up and out to the side (not straight up)
+    // while the forearm hangs loosely beneath it, bent about square, then swings forward past the head.
+    const elbow = flowingVector(p, [
+      [exit, [-0.24, 0.12, 0.16]], [lift, [-0.18, 0.20, 0.30]], [midRec, [-0.06, 0.34, 0.22]],
+      [lateRec, [0.08, 0.32, 0.19]],
+      [preEntry, [0.14, 0.20, 0.15]], [1, [0.16, 0.10, 0.10]],
+    ]);
     const recovery = p < exit ? 0 : smooth(clamp((p - exit) / 0.05, 0, 1)) * smooth(clamp((1 - p) / 0.07, 0, 1));
     const under = p < exit;
     // Underwater elbow direction. The upper arm rotates inward through the catch so the elbow
@@ -141,12 +178,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Palm direction for the forearm twist. Down and slightly out at entry, back through the catch
     // and push, pinkie-first and facing the thigh at release, then facing back and out (thumb down)
     // as the elbow lifts, and out to the side as the hand swings forward to the entry. Slip skews the palm inward so it slices rather than holds.
-    const palm = [0, 1, 2].map(i => keyed(p, [
-      [0, [0.1, 0.3, -1][i]], [0.14, [0.1, 0.15, -1][i]], [0.22, [-0.7, 0, -0.7][i]],
-      [0.36, [-1, -0.25 * (1 - w), -0.15][i]], [push, [-1, 0, 0.35][i]],
-      [fin, [-0.2, -0.8, 0.5][i]], [exit, [-0.2, -0.6, 0.6][i]],
-      [midRec, [-0.6, 0.6, 0.2][i]], [lateRec, [-0.2, 1, -0.1][i]],
-      [preEntry, [0, 0.45, -1][i]], [1, [0.1, 0.3, -1][i]],
+    const SETTLED = 0.14;
+    const palm = p >= fin || p < SETTLED ? flowingVector(p < SETTLED ? p + 1 : p, [
+      [fin, [-0.2, -0.8, 0.5]], [exit, [-0.2, -0.6, 0.6]],
+      [midRec, [-0.6, 0.6, 0.2]], [lateRec, [-0.2, 1, -0.1]],
+      [preEntry, [0, 0.45, -1]], [1, [0.1, 0.3, -1]], [1 + SETTLED, [0.1, 0.15, -1]],
+    ]) : [0, 1, 2].map(i => keyed(p, [
+      [SETTLED, [0.1, 0.15, -1][i]], [0.22, [-0.7, 0, -0.7][i]],
+      [0.36, [-1, -0.25 * (1 - w), -0.15][i]], [push, [-1, 0, 0.35][i]], [fin, [-0.2, -0.8, 0.5][i]],
     ]));
     palm[1] -= 0.9 * s * bump(p, 0.14, fin);
     // A dropped elbow leaves the palm facing the floor through the catch: it presses down, not back.
@@ -154,7 +193,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     palm[2] -= 0.35 * sag * bump(p, 0.14, 0.42);
     // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
-    const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : 15) - 32 * front;
+    // Over the water the wrist goes loose: the hand hangs from it, fingers trailing, then firms up
+    // for a fingertips-first entry. It starts and ends straight, so the hand never snaps at the exit or entry.
+    const relaxed = flowing(p, [[exit, 0], [lift, 22], [midRec, 30], [lateRec, 22], [preEntry, 8], [1, 0]]);
+    const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : relaxed) - 32 * front;
     const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
     return {
       x, out, height, elbow, recovery, elbowDir, palm, shrug: front,

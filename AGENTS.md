@@ -220,6 +220,13 @@ These problems cost real time before. Plan around them.
   - a fallback guide that can itself run along the arm: the "out and a little
     forward" hint is parallel to a 100%-width pull, so it now blends in "up"
     as its remainder shrinks.
+- `keyed` eases to a stop at every keyframe. From the deepest point of the push
+  to full extension in front, `arm()` uses `flowing` (a monotone cubic that
+  keeps moving through keys and never overshoots), so the hand never pauses at
+  the hip or mid-recovery. Keep the pull-to-finish sweep's `smooth` ending:
+  letting the push end still moving lowers its peak hand speed, and with it the
+  visible surge that `browser_motion.js` checks. The recovery wrist starts and
+  ends straight, so the hand doesn't snap at the exit or entry.
 - Fix these with continuous constructions: soft minimum shares, a partial
   roll, or folding the angle. Avoid `if (length < threshold)` fallbacks, which
   create a new discontinuity at the threshold.

@@ -43,8 +43,10 @@ cloud services or downloaded models.
   presets and twelve combinable faults with coaching cues, including **Head
   lift**, **Early exit**, **Dropped elbow** and **Lopsided pull**. The default
   distance stroke combines kick-led hip roll, a two-beat kick, short glide,
-  bilateral breathing every three strokes and an adjustable-width high-elbow
-  "power diamond" pull. All faults start off.
+  bilateral breathing every three strokes, an adjustable-width high-elbow
+  "power diamond" pull and a relaxed, elbow-led recovery: the hand leaves the
+  water still moving, skims low under a high elbow and swings forward into a
+  fingertips-first entry. All faults start off.
 - **Fix first:** a coaching card that ranks the single changes worth the most
   time per 100 m at your current stroke rate (clear a fault, set the catch
   earlier, hold the water, connect the hips, shorten an over-long glide).
