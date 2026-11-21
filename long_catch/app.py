@@ -178,6 +178,7 @@ FAULT_ICONS = {
     'earlyroll': 'sync',
     'wristpress': 'back_hand',
     'shoulderreach': 'open_in_full',
+    'hipfinish': 'rotate_right',
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 

@@ -502,6 +502,14 @@ FAULTS: dict[str, Fault] = {
         reach=0.03,
         good=True,
     ),
+    'hipfinish': Fault(
+        'Hip finish & roll',
+        'The hand pushes the water all the way back to the hip, and the hips and shoulders roll together '
+        'as the push ends, turning about a still head like a corkscrew.',
+        'Push water to the hip, then rotate: keep the head still and turn the body as one unit.',
+        push=-0.03,
+        good=True,
+    ),
 }
 # The right arm's catch with the Lopsided pull fault, as a share of the left arm's (engine.js).
 LOPSIDED_CATCH = 0.55

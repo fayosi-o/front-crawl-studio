@@ -42,9 +42,11 @@ cloud services or downloaded models.
 - **Stroke controls:** thirteen settings (including the swimmer's height), four
   presets and thirteen combinable faults with coaching cues, including **Head
   lift**, **Early exit**, **Dropped elbow**, **Lopsided pull** and **Early
-  rotation**, plus two **Good form** cues that fix the Dropped elbow
-  (**Wrist press** and **Shoulder reach**: the palm presses back and the arm
-  reaches long from the shoulder, which helps the estimates). The default
+  rotation**, plus three **Good form** cues (**Wrist press** and **Shoulder
+  reach** fix the Dropped elbow: the palm presses back with the elbow high and
+  the arm reaches long from the shoulder; **Hip finish & roll** pushes the
+  water right back to the hip and turns hips and shoulders together about a
+  still head). They help the estimates. The default
   distance stroke combines kick-led hip roll, a two-beat kick, short glide,
   bilateral breathing every three strokes, an adjustable-width high-elbow
   "power diamond" pull and a relaxed, elbow-led recovery: the hand leaves the

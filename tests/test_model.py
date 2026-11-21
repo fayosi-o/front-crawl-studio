@@ -642,7 +642,7 @@ def test_good_form_cues_help_and_fix_a_dropped_elbow():
     # Use a weaker catch so the gain is not capped at a perfect hold.
     clean = ViewState(settings=StrokeSettings(catch=70, slip=20))
     base = clean.metrics()
-    for key in ('wristpress', 'shoulderreach'):
+    for key in ('wristpress', 'shoulderreach', 'hipfinish'):
         assert FAULTS[key].good and FAULTS[key].cue
         assert clean.with_fault(key, True).metrics().distance_per_stroke > base.distance_per_stroke
         assert not any(a.fault == key for a in advice(clean.with_fault(key, True)))

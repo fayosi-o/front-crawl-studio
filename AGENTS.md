@@ -67,9 +67,10 @@ These instructions are platform-neutral. Windows notes are at the end;
 - "Fix first" coaching lives in `model.advice`: it scores single changes with
   the same estimate as the header and never changes the stroke rate.
 
-Two entries in `model.FAULTS` are good form, not errors (`Fault.good`): **Wrist press**
+Three entries in `model.FAULTS` are good form, not errors (`Fault.good`): **Wrist press**
 (more catch, less slip; the palm and wrist turn back, and it removes most of the Dropped elbow sag) and
-**Shoulder reach** (`reach`: a little more distance; the shoulder and hand reach forward). They use the same
+**Shoulder reach** (`reach`: a little more distance; the shoulder and hand reach forward) and
+**Hip finish & roll** (`push` < 0; the hand finishes further back and the hips roll with the shoulders). They use the same
 switch and `render_params()['faults']`, sit under "Good form" in the panel, are not counted as faults and
 never appear in "Fix first".
 

@@ -102,7 +102,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // sinks below the hand at the catch so the palm presses down instead of back.
     // Wrist press (the fix) lifts the palm back up and removes most of that sag; Shoulder reach pushes the
     // shoulder and the hand forward through the glide.
-    const press = F.wristpress ? 1 : 0, rch = F.shoulderreach ? 1 : 0;
+    // Hip finish carries the push right back to the hip before the hand leaves the water.
+    const press = F.wristpress ? 1 : 0, rch = F.shoulderreach ? 1 : 0, hip = F.hipfinish ? 1 : 0;
     const early = F.earlyexit ? 1 : 0, sag = F.droppedelbow ? 1 - 0.7 * press : 0;
     const reachX = 0.08 * over + 0.05 * rch;
     // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
@@ -113,7 +114,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const entryX = lerp(0.36, enterX + 0.08, over) + 0.05 * rch, entryH = lerp(-0.01, enterH + 0.03, over);
     const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over + 0.04 * rch;
     // The release sweeps the hand back, up and out past the thigh, so it leaves the water moving.
-    const finishX = -lerp(0.40, 0.50, L) + 0.16 * early, exitX = -lerp(0.45, 0.55, L) + 0.16 * early;
+    const finishX = -lerp(0.40, 0.50, L) + 0.16 * early - 0.04 * hip;
+    const exitX = -lerp(0.45, 0.55, L) + 0.16 * early - 0.04 * hip;
     // From the deepest point of the push to the arm's full extension in front the hand follows flowing
     // curves (see `flowing`; phases past 1 belong to the next cycle), so it never pauses at a
     // keyframe: it rises and turns out past the hip as the push ends, comes out of the water still
@@ -174,7 +176,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // points under the chest, so a large up share would fold the elbow inward. A pull wider than
     // half way reaches out to the side, along that outward guide (under heavy roll exactly along
     // it), so the guide turns back for it: back stays square to an arm reaching out.
-    const dropped = lerp(-0.6, 0.35, c) - 0.5 * sag, reachOut = smooth(clamp((w - 0.5) / 0.5, 0, 1));
+    const dropped = lerp(-0.6, 0.35, c) - 0.5 * sag + 0.2 * press, reachOut = smooth(clamp((w - 0.5) / 0.5, 0, 1));
     const elbowDir = [0, 1, 2].map(i => keyed(p, [
       [0, [0.15, 0.75, 0.65][i]], [0.12, [0.15, 0.75, 0.65][i]],
       [0.22, [lerp(-0.1, 0.35, c) - 0.25 * sag, 0.8, dropped][i]],
@@ -1446,7 +1448,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const chestGain = F.overrotation ? 1.65 : F.flathips ? 1.25 : 1;
     const roll = Math.min(80, P.roll * chestGain * (1 + 0.04 * noise(2 * st, 11))) * D;
     const lead = 0.07 * P.drive - 0.05 * (1 - P.drive);
-    const hipShare = F.flathips ? 0.06 : F.overrotation ? 0.85 : 0.3 + 0.6 * P.drive;
+    // Hip finish & roll: the hips turn with the shoulders, one unit about a still head (a corkscrew).
+    const hipShare = F.flathips ? 0.06 : F.overrotation ? 0.85 : F.hipfinish ? 0.85 : 0.3 + 0.6 * P.drive;
     // Two-beat timing: the kick turns the hips first and the chest follows a moment later, then both
     // hold on the side. A six-beat kick leaves the steady, even rotation. Catch-up always holds on the
     // side, on its own timing (see bodyPhase).
