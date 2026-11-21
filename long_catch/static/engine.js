@@ -100,14 +100,18 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const over = F.overreach ? 1 : 0, cross = F.crossover ? 1 : 0;
     // Early exit lifts the hand out at the waist (Python moves P.exit forward); a dropped elbow
     // sinks below the hand at the catch so the palm presses down instead of back.
-    const early = F.earlyexit ? 1 : 0, sag = F.droppedelbow ? 1 : 0;
+    // Wrist press (the fix) lifts the palm back up and removes most of that sag; Shoulder reach pushes the
+    // shoulder and the hand forward through the glide.
+    const press = F.wristpress ? 1 : 0, rch = F.shoulderreach ? 1 : 0;
+    const early = F.earlyexit ? 1 : 0, sag = F.droppedelbow ? 1 - 0.7 * press : 0;
+    const reachX = 0.08 * over + 0.05 * rch;
     // Entry angle tilts the extended arm about the shoulder: 0 deg skims the surface, larger points to the floor.
     const tilt = deg => [0.56 * Math.cos(deg * D), -0.56 * Math.sin(deg * D)];
     const [enterX, enterH] = tilt(P.entry), [glideX, glideH] = tilt(P.entry + 3);
     // Fingertips go in just past the head with the elbow still bent and high, then the arm extends
     // forward under the surface. An over-reaching swimmer spears in at full stretch instead.
-    const entryX = lerp(0.36, enterX + 0.08, over), entryH = lerp(-0.01, enterH + 0.03, over);
-    const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over;
+    const entryX = lerp(0.36, enterX + 0.08, over) + 0.05 * rch, entryH = lerp(-0.01, enterH + 0.03, over);
+    const pullX = lerp(0.10, 0.27, c) - 0.12 * s + 0.10 * over + 0.04 * rch;
     // The release sweeps the hand back, up and out past the thigh, so it leaves the water moving.
     const finishX = -lerp(0.40, 0.50, L) + 0.16 * early, exitX = -lerp(0.45, 0.55, L) + 0.16 * early;
     // From the deepest point of the push to the arm's full extension in front the hand follows flowing
@@ -119,10 +123,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const lift = rec(0.15);
     let x = from(fin) ? flowing(ahead, [
       [fin, finishX], [exit, exitX], [lift, exitX + 0.09], [midRec, -0.17], [lateRec, 0.12],
-      [preEntry, 0.30], [1, entryX], [1 + REACHED, enterX + 0.08 * over],
+      [preEntry, 0.30], [1, entryX], [1 + REACHED, enterX + reachX],
     ]) : keyed(p, [
-      [REACHED, enterX + 0.08 * over], [0.16, glideX - 0.01 + 0.08 * over],
-      [0.22, lerp(0.30, 0.40, c) + 0.08 * over], [pull, pullX],
+      [REACHED, enterX + reachX], [0.16, glideX - 0.01 + reachX],
+      [0.22, lerp(0.30, 0.40, c) + reachX], [pull, pullX],
     ]);
     // One uninterrupted sweep: pull under the chest, then extend back toward the hip.
     // The slight timing bias puts peak rearward hand speed in the push, not at a stop under the shoulder.
@@ -193,15 +197,20 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // A dropped elbow leaves the palm facing the floor through the catch: it presses down, not back.
     palm[0] += 0.45 * sag * bump(p, 0.14, 0.42);
     palm[2] -= 0.35 * sag * bump(p, 0.14, 0.42);
+    // Wrist press: the palm turns back through the catch instead of down.
+    palm[0] -= 0.3 * press * bump(p, 0.14, 0.42);
+    palm[2] += 0.2 * press * bump(p, 0.14, 0.42);
     // Over-extension: locked arm, shrugged shoulder, and a "stop sign" wrist that brakes at the front.
     const front = over * keyed(p, [[0, 1], [0.16, 1], [0.30, 0], [0.92, 0], [1, 1]]);
     // Over the water the wrist goes loose: the hand hangs from it, fingers trailing, then firms up
     // for a fingertips-first entry. It starts and ends straight, so the hand never snaps at the exit or entry.
     const relaxed = flowing(p, [[exit, 0], [lift, 22], [midRec, 30], [lateRec, 22], [preEntry, 8], [1, 0]]);
-    const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) : relaxed) - 32 * front;
+    const wrist = (under ? -48 * s * bump(p, 0.08, exit) + 12 * (1 - s) * bump(p, 0.12, 0.45) - 20 * press * bump(p, 0.14, fin)
+      : relaxed) - 32 * front;
     const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
     return {
       x, out, height, elbow, recovery, elbowDir, palm, shrug: front,
+      reach: rch * keyed(p, [[0, 1], [0.2, 1], [0.36, 0], [preEntry, 0], [1, 1]]),
       wrist: wrist * D, under, stage, load: (P.feel || 0) * loadShare(p, P), pace: loadPace(p, P),
       back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),
     };
@@ -1108,7 +1117,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
     const cos = Math.cos(bodyRoll), sin = Math.sin(bodyRoll);
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
-    sh.position.x = r.baseX + 0.04 * a.shrug;
+    sh.position.x = r.baseX + 0.04 * a.shrug + 0.05 * a.reach;
     // Keep the hand's lane-relative width and water-relative depth independent of body roll.
     // Transform both together: correcting depth alone lets a deep pull cross the centre line.
     const toChestPoint = (v, x, out, height) => {

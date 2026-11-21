@@ -176,6 +176,8 @@ FAULT_ICONS = {
     'droppedelbow': 'vertical_align_bottom',
     'lopsided': 'balance',
     'earlyroll': 'sync',
+    'wristpress': 'back_hand',
+    'shoulderreach': 'open_in_full',
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 
@@ -537,20 +539,29 @@ class LongCatchPage:
         """Fault chips that toggle on click, a Clear button, and a list of coaching cues."""
         with ui.element('div').classes('lc-card'):
             with ui.row().classes('lc-card-head'):
-                section_title('Stroke faults')
+                section_title('Stroke faults & form')
                 with ui.row().classes('items-center gap-1'):
                     self.fault_badge = ui.label().classes('lc-badge')
                     self.clear_faults = ui.button('Clear', on_click=lambda: self.update(faults=frozenset()), color=None)
                     self.clear_faults.props('flat dense no-caps').classes('lc-clear')
-            with ui.element('div').classes('lc-faults'):
-                for key, fault in FAULTS.items():
-                    button = ui.button(
-                        fault.label, icon=FAULT_ICONS[key], on_click=lambda k=key: self.toggle_fault(k), color=None
-                    )
-                    button.props(f'flat no-caps aria-pressed=false aria-label="{fault.label}"')
-                    button.classes(f'lc-fault lc-fault-{key}').tooltip(fault.hint)
-                    self.fault_buttons[key] = button
+            for good in (False, True):
+                if good:
+                    ui.label('Good form').classes('lc-form-title')
+                with ui.element('div').classes('lc-faults'):
+                    self._build_fault_buttons(good)
             self.cues = ui.element('div').classes('lc-cues')
+
+    def _build_fault_buttons(self, good: bool) -> None:
+        """The chips for the faults, or for the good-form cues that fix them."""
+        for key, fault in FAULTS.items():
+            if fault.good != good:
+                continue
+            button = ui.button(
+                fault.label, icon=FAULT_ICONS[key], on_click=lambda k=key: self.toggle_fault(k), color=None
+            )
+            button.props(f'flat no-caps aria-pressed=false aria-label="{fault.label}"')
+            button.classes(f'lc-fault lc-fault-{key}').tooltip(fault.hint)
+            self.fault_buttons[key] = button
 
     def _build_coach(self) -> None:
         """Pace summary and the ranked changes that would save the most time at this rate."""
@@ -752,10 +763,10 @@ class LongCatchPage:
         if active == self._fault_layout:
             return
         self._fault_layout = active
-        count = len(active)
+        count = sum(not FAULTS[key].good for key in active)
         self.fault_badge.text = f'{count} on' if count else 'Clean'
         self.fault_badge.classes(replace='lc-badge lc-badge-fault' if count else 'lc-badge')
-        self.clear_faults.set_visibility(bool(count))
+        self.clear_faults.set_visibility(bool(active))
         for key, button in self.fault_buttons.items():
             on = key in active
             if on:
@@ -766,7 +777,7 @@ class LongCatchPage:
         self.cues.clear()
         with self.cues:
             if not active:
-                hint = 'Switch on a fault to see how it changes the stroke.'
+                hint = 'Switch on a fault, or a good-form cue, to see how it changes the stroke.'
                 ui.label(hint).classes('lc-cue lc-cue-empty')
             for key, fault in FAULTS.items():
                 if key in active:

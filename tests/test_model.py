@@ -378,8 +378,9 @@ def test_stroke_depth_is_normalized_and_validated():
 
 def test_every_fault_costs_distance_and_unknown_faults_are_rejected():
     clean = ViewState().metrics().distance_per_stroke
-    for key in FAULTS:
-        assert ViewState(faults=frozenset({key})).metrics().distance_per_stroke < clean
+    for key, fault in FAULTS.items():
+        if not fault.good:
+            assert ViewState(faults=frozenset({key})).metrics().distance_per_stroke < clean
     with pytest.raises(ValueError):
         ViewState(faults=frozenset({'flailing'}))
 
@@ -635,3 +636,17 @@ def test_sinking_legs_cost_more_at_a_faster_pace():
 
     assert cost(30) < cost(42) < cost(60)
     assert sink_scale(0.5) < 1.0 < sink_scale(1.4)
+
+
+def test_good_form_cues_help_and_fix_a_dropped_elbow():
+    # Use a weaker catch so the gain is not capped at a perfect hold.
+    clean = ViewState(settings=StrokeSettings(catch=70, slip=20))
+    base = clean.metrics()
+    for key in ('wristpress', 'shoulderreach'):
+        assert FAULTS[key].good and FAULTS[key].cue
+        assert clean.with_fault(key, True).metrics().distance_per_stroke > base.distance_per_stroke
+        assert not any(a.fault == key for a in advice(clean.with_fault(key, True)))
+    dropped = clean.with_fault('droppedelbow', True)
+    fixed = dropped.with_fault('wristpress', True).with_fault('shoulderreach', True)
+    assert fixed.metrics().distance_per_stroke > dropped.metrics().distance_per_stroke
+    assert fixed.render_params()['faults'] == ['droppedelbow', 'shoulderreach', 'wristpress']

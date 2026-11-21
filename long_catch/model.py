@@ -383,7 +383,10 @@ class Metrics:
 
 @dataclass(frozen=True, slots=True)
 class Fault:
-    """A common stroke error that can be switched on to show its shape and cost."""
+    """A common stroke error that can be switched on to show its shape and cost.
+
+    The same switch also carries a few good-form cues (``good``) that fix an error, such as Wrist press.
+    """
 
     label: str
     hint: str  # what the fault looks like
@@ -392,6 +395,8 @@ class Fault:
     slip: float = 0.0  # added to slip (0–1)
     catch: float = 0.0  # removed from catch quality (0–1)
     push: float = 0.0  # fraction of each stroke's push lost
+    reach: float = 0.0  # fraction of distance per stroke gained (good form only)
+    good: bool = False  # good form to switch on, not an error: its gains are negative catch and slip costs
 
 
 FAULTS: dict[str, Fault] = {
@@ -480,6 +485,22 @@ FAULTS: dict[str, Fault] = {
         catch=0.18,
         slip=0.06,
         drag=0.02,
+    ),
+    'wristpress': Fault(
+        'Wrist press',
+        'The wrist flexes back through the catch so the palm and forearm press straight back, with the elbow '
+        'held high and the hand never pressing down.',
+        'Press with the wrist: cock the hand back so the palm faces the wall behind you, not the floor.',
+        catch=-0.05,
+        slip=-0.03,
+        good=True,
+    ),
+    'shoulderreach': Fault(
+        'Shoulder reach',
+        'The shoulder rolls forward as the hand enters, so the arm reaches longer in front before the catch.',
+        'Extend the shoulder: reach through from the shoulder, not just the arm, before you start the catch.',
+        reach=0.03,
+        good=True,
     ),
 }
 # The right arm's catch with the Lopsided pull fault, as a share of the left arm's (engine.js).
@@ -650,6 +671,7 @@ def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, fl
     quality = 0.60 + 0.75 * hold * connection - 0.32 * slip + LONG_STROKE_M * length**2 * hold
     kick = kick_thrust(s.kick / 100, s.beats, 'kneekick' in faults)
     push = math.prod(1.0 - FAULTS[k].push for k in faults)
+    reach = 1.0 + sum(FAULTS[k].reach for k in faults)
     # The pace before the body's drag sets how hard the legs' sinking drags.
     pace = quality * math.sqrt(REFERENCE_RATE / s.rate) * (1.0 + kick) * push * s.height / REFERENCE_HEIGHT
     drag = body_drag(s, faults, pace * s.rate / 60.0)
@@ -661,6 +683,7 @@ def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, fl
         * (0.80 + 0.20 * momentum)
         * (1.0 + kick)
         * push
+        * reach
         * (1.0 - drag)
         * s.height
         / REFERENCE_HEIGHT,
@@ -871,7 +894,7 @@ def advice(view: ViewState, limit: int = 3) -> tuple[Advice, ...]:
     catch, slip, or drive, and an over-long glide are scored through the same
     estimate as the header, and only savings of at least ``MIN_SAVING`` count.
     """
-    active = [(key, fault) for key, fault in FAULTS.items() if key in view.faults]
+    active = [(key, fault) for key, fault in FAULTS.items() if key in view.faults and not fault.good]
     options = [Advice(f'Fix {fault.label.lower()}', fault.cue, fault=key) for key, fault in active]
     s = view.settings
     for key, direction, title, cue in SETTING_ADVICE:

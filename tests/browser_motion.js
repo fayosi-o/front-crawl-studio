@@ -149,7 +149,7 @@ async page => {
         for (const frontGlide of [-0.08, 0.08]) run({...preset, frontGlide, catchDelay: catchDelay(frontGlide)}, 30, 6);
       }
       run({faults: ['crossover', 'overrotation', 'overreach', 'flathips', 'sinking', 'snaking', 'kneekick', 'rushing',
-        'earlyexit', 'droppedelbow', 'lopsided', 'earlyroll'], rush: 0.72, exit: 0.68}, 30, 12);
+        'earlyexit', 'droppedelbow', 'lopsided', 'earlyroll', 'wristpress', 'shoulderreach'], rush: 0.72, exit: 0.68}, 30, 12);
       run({}, 30, 60);
       const paused = JSON.stringify(pose());
       for (let i = 0; i < 10; i++) engine.advance(0);
