@@ -848,6 +848,10 @@ class ViewState:
 # lower first; keys 1–4 in the UI). The first three are distance strokes built on a two- or
 # four-beat kick. Presets set the stroke, not the swimmer: they keep the swimmer's height.
 PRESETS: dict[str, StrokeSettings] = {
+    # The same form at a distance pace: slower turnover, a longer glide and a lighter four-beat kick.
+    'Phelps relaxed': StrokeSettings(
+        rate=36, catch=95, roll=52, slip=6, width=25, depth=55, entry=8, drive=85, kick=50, beats=4, glide=55
+    ),
     # From underwater stills of Phelps: full reach, high-elbow catch under the body, a long push past the
     # hip, big shoulder-and-hip roll and a steady six-beat kick.
     'Phelps-style': StrokeSettings(
