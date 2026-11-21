@@ -352,7 +352,7 @@ def test_matching_preset_identifies_unchanged_presets_only():
     assert all(matching_preset(settings) == name for name, settings in PRESETS.items())
     assert matching_preset(PRESETS['Long power'].with_values(kick=0)) is None
     metrics = {name: s.metrics().distance_per_stroke for name, s in PRESETS.items()}
-    assert len(set(PRESETS.values())) == 4
+    assert len(set(PRESETS.values())) == len(PRESETS)
     assert metrics['Long power'] > metrics['Compact connected'] > metrics['Short slipping']
 
 
