@@ -166,7 +166,7 @@ LOAD_RELEASE = 0.75  # share of that time won back by the end of the push, as th
 
 
 # Hand paddles: the paddled hand's area against a bare hand, and the extra arm work each pull costs.
-PADDLE_AREA = 1.25
+PADDLE_AREA = 1.45
 PADDLE_EFFORT = 0.1
 
 

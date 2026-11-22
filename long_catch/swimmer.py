@@ -75,7 +75,7 @@ def _superellipse(t: float, a: float, b: float) -> list[float]:
     return [a * math.copysign(abs(c) ** 0.5, c), b * math.copysign(abs(s) ** 0.5, s)]
 
 
-PADDLE_OUTLINE = [_superellipse(2 * math.pi * i / 48, 0.095, 0.058) for i in range(48)]
+PADDLE_OUTLINE = [_superellipse(2 * math.pi * i / 48, 0.108, 0.066) for i in range(48)]
 NECK_X = 0.29  # base of the neck along the spine; the head turns and lifts about this point
 HEAD_CENTRE: Vec = (0.50, 0.0, 0.015)
 HEAD_AXES: Vec = (0.1375, 0.0935, 0.113)  # skull semi-axes: crown (+x), side (y), back of head (+z)
