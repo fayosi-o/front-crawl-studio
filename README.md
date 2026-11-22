@@ -46,7 +46,10 @@ cloud services or downloaded models.
   reach** fix the Dropped elbow: the palm presses back with the elbow high and
   the arm reaches long from the shoulder; **Hip finish & roll** pushes the
   water right back to the hip and turns hips and shoulders together about a
-  still head). They help the estimates. The default
+  still head). They help the estimates. Under **Equipment**, **Hand
+  paddles** put a hand-sized plate on each palm: the hand holds more water, so
+  each stroke carries further and the arm feels heavier, at a higher effort.
+  The default
   distance stroke combines kick-led hip roll, a two-beat kick, short glide,
   bilateral breathing every three strokes, an adjustable-width high-elbow
   "power diamond" pull and a relaxed, elbow-led recovery: the hand leaves the

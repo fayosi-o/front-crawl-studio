@@ -66,6 +66,16 @@ TRUNK_PROFILE = (
     (0.100, 0.295),
     (0.0, 0.300),
 )
+
+
+# Hand-paddle outline in the hand's frame (x along the fingers, y across): a rounded rectangle
+# (superellipse) about 19 cm by 12 cm, only a little larger than the hand.
+def _superellipse(t: float, a: float, b: float) -> list[float]:
+    c, s = math.cos(t), math.sin(t)
+    return [a * math.copysign(abs(c) ** 0.5, c), b * math.copysign(abs(s) ** 0.5, s)]
+
+
+PADDLE_OUTLINE = [_superellipse(2 * math.pi * i / 48, 0.095, 0.058) for i in range(48)]
 NECK_X = 0.29  # base of the neck along the spine; the head turns and lifts about this point
 HEAD_CENTRE: Vec = (0.50, 0.0, 0.015)
 HEAD_AXES: Vec = (0.1375, 0.0935, 0.113)  # skull semi-axes: crown (+x), side (y), back of head (+z)
@@ -251,6 +261,17 @@ class SwimmerBuilder:
                     # Thumbs sit on the inner edge of each palm.
                     thumb = ui.scene.sphere(0.028, 24, 16).material(skin)
                     self._register('thumb' + side, thumb).scale(1.1, 0.6, 0.65).move(0.026, -sign * 0.045, -0.005)
+                    self._paddle(side)
+
+    def _paddle(self, side: str) -> None:
+        """A hand paddle under the palm (-z) with a strap over the fingers; hidden until switched on.
+
+        A rounded plate a little longer and wider than the hand, so it reads as equipment, not a fin.
+        """
+        with self._register('pad' + side, ui.scene.group().move(0.072, 0, -0.027)).visible(False):
+            ui.scene.extrusion(PADDLE_OUTLINE, 0.005).material(self.colors.paddle, 0.85)
+            strap = ui.scene.torus(0.05, 0.004, 8, 40).material(self.colors.rubber)
+            strap.scale(0.5, 1, 1).rotate(0, math.pi / 2, 0).move(0.035, 0, 0.022)
 
     def _pelvis(self) -> None:
         """Hips in suit colour, plus the core and hip-drive emphasis patches."""

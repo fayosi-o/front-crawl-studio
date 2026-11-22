@@ -32,6 +32,7 @@ from long_catch.model import (
     advice,
     felt_load,
     format_duration,
+    hand_area,
     matching_preset,
     path_length,
     preset_for,
@@ -179,6 +180,7 @@ FAULT_ICONS = {
     'wristpress': 'back_hand',
     'shoulderreach': 'open_in_full',
     'hipfinish': 'rotate_right',
+    'paddles': 'pan_tool',
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 
@@ -545,17 +547,17 @@ class LongCatchPage:
                     self.fault_badge = ui.label().classes('lc-badge')
                     self.clear_faults = ui.button('Clear', on_click=lambda: self.update(faults=frozenset()), color=None)
                     self.clear_faults.props('flat dense no-caps').classes('lc-clear')
-            for good in (False, True):
-                if good:
-                    ui.label('Good form').classes('lc-form-title')
+            for kind, title in (('fault', None), ('form', 'Good form'), ('kit', 'Equipment')):
+                if title:
+                    ui.label(title).classes('lc-form-title')
                 with ui.element('div').classes('lc-faults'):
-                    self._build_fault_buttons(good)
+                    self._build_fault_buttons(kind)
             self.cues = ui.element('div').classes('lc-cues')
 
-    def _build_fault_buttons(self, good: bool) -> None:
-        """The chips for the faults, or for the good-form cues that fix them."""
+    def _build_fault_buttons(self, kind: str) -> None:
+        """The chips for the faults, the good-form cues that fix them, or the training equipment."""
         for key, fault in FAULTS.items():
-            if fault.good != good:
+            if kind != ('kit' if fault.kit else 'form' if fault.good else 'fault'):
                 continue
             button = ui.button(
                 fault.label, icon=FAULT_ICONS[key], on_click=lambda k=key: self.toggle_fault(k), color=None
@@ -778,7 +780,7 @@ class LongCatchPage:
         self.cues.clear()
         with self.cues:
             if not active:
-                hint = 'Switch on a fault, or a good-form cue, to see how it changes the stroke.'
+                hint = 'Switch on a fault, a good-form cue or paddles to see how it changes the stroke.'
                 ui.label(hint).classes('lc-cue lc-cue-empty')
             for key, fault in FAULTS.items():
                 if key in active:
@@ -803,8 +805,8 @@ class LongCatchPage:
         """Size the phase segments: recovery moves with stroke rate, a heavy felt load slows the
         hand under water and shortens the recovery, and spinning arms squeeze the pull."""
         s = self.view.settings
-        feel = felt_load(metrics.hold_quality, s.drive / 100)
         faults = self.view.faults
+        feel = felt_load(metrics.hold_quality, s.drive / 100, hand_area(faults))
         bounds = timeline_boundaries(path_length(s.rate), 'rushing' in faults, s.glide, feel, 'earlyexit' in faults)
         starts = (0.0, *bounds, 1.0)
         if starts == self._segment_layout:

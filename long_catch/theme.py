@@ -28,6 +28,7 @@ class Palette:
     cap: str = '#2b4f86'
     lens: str = '#5d9cc9'
     rubber: str = '#141c21'
+    paddle: str = '#8a78e0'
 
     def css_variables(self) -> str:
         """A ``:root`` rule declaring one CSS custom property per colour."""

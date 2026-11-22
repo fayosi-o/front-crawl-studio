@@ -165,13 +165,25 @@ LOAD_DWELL = 0.36  # extra time per unit of underwater path at full load with a 
 LOAD_RELEASE = 0.75  # share of that time won back by the end of the push, as the load lets go
 
 
-def felt_load(hold_quality: float, drive_balance: float) -> float:
+# Hand paddles: the paddled hand's area against a bare hand, and the extra arm work each pull costs.
+PADDLE_AREA = 1.25
+PADDLE_EFFORT = 0.1
+
+
+def hand_area(faults: frozenset[str]) -> float:
+    """The hand's pulling area against a bare hand: larger with hand paddles on."""
+    return PADDLE_AREA if 'paddles' in faults else 1.0
+
+
+def felt_load(hold_quality: float, drive_balance: float, area: float = 1.0) -> float:
     """Peak load (0–1) felt on the hand and forearm: the hold, connected to the body by the hips.
 
     Uses the same hold and hip connection as the estimates, so a stroke that holds water in the
-    estimates also feels heavy in the arm.
+    estimates also feels heavy in the arm. A larger hand (``area``, hand paddles) catches more water
+    and feels heavier still.
     """
-    return clamp(hold_quality, 0.0, 1.0) * (0.7 + 0.3 * clamp(drive_balance, 0.0, 1.0))
+    load = clamp(hold_quality, 0.0, 1.0) * (0.7 + 0.3 * clamp(drive_balance, 0.0, 1.0))
+    return clamp(load * area, 0.0, 1.0)
 
 
 def load_profile(phase: float, exit: float) -> float:
@@ -326,14 +338,17 @@ def kick_drag(kick: float, sink: float = 1.0) -> float:
     return 1.0 - (1.0 - LEG_SINK * sink * (1.0 - k) ** 2) * (1.0 - KICK_DRAG * k * k)
 
 
-def work_rate(speed: float, hold_quality: float, stroke_rate: float, kick: float, beats: int) -> float:
+def work_rate(
+    speed: float, hold_quality: float, stroke_rate: float, kick: float, beats: int, arm_load: float = 1.0
+) -> float:
     """Power a stroke puts in, in arbitrary units (see ``EFFORT_SPRINT`` for the scale).
 
     ``speed`` is the pace the stroke's own push would make in a streamlined body, relative to the
     swimmer's height (m/s per 180 cm): a draggy body slows the swimmer without making the stroke
-    any easier, and a taller swimmer is not charged for a longer stroke.
+    any easier, and a taller swimmer is not charged for a longer stroke. ``arm_load`` scales the
+    arms' work (hand paddles make every pull heavier).
     """
-    arms = speed**3 / (0.3 + 0.4 * clamp(hold_quality, 0.0, 1.0))  # a slipping hand wastes some on the water
+    arms = arm_load * speed**3 / (0.3 + 0.4 * clamp(hold_quality, 0.0, 1.0))  # a slipping hand wastes some
     turnover = TURNOVER_POWER * (stroke_rate / 60.0) ** 3
     legs = KICK_POWER * clamp(kick, 0.0, 1.0) ** 2 * beats / 6
     return arms + turnover + legs
@@ -397,6 +412,7 @@ class Fault:
     push: float = 0.0  # fraction of each stroke's push lost
     reach: float = 0.0  # fraction of distance per stroke gained (good form only)
     good: bool = False  # good form to switch on, not an error: its gains are negative catch and slip costs
+    kit: bool = False  # training equipment (hand paddles), listed under Equipment; always also ``good``
 
 
 FAULTS: dict[str, Fault] = {
@@ -509,6 +525,16 @@ FAULTS: dict[str, Fault] = {
         'Push water to the hip, then rotate: keep the head still and turn the body as one unit.',
         push=-0.03,
         good=True,
+    ),
+    'paddles': Fault(
+        'Hand paddles',
+        'Medium hand paddles strapped to each palm: the hand holds more water, so each stroke carries further '
+        'and the arm feels heavier, but every pull costs more effort and loads the shoulder.',
+        'Keep the catch patient and the elbow high, and build up slowly: paddles load the shoulder.',
+        slip=-0.04,
+        push=-0.05,
+        good=True,
+        kit=True,
     ),
 }
 # The right arm's catch with the Lopsided pull fault, as a share of the left arm's (engine.js).
@@ -700,7 +726,8 @@ def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, fl
     )
     speed = distance_per_stroke * s.rate / 60.0
     streamlined = speed / (1.0 - drag) * REFERENCE_HEIGHT / s.height
-    power = work_rate(streamlined, hold, s.rate, s.kick / 100, s.beats)
+    arm_load = 1.0 + PADDLE_EFFORT * ('paddles' in faults)
+    power = work_rate(streamlined, hold, s.rate, s.kick / 100, s.beats, arm_load)
     return hold, distance_per_stroke, momentum, power
 
 
@@ -830,7 +857,7 @@ class ViewState:
             'scale': s.height / REFERENCE_HEIGHT,  # the swimmer's size against the 180 cm model
             'faults': sorted(self.faults),
             'rush': RUSH if 'rushing' in self.faults else 1.0,
-            'feel': felt_load(m.hold_quality, s.drive / 100),
+            'feel': felt_load(m.hold_quality, s.drive / 100, hand_area(self.faults)),
             'trail': self.trail,
             'trailSeconds': self.trail_seconds,
             'pressure': self.pressure,

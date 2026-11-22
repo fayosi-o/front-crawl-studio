@@ -304,7 +304,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
   // Fist drill: the hands close (thumbs tucked), so the palm loads little and the forearm does the catching.
   const FIST_GAIN = { wr: 0.25, el: 1.5 };
-  const probeGain = (p, P) => p.gain * (P.drill === 'fist' && p.hand ? FIST_GAIN[p.joint.slice(0, 2)] : 1);
+  // Hand paddles enlarge the palm, so the hand probe loads more water (not with the fist drill).
+  const paddled = P => !!S.faults.paddles && P.drill !== 'fist';
+  const probeGain = (p, P) => p.gain * (P.drill === 'fist' && p.hand ? FIST_GAIN[p.joint.slice(0, 2)] : 1)
+    * (paddled(P) && p.joint.startsWith('wr') ? CONFIG.paddleArea : 1);
   function shapeHands(m, P) {
     const fist = P.drill === 'fist';
     if (m.fist === fist) return;
@@ -320,6 +323,12 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       m['thumb' + side].visible = !fist;
     }
+  }
+
+  // Show the hand paddles while they are switched on; a closed fist drill takes them off.
+  function showPaddles(m, P) {
+    const on = paddled(P);
+    m.padR.visible = m.padL.visible = on;
   }
 
   // ---- natural motion ---------------------------------------------------------
@@ -673,14 +682,15 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     renderer.setSize(size.x, size.y, false);
   }
 
-  // A soft sheen: skin and suit catch a little light; the silicone cap gets a brighter, tighter highlight.
+  // A soft sheen: skin and suit catch a little light; the silicone cap and the plastic paddles get a
+  // brighter, tighter highlight.
   function setupSheen(m) {
-    const cap = new THREE.Color(CONFIG.colors.cap);
+    const cap = new THREE.Color(CONFIG.colors.cap), paddle = new THREE.Color(CONFIG.colors.paddle);
     for (const part of [m.chest, m.pelvis]) {
       part.traverse(o => {
         const mat = o.material;
         if (!o.isMesh || !mat || !mat.isMeshPhongMaterial || mat.opacity === 0) return;
-        const shiny = mat.color.equals(cap);
+        const shiny = mat.color.equals(cap) || mat.color.equals(paddle);
         mat.specular.setScalar(shiny ? 0.18 : 0.1);
         mat.shininess = shiny ? 40 : 16;
       });
@@ -1525,6 +1535,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     vary(right, st, 1);
     vary(left, st + 0.5, 5);
     shapeHands(m, P);
+    showPaddles(m, P);
     const slipness = slipShare(P), slipR = slipShare(PR);
     m.slip = {R: slipR, L: slipness};
     m.grip = {R: gripOf(PR, slipR), L: gripOf(P, slipness)};

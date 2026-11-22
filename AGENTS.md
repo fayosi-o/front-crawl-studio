@@ -74,6 +74,12 @@ Three entries in `model.FAULTS` are good form, not errors (`Fault.good`): **Wris
 switch and `render_params()['faults']`, sit under "Good form" in the panel, are not counted as faults and
 never appear in "Fix first".
 
+**Hand paddles** (`paddles`) is training equipment: `good` and `kit`, listed under "Equipment". The paddled
+hand holds more water (less slip, more push), feels heavier (`felt_load(..., hand_area(faults))`, so the hand
+also moves more slowly through the pull) and its arm work costs `PADDLE_EFFORT` more (`work_rate`'s `arm_load`).
+In `engine.js` the `padR`/`padL` plates show on the palms and the hand pressure probe gains `paddleArea`;
+the fist drill takes them off.
+
 ### Adding a stroke fault
 
 Faults are data in `model.FAULTS` (label, hint, cue, and a cost as drag, slip,

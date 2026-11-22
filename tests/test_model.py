@@ -16,6 +16,7 @@ from long_catch.model import (
     LOAD_DWELL,
     LOAD_RELEASE,
     MIN_SAVING,
+    PADDLE_AREA,
     PRESETS,
     PROPULSIVE_S,
     RUSH,
@@ -642,7 +643,7 @@ def test_good_form_cues_help_and_fix_a_dropped_elbow():
     # Use a weaker catch so the gain is not capped at a perfect hold.
     clean = ViewState(settings=StrokeSettings(catch=70, slip=20))
     base = clean.metrics()
-    for key in ('wristpress', 'shoulderreach', 'hipfinish'):
+    for key in ('wristpress', 'shoulderreach', 'hipfinish', 'paddles'):
         assert FAULTS[key].good and FAULTS[key].cue
         assert clean.with_fault(key, True).metrics().distance_per_stroke > base.distance_per_stroke
         assert not any(a.fault == key for a in advice(clean.with_fault(key, True)))
@@ -650,3 +651,16 @@ def test_good_form_cues_help_and_fix_a_dropped_elbow():
     fixed = dropped.with_fault('wristpress', True).with_fault('shoulderreach', True)
     assert fixed.metrics().distance_per_stroke > dropped.metrics().distance_per_stroke
     assert fixed.render_params()['faults'] == ['droppedelbow', 'shoulderreach', 'wristpress']
+
+
+def test_hand_paddles_carry_further_but_cost_effort_and_feel_heavier():
+    bare = ViewState(settings=StrokeSettings(catch=70, slip=20))
+    paddled = bare.with_fault('paddles', True)
+    assert FAULTS['paddles'].kit and FAULTS['paddles'].good
+    m0, m1 = bare.metrics(), paddled.metrics()
+    assert m1.distance_per_stroke > m0.distance_per_stroke
+    assert m1.hold_quality > m0.hold_quality
+    assert m1.effort > m0.effort
+    assert paddled.render_params()['feel'] > bare.render_params()['feel']
+    assert felt_load(0.5, 0.5, PADDLE_AREA) == pytest.approx(PADDLE_AREA * felt_load(0.5, 0.5))
+    assert felt_load(1.0, 1.0, PADDLE_AREA) == 1.0
