@@ -645,18 +645,46 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   // Replace NiceGUI's flat default lights (strong ambient + one overhead light) with a higher-contrast rig.
-  // White light keeps the palette colours strong; less ambient and a stronger key light from above-front
-  // add shading, and a faint cool rim light from behind separates the swimmer from the dark water.
+  // White light keeps the palette colours strong. A sky/pool hemisphere light replaces most of the flat
+  // ambient, so upper surfaces read pale and undersides take a cool teal tint; a key light from above-front
+  // adds shading, and a cool rim light from behind separates the swimmer from the dark water.
   // No shadows, so rendering cost is unchanged.
   function setupLighting(group) {
     for (const light of S.el.scene.children.filter(o => o.isAmbientLight || o.isDirectionalLight)) {
       S.el.scene.remove(light);
     }
-    const key = new THREE.DirectionalLight(0xffffff, 1.9);
+    const key = new THREE.DirectionalLight(0xffffff, 2.0);
     key.position.set(3, -2.5, 6);
-    const rim = new THREE.DirectionalLight(0x9fe4ff, 0.5);
+    const rim = new THREE.DirectionalLight(0x9fe4ff, 0.9);
     rim.position.set(-4, 3, -1.5);
-    group.add(new THREE.AmbientLight(0xffffff, 1.5), key, rim);
+    const sky = new THREE.HemisphereLight(0xe4f6ff, 0x1d5562, 1.2);
+    sky.position.set(0, 0, 1);
+    group.add(new THREE.AmbientLight(0xffffff, 0.6), sky, key, rim);
+    // A faint haze in the background colour: the far lane rope and the end of the pool fade into the dark.
+    S.el.scene.fog = new THREE.FogExp2(CONFIG.background, 0.06);
+  }
+
+  // Render at the screen's pixel density (capped at 2x), so edges stay crisp on high-DPI displays.
+  function sharpen(renderer) {
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    if (renderer.getPixelRatio() === ratio) return;
+    const size = renderer.getSize(new THREE.Vector2());
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(size.x, size.y, false);
+  }
+
+  // A soft sheen: skin and suit catch a little light; the silicone cap gets a brighter, tighter highlight.
+  function setupSheen(m) {
+    const cap = new THREE.Color(CONFIG.colors.cap);
+    for (const part of [m.chest, m.pelvis]) {
+      part.traverse(o => {
+        const mat = o.material;
+        if (!o.isMesh || !mat || !mat.isMeshPhongMaterial || mat.opacity === 0) return;
+        const shiny = mat.color.equals(cap);
+        mat.specular.setScalar(shiny ? 0.18 : 0.1);
+        mat.shininess = shiny ? 40 : 16;
+      });
+    }
   }
 
   // Build the surface waves, pool floor, and lights once per scene; returns false until THREE has loaded.
@@ -705,6 +733,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     });
     scene.add(pool);
     setupLighting(pool);
+    sharpen(S.el.renderer);
+    setupSheen(m);
     const pos = m.water.geometry.attributes.position, a = pos.array;
     const fixed = new Float64Array(pos.count), heights = new Float64Array(pos.count);
     for (let i = 0; i < pos.count; i++) {
@@ -1076,6 +1106,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!el || !el.renderer || !el.camera) { setTimeout(() => setView(viewId, angle), 100); return; }
     if (!S.view || S.view.el !== el) {
       el.renderer.setClearColor(CONFIG.background);
+      sharpen(el.renderer);
       el.$el.style.width = '100%';
       el.$el.style.height = '100%';
       const v = el.camera.position.clone();

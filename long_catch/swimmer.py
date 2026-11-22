@@ -34,7 +34,7 @@ BODY = BodyDimensions()
 def limb_x(length: float, root_radius: float, tip_radius: float, color: str, direction: int = 1):
     """Tapered segment ending exactly at its joint pivots, along local +/-x."""
     return (
-        ui.scene.cylinder(tip_radius, root_radius, length, 20)
+        ui.scene.cylinder(tip_radius, root_radius, length, 32)
         .material(color)
         .rotate(0, 0, -direction * math.pi / 2)
         .move(direction * length / 2, 0, 0)
@@ -43,11 +43,29 @@ def limb_x(length: float, root_radius: float, tip_radius: float, color: str, dir
 
 def ellipsoid(sx: float, sy: float, sz: float, color: str, opacity: float = 1.0):
     """Unit sphere scaled to the given semi-axes."""
-    return ui.scene.sphere(1, 20, 12).material(color, opacity).scale(sx, sy, sz)
+    return ui.scene.sphere(1, 32, 20).material(color, opacity).scale(sx, sy, sz)
 
 
 # ---- head geometry (chest frame, metres) ----------------------------------------------------
 Vec = tuple[float, float, float]
+# Trunk outline as (radius, position along the spine): a rounded waist end, the waist, the widest
+# point across the chest and a rounded shoulder end. The build flattens it front to back.
+TRUNK_PROFILE = (
+    (0.0, -0.300),
+    (0.060, -0.295),
+    (0.100, -0.280),
+    (0.122, -0.255),
+    (0.130, -0.220),
+    (0.142, -0.150),
+    (0.160, -0.050),
+    (0.180, 0.060),
+    (0.196, 0.160),
+    (0.200, 0.215),
+    (0.190, 0.255),
+    (0.160, 0.280),
+    (0.100, 0.295),
+    (0.0, 0.300),
+)
 NECK_X = 0.29  # base of the neck along the spine; the head turns and lifts about this point
 HEAD_CENTRE: Vec = (0.50, 0.0, 0.015)
 HEAD_AXES: Vec = (0.1375, 0.0935, 0.113)  # skull semi-axes: crown (+x), side (y), back of head (+z)
@@ -135,10 +153,11 @@ class SwimmerBuilder:
     def _torso(self) -> None:
         """Smooth tapered trunk, chest and waist volumes, and back-muscle overlays."""
         skin = self.colors.skin
-        trunk = ui.scene.cylinder(0.20, 0.125, 0.55, 32).material(skin)
-        trunk.rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62).move(-0.025, 0, 0)
-        ui.scene.sphere(1, 24, 16).material(skin).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
-        ui.scene.sphere(1, 24, 16).material(skin).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
+        # One closed, rounded surface from the waist (-x) to the shoulders (+x), so no flat ends show.
+        trunk = ui.scene.lathe([[r, h - 0.025] for r, h in TRUNK_PROFILE], 48).material(skin, 1.0, 'both')
+        trunk.rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62)
+        ui.scene.sphere(1, 32, 20).material(skin).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
+        ui.scene.sphere(1, 32, 20).material(skin).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
         for side, sign in SIDES:
             self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
@@ -216,21 +235,21 @@ class SwimmerBuilder:
         """
         skin, b = self.colors.skin, self.body
         with self._register('sh' + side, ui.scene.group().move(0.27, sign * b.shoulder_y, 0)):
-            ui.scene.sphere(0.065, 20, 14).material(skin)
+            ui.scene.sphere(0.065, 32, 20).material(skin)
             ellipsoid(0.085, 0.07, 0.072, skin).move(0.03, 0, 0.004)  # deltoid cap
             limb_x(b.upper_arm, 0.058, 0.041, skin)
             ellipsoid(0.10, 0.05, 0.056, skin).move(0.14, 0, 0.006)  # biceps and triceps
             self._patch('tri' + side, ellipsoid(0.095, 0.038, 0.025, self.colors.patch)).move(0.13, 0, 0.035)
             with self._register('el' + side, ui.scene.group().move(b.upper_arm, 0, 0)):
-                ui.scene.sphere(0.042, 18, 12).material(skin)
-                ui.scene.sphere(0.028, 14, 10).material(skin).move(-0.006, 0, 0.026)  # olecranon (elbow point)
+                ui.scene.sphere(0.042, 28, 18).material(skin)
+                ui.scene.sphere(0.028, 24, 16).material(skin).move(-0.006, 0, 0.026)  # olecranon (elbow point)
                 self._register('fa' + side, limb_x(b.forearm, 0.042, 0.028, skin))
                 ellipsoid(0.09, 0.041, 0.04, skin).move(0.075, 0, 0)  # forearm muscle bulk
                 with self._register('wr' + side, ui.scene.group().move(b.forearm, 0, 0)):
-                    ui.scene.sphere(0.029, 16, 10).material(skin)
+                    ui.scene.sphere(0.029, 24, 16).material(skin)
                     self._register('ha' + side, ellipsoid(0.08, 0.046, 0.018, skin)).move(0.065, 0, 0)
                     # Thumbs sit on the inner edge of each palm.
-                    thumb = ui.scene.sphere(0.028, 16, 10).material(skin)
+                    thumb = ui.scene.sphere(0.028, 24, 16).material(skin)
                     self._register('thumb' + side, thumb).scale(1.1, 0.6, 0.65).move(0.026, -sign * 0.045, -0.005)
 
     def _pelvis(self) -> None:
@@ -245,14 +264,14 @@ class SwimmerBuilder:
         """Nested hip -> knee -> ankle groups, pointing back (-x) from the pelvis."""
         skin, b = self.colors.skin, self.body
         with self._register('leg' + side, ui.scene.group().move(-0.08, sign * b.hip_y, 0)):
-            ui.scene.sphere(0.073, 20, 14).material(self.colors.suit)
+            ui.scene.sphere(0.073, 32, 20).material(self.colors.suit)
             limb_x(b.thigh, 0.072, 0.045, skin, direction=-1)
             with self._register('knee' + side, ui.scene.group().move(-b.thigh, 0, 0)):
-                ui.scene.sphere(0.046, 18, 12).material(skin)
+                ui.scene.sphere(0.046, 28, 18).material(skin)
                 limb_x(b.shin, 0.046, 0.026, skin, direction=-1)
                 ellipsoid(0.13, 0.043, 0.044, skin).move(-0.13, 0, 0)
                 with self._register('ankle' + side, ui.scene.group().move(-b.shin, 0, 0)):
-                    ui.scene.sphere(0.028, 16, 10).material(skin)
+                    ui.scene.sphere(0.028, 24, 16).material(skin)
                     ellipsoid(0.115, 0.043, 0.026, skin).move(-0.075, 0, -0.01)
 
     def _lane_ropes(self) -> None:
@@ -262,5 +281,5 @@ class SwimmerBuilder:
         for y, z in ((1.2, 0.02), (-1.2, -0.01)):
             for i in range(18):
                 color = self.colors.hold if i % 2 else self.colors.text
-                buoys.append(ui.scene.sphere(0.045, 12, 8).material(color).move(-4.25 + i * 0.5, y, z).id)
+                buoys.append(ui.scene.sphere(0.045, 24, 16).material(color).move(-4.25 + i * 0.5, y, z).id)
         self.ids['buoys'] = buoys

@@ -35,6 +35,7 @@ def engine_script() -> str:
             'skin': PALETTE.skin,
             'water': PALETTE.water,
             'floor': PALETTE.floor,
+            'cap': PALETTE.cap,
         },
         'background': PALETTE.background,
         'phases': list(PHASE_LABELS.values()),
