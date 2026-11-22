@@ -526,6 +526,30 @@ FAULTS: dict[str, Fault] = {
         push=-0.03,
         good=True,
     ),
+    'pushdown': Fault(
+        'Pressing down',
+        'The hand presses down toward the floor through the push instead of driving back, so the water is '
+        'squeezed under the body and the stroke loses its power.',
+        'Push back along the body, not down: keep the palm facing the wall behind you.',
+        push=0.06,
+        slip=0.04,
+    ),
+    'flatpush': Fault(
+        'Parallel push',
+        'The hand drives straight back level with the body, staying deep and pushing water directly behind you, '
+        'and only comes up as the push ends.',
+        'Push parallel to the line of your body: palm to the wall behind, hand level until the hip.',
+        push=-0.03,
+        good=True,
+    ),
+    'upsweep': Fault(
+        'Late upsweep',
+        'At the last moment the hand sweeps up toward the surface, keeping pressure on the water to the very end '
+        'and leaving the water moving.',
+        'Finish the push with an upward flick past the hip, then let the hand slip out.',
+        push=-0.02,
+        good=True,
+    ),
     'paddles': Fault(
         'Hand paddles',
         'Medium hand paddles strapped to each palm: the hand holds more water, so each stroke carries further '

@@ -180,6 +180,9 @@ FAULT_ICONS = {
     'wristpress': 'back_hand',
     'shoulderreach': 'open_in_full',
     'hipfinish': 'rotate_right',
+    'pushdown': 'south',
+    'flatpush': 'arrow_back',
+    'upsweep': 'north_east',
     'paddles': 'pan_tool',
 }
 assert set(FAULT_ICONS) == set(FAULTS)

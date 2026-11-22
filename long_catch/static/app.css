@@ -202,11 +202,13 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
 .lc-fault.lc-active.q-btn .q-icon { color: var(--lc-slip); }
 .lc-form-title { margin-top: 12px; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lc-muted); }
 .lc-fault-wristpress.lc-active.q-btn, .lc-fault-shoulderreach.lc-active.q-btn, .lc-fault-hipfinish.lc-active.q-btn,
+.lc-fault-flatpush.lc-active.q-btn, .lc-fault-upsweep.lc-active.q-btn,
 .lc-fault-paddles.lc-active.q-btn {
   background: rgba(61, 190, 165, 0.16); border-color: var(--lc-hold);
 }
 .lc-fault-wristpress.lc-active.q-btn .q-icon, .lc-fault-shoulderreach.lc-active.q-btn .q-icon,
-.lc-fault-hipfinish.lc-active.q-btn .q-icon,
+.lc-fault-hipfinish.lc-active.q-btn .q-icon, .lc-fault-flatpush.lc-active.q-btn .q-icon,
+.lc-fault-upsweep.lc-active.q-btn .q-icon,
 .lc-fault-paddles.lc-active.q-btn .q-icon { color: var(--lc-hold); }
 .lc-badge-fault { background: rgba(227, 107, 79, 0.16); color: var(--lc-slip); }
 .lc-clear.q-btn { font-size: 0.7rem; color: var(--lc-muted) !important; min-height: 22px; padding: 0 6px; }

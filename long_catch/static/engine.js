@@ -160,6 +160,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       [0.30, lerp(-0.26, -0.40, c) - 0.05 * d + 0.04 * sag],
       [push, -0.32 - 0.08 * d],
     ]);
+    // Push path: Pressing down sinks the hand toward the floor through the push; a Parallel push cancels
+    // the hand's natural rise so it drives back level, coming up only as the push ends; a Late upsweep
+    // adds an extra flick up at the last moment.
+    const lvl = p > push && p < exit ? smooth(clamp((p - push) / 0.08, 0, 1))
+      * (1 - smooth(clamp((p - (fin - 0.06)) / (exit - fin + 0.06), 0, 1))) : 0;
+    const dy = -0.16 * (F.pushdown ? 1 : 0) * bump(p, 0.40, exit) - 0.22 * (F.flatpush ? 1 : 0) * lvl
+      + 0.10 * (F.upsweep ? 1 : 0) * bump(p, fin - 0.05, exit + 0.02);
     // Recovery is elbow-led and relaxed: the elbow lifts up and out to the side (not straight up)
     // while the forearm hangs loosely beneath it, bent about square, then swings forward past the head.
     const elbow = flowingVector(p, [
@@ -211,7 +218,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       : relaxed) - 32 * front;
     const stage = p < 0.12 ? 0 : p < pull ? 1 : p < push ? 2 : p < fin ? 3 : p < exit ? 4 : 5;
     return {
-      x, out, height, elbow, recovery, elbowDir, palm, shrug: front,
+      x, out, height: height + dy, elbow, recovery, elbowDir, palm, shrug: front,
       reach: rch * keyed(p, [[0, 1], [0.2, 1], [0.36, 0], [preEntry, 0], [1, 1]]),
       wrist: wrist * D, under, stage, load: (P.feel || 0) * loadShare(p, P), pace: loadPace(p, P),
       back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),

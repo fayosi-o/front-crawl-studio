@@ -73,6 +73,8 @@ Three entries in `model.FAULTS` are good form, not errors (`Fault.good`): **Wris
 **Hip finish & roll** (`push` < 0; the hand finishes further back and the hips roll with the shoulders). They use the same
 switch and `render_params()['faults']`, sit under "Good form" in the panel, are not counted as faults and
 never appear in "Fix first".
+The push path has three switches that only shift the hand's height in `arm()` (`dy`): **Pressing down** (a fault),
+**Parallel push** and **Late upsweep** (good form, `push` < 0).
 
 **Hand paddles** (`paddles`) is training equipment: `good` and `kit`, listed under "Equipment". The paddled
 hand holds more water (less slip, more push), feels heavier (`felt_load(..., hand_area(faults))`, so the hand
