@@ -13,6 +13,7 @@ from long_catch.model import (
     EFFORT_SPRINT,
     FAULTS,
     FINISH_START,
+    HULL_FROM,
     LOAD_DWELL,
     LOAD_RELEASE,
     MIN_SAVING,
@@ -46,6 +47,7 @@ from long_catch.model import (
     rate_slip,
     roll_drag,
     sink_scale,
+    speed_drag,
     stroke_phase,
     stroke_time,
     timeline_boundaries,
@@ -289,8 +291,8 @@ def test_height_scales_the_stroke_and_the_swimmer():
     tall, short = StrokeSettings(height=200).metrics(), StrokeSettings(height=150).metrics()
     base = StrokeSettings().metrics()
     assert tall.distance_per_stroke / base.distance_per_stroke == pytest.approx(
-        200 / 180, rel=0.01
-    )  # a faster swimmer's legs drag a touch more
+        200 / 180, rel=0.02
+    )  # a faster swimmer's legs and waves drag a touch more
     assert short.distance_per_stroke < base.distance_per_stroke < tall.distance_per_stroke
     assert ViewState(settings=StrokeSettings(height=200)).render_params()['scale'] == pytest.approx(200 / 180)
     for height in (149, 201):
@@ -664,3 +666,12 @@ def test_hand_paddles_carry_further_but_cost_effort_and_feel_heavier():
     assert paddled.render_params()['feel'] > bare.render_params()['feel']
     assert felt_load(0.5, 0.5, PADDLE_AREA) == pytest.approx(PADDLE_AREA * felt_load(0.5, 0.5))
     assert felt_load(1.0, 1.0, PADDLE_AREA) == 1.0
+
+
+def test_a_fast_pace_costs_wave_drag_that_a_slow_one_does_not():
+    assert speed_drag(0.5) == speed_drag(HULL_FROM) == 0.0  # the default stroke keeps its calibration
+    assert 0 < speed_drag(1.2) < speed_drag(1.4) < speed_drag(2.0)
+    assert speed_drag(1.3, height=150) > speed_drag(1.3) > speed_drag(1.3, height=200)  # a longer hull is freer
+    rates = range(22, 73, 2)
+    speeds = [StrokeSettings(rate=r, kick=100, beats=6).metrics().distance_per_stroke * r / 60 for r in rates]
+    assert all(b > a for a, b in pairwise(speeds))  # waves never make a higher rate slower

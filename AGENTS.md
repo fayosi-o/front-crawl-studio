@@ -51,7 +51,7 @@ These instructions are platform-neutral. Windows notes are at the end;
   `pull_shape`), stroke length (`path_length`, one curve for the whole rate
   range), thrust against drag (distance per stroke falls with the square root of
   the rate), momentum (`drive_seconds`, `momentum_carry` with the body's drag),
-  body drag (`body_drag`: faults, `roll_drag`, `kick_drag`), `kick_thrust`,
+  body drag (`body_drag`: faults, `roll_drag`, `kick_drag`, and `speed_drag`, the wave-making loss above the default pace, per sqrt of height, so slower strokes keep their calibration), `kick_thrust`,
   each fault's lost `push`, and height. Effort (`work_rate`) is scaled to
   `EFFORT_SPRINT` and counts the stroke's own push, so drag faults don't lower
   it. Entry angle and the breathing pattern on its own are visual only;

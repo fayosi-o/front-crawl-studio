@@ -69,6 +69,9 @@ LEG_SINK = 0.025  # drag of still, sinking legs
 KICK_LIFT = 0.5  # share of the Sinking legs cost a full kick wins back
 SINK_REF_SPEED = 0.95  # m/s at which the legs' sinking costs its listed drag (the default stroke)
 SINK_SPEED_RANGE = (0.7, 1.5)  # how far a slow or fast pace scales it
+HULL_FROM = 0.95  # m/s (per sqrt of height) above which wave-making drag starts to bite: the default pace
+HULL_COST = 0.6  # distance lost at 1.5x that pace is this times 0.25
+HULL_MAX = 0.3
 HEADLIFT_BREATH = 3  # breathing pattern at which Head lift costs its listed drag
 
 # Effort: the work rate of a stroke against an all-out sprint (EFFORT_SPRINT). Pushing the drag
@@ -330,6 +333,17 @@ def kick_thrust(kick: float, beats: int, knee_kick: bool = False) -> float:
 def sink_scale(speed: float) -> float:
     """How much heavier sinking legs drag at this pace: water resistance grows with speed squared."""
     return clamp((speed / SINK_REF_SPEED) ** 2, *SINK_SPEED_RANGE)
+
+
+def speed_drag(speed: float, height: int = REFERENCE_HEIGHT) -> float:
+    """Fraction of distance lost to the water the body piles up at a fast pace.
+
+    Resistance climbs faster than speed squared once the swimmer is making waves, and sooner for a
+    shorter hull, so speed is taken per sqrt of height (the Froude number). Nothing is lost at or
+    below ``HULL_FROM``, so the default stroke and slower ones keep their calibration.
+    """
+    over = max(0.0, speed * math.sqrt(REFERENCE_HEIGHT / height) / HULL_FROM - 1.0)
+    return clamp(HULL_COST * over * over, 0.0, HULL_MAX)
 
 
 def kick_drag(kick: float, sink: float = 1.0) -> float:
@@ -619,9 +633,14 @@ def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None, s
 
 
 def body_drag(settings: StrokeSettings, faults: frozenset[str] = frozenset(), speed: float = SINK_REF_SPEED) -> float:
-    """Fraction of distance lost to the body's drag: faults, body roll and the legs (heavier when faster)."""
+    """Fraction of distance lost to the body's drag: faults, body roll, the legs and, at a fast pace, waves."""
     sink = sink_scale(speed)
-    parts = (fault_drag(faults, settings, sink), roll_drag(settings.roll), kick_drag(settings.kick / 100, sink))
+    parts = (
+        fault_drag(faults, settings, sink),
+        roll_drag(settings.roll),
+        kick_drag(settings.kick / 100, sink),
+        speed_drag(speed, settings.height),
+    )
     return 1.0 - math.prod(1.0 - part for part in parts)
 
 
