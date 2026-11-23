@@ -540,6 +540,11 @@ class LongCatchPage:
                 'Simulated pressure: clouds build where the palm, forearm and feet load the water, '
                 'are pushed backward, and dissipate. Slipping hands build little.'
             )
+            flow = ui.switch('Water flow', value=self.view.flow, on_change=lambda e: self.set_switch('flow', e.value))
+            flow.classes('lc-flow-toggle').tooltip(
+                'Watch the water at each hand: a hand that holds carries it back in teal; a slipping hand lets it '
+                'spill off to the side in red.'
+            )
 
     def _build_faults(self) -> None:
         """Fault chips that toggle on click, a Clear button, and a list of coaching cues."""
@@ -617,7 +622,7 @@ class LongCatchPage:
             self.update(trail_seconds=seconds)
 
     def set_switch(self, name: str, value: Any) -> None:
-        """A view switch (split view, water pressure); only true or false from the browser count."""
+        """A view switch (split view, water pressure, water flow); only true or false from the browser count."""
         if isinstance(value, bool):
             self.update(**{name: value})
 

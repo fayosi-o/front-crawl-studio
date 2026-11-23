@@ -245,6 +245,8 @@ def test_pull_shape_keeps_the_hold_in_the_power_diamond():
         assert m.hold_quality < base.hold_quality and m.distance_per_stroke < base.distance_per_stroke
     params = ViewState(settings=StrokeSettings(width=100), pressure=True).render_params()
     assert (params['width'], params['pressure']) == (1, True)
+    assert ViewState(flow=True).render_params()['flow'] is True
+    assert ViewState().render_params()['flow'] is False
 
 
 def test_roll_outside_its_band_costs_drag():

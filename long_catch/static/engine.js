@@ -868,7 +868,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Positions are in the swimmer's frame, where the still pool water streams back at swim speed.
   // Particles are [x, y, z, vx, vy, vz, age, life].
   const FX = {
-    maxRipples: 24, maxBubbles: 420, maxSpray: 160, maxPressure: 700, rippleSpeed: 0.55, gravity: 9.81, rise: 0.28,
+    maxRipples: 24, maxBubbles: 420, maxSpray: 160, maxPressure: 700, maxFlow: 700, rippleSpeed: 0.55, gravity: 9.81, rise: 0.28,
   };
   const rand = (a, b) => a + (b - a) * Math.random();
   const spawnCount = rate => Math.floor(rate + Math.random());
@@ -887,7 +887,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     ]),
   };
 
-  function updatePressure(fx, m, P, dt, slipness, flow) {
+  function updatePressure(fx, m, P, dt, slipness, flow, emitting = true) {
     const sys = fx.pressure;
     for (const pr of fx.probes) {
       const joint = m[pr.joint];
@@ -897,7 +897,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       pr.prev.copy(pr.pos);
       const wasKnown = pr.known;
       pr.known = true;
-      if (!wasKnown || pr.pos.z > -0.03) continue;
+      if (!emitting || !wasKnown || pr.pos.z > -0.03) continue;
       // Load follows the limb's push relative to the body: a hand that holds the water stays nearly
       // still in it while the body moves past, so the push it makes is what loads the water.
       if (pr.face) {
@@ -920,6 +920,43 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
           rand(0.8, 1.4), clamp(0.35 + 0.35 * q, 0.35, 1));
       }
     }
+  }
+
+  // Water flow view (visual only): tracers released at each pulling palm. The share that holds is
+  // carried back with the hand (teal); the share that slips escapes sideways around the palm's edge
+  // while the hand slides on (red), and any sideways sweep of the palm (a wide pull, a snaking body)
+  // adds to the spill. Slipping is read from the same per-arm value that colours the hand.
+  function updateFlow(fx, m, P, dt, flow) {
+    const sys = fx.flowSys;
+    for (const pr of fx.probes) {
+      if (!pr.hand || !pr.joint.startsWith('wr') || !pr.known || pr.pos.z > -0.03) continue;
+      const arm = pr.joint.slice(-1), slip = clamp(m.slip ? m.slip[arm] : 0, 0, 1);
+      const joint = m[pr.joint], n = pr.n.set(0, 0, -1).transformDirection(joint.matrixWorld);
+      const v = pr.vel, push = Math.max(0, v.dot(n));
+      const side = Math.abs(v.y) + 0.5 * Math.hypot(v.x + flow, v.y) * slip;  // sideways slide of the palm
+      const rate = Math.min(600, 120 + 300 * (push + 0.6 * side));
+      for (let i = spawnCount(rate * dt); i > 0; i--) {
+        const spill = Math.random() < clamp(slip + 0.5 * clamp(side, 0, 1), 0, 1);
+        const sign = (v.y !== 0 ? Math.sign(v.y) : (arm === 'R' ? -1 : 1)) * (spill ? 1 : 0);
+        const hold = spill ? 0.15 : 0.55;
+        emit(sys, pr.pos.x + rand(-0.04, 0.04), pr.pos.y + rand(-0.05, 0.05), pr.pos.z + rand(-0.03, 0.03),
+          -flow + v.x * hold + (spill ? rand(-0.1, 0.1) : 0), v.y * hold + sign * rand(0.5, 1.3) * (0.4 + slip),
+          v.z * hold + (spill ? rand(-0.05, 0.12) : 0), rand(1.2, 2.0), spill ? 1 : 0);
+      }
+    }
+  }
+
+  function drawTracers(sys) {
+    const [hr, hg, hb] = C.hold, [sr, sg, sb] = C.slip, list = sys.list;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i], age = q[6] / q[7], spill = q[8];
+      sys.pos[3 * i] = q[0]; sys.pos[3 * i + 1] = q[1]; sys.pos[3 * i + 2] = q[2];
+      sys.col[4 * i] = spill ? sr : hr; sys.col[4 * i + 1] = spill ? sg : hg; sys.col[4 * i + 2] = spill ? sb : hb;
+      sys.col[4 * i + 3] = 0.75 * Math.min(1, q[6] / 0.05) * (1 - age) ** 0.8;
+    }
+    sys.geo.attributes.position.needsUpdate = true;
+    sys.geo.attributes.color.needsUpdate = true;
+    sys.geo.setDrawRange(0, list.length);
   }
 
   // Fresh pressure glows warm and dense; as it spreads and slows it cools to pale blue and fades.
@@ -966,6 +1003,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       bubbles: makeParticles(group, FX.maxBubbles, 0.05, [0.85, 0.96, 1]),
       spray: makeParticles(group, FX.maxSpray, 0.045, [1, 1, 1]),
       pressure: makeParticles(group, FX.maxPressure, 0.18, PRESSURE.hot),
+      flowSys: makeParticles(group, FX.maxFlow, 0.14, [1, 1, 1]),
       limbs: ALL_LIMBS.map(limb => ({
         limb, hand: limb.key.startsWith('hand'), known: false, air: 0, wet: 0,
         pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(),
@@ -1071,6 +1109,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       q[0] += q[3] * dt; q[1] += q[4] * dt; q[2] = Math.min(-0.01, q[2] + q[5] * dt); q[6] += dt;
       return q[6] < q[7];
     });
+    // Flow tracers: held water settles into the stream with the body; spilled water keeps sliding sideways.
+    compact(fx.flowSys.list, q => {
+      const k = q[8] ? 0.9 : 2.0;
+      q[3] += (-flow - q[3]) * Math.min(1, k * dt); q[4] -= q[4] * Math.min(1, (q[8] ? 0.5 : 2.0) * dt);
+      q[5] -= q[5] * Math.min(1, 2 * dt);
+      q[0] += q[3] * dt; q[1] += q[4] * dt; q[2] = Math.min(-0.01, q[2] + q[5] * dt); q[6] += dt;
+      return q[6] < q[7];
+    });
     // Rings ride back with the water and are dropped once they have faded.
     for (const r of fx.ripples) { r[0] -= flow * dt; r[2] += dt; }
     compact(fx.ripples, r => r[2] < 2.2);
@@ -1093,7 +1139,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!m.pool) return;
     const fx = setupSplash(m), flow = S.flow ?? P.speed;
     if (S.trailReset) {
-      fx.ripples.length = fx.bubbles.list.length = fx.spray.list.length = fx.pressure.list.length = 0;
+      fx.ripples.length = fx.bubbles.list.length = fx.spray.list.length = fx.pressure.list.length = fx.flowSys.list.length = 0;
       fx.wash = 0;
       m.pool.dirty = true;
       for (const l of fx.limbs) { l.known = false; l.air = l.wet = 0; }
@@ -1114,10 +1160,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       fx.footX = feetX / feet;
       fx.wash += (clamp(fx.washTarget / 2, 0, 1.5) - fx.wash) * Math.min(1, 3 * dt);
-      if (P.pressure) updatePressure(fx, m, P, dt, slipness, flow);
+      if (P.pressure || P.flow) updatePressure(fx, m, P, dt, slipness, flow, !!P.pressure);
+      if (P.flow) updateFlow(fx, m, P, dt, flow);
       stepFx(fx, flow, dt);
     }
     if (!P.pressure) fx.pressure.list.length = 0;
+    if (!P.flow) fx.flowSys.list.length = 0;
+    drawTracers(fx.flowSys);
     drawParticles(fx.bubbles, 0.7);
     drawParticles(fx.spray, 0.9);
     drawPressure(fx.pressure);

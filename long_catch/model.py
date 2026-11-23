@@ -828,10 +828,11 @@ class ViewState:
     trail: Trail = 'off'
     trail_seconds: float = 1.5
     pressure: bool = False
+    flow: bool = False
     drill: DrillName = 'off'
 
     def __post_init__(self) -> None:
-        for name in ('playing', 'split', 'pressure'):
+        for name in ('playing', 'split', 'pressure', 'flow'):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f'{name} must be true or false')
         if self.emphasis not in EMPHASES:
@@ -904,6 +905,7 @@ class ViewState:
             'trail': self.trail,
             'trailSeconds': self.trail_seconds,
             'pressure': self.pressure,
+            'flow': self.flow,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
