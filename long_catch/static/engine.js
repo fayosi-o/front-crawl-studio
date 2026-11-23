@@ -1181,7 +1181,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     below: { dir: [0, 0, -1], up: [1, 0, 0], half: [0.62, 1.3] },
     side: { dir: [0, -1, 0], up: [0, 0, 1], half: [1.3, 0.5] },
     front: { dir: [1, 0, 0.18], up: [0, 0, 1], half: [0.7, 0.5], min: 3.4 },
+    // Close-up that follows whichever hand is deeper (the one pulling), seen from the side.
+    hand: { dir: [0.25, -1, 0.12], up: [0, 0, 1], half: [0.55, 0.38], follow: true },
   };
+  const handScratch = [];
   // Adopt a scene_view as the second camera; retries until NiceGUI has mounted it.
   function setView(viewId, angle) {
     const el = typeof getElement === 'function' ? getElement(viewId) : null;
@@ -1209,6 +1212,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const dist = Math.max(spec.min || 0, 1.15 * spec.half[1] / t, 1.15 * spec.half[0] / (t * w / h));
     v.dir.set(...spec.dir).normalize();
     cam.up.set(...spec.up);
+    if (spec.follow && S.m && S.m.wrR) {
+      // Follow the deeper wrist; switch hands only when the other is clearly deeper, and ease the target.
+      const [r, l] = handScratch.length ? handScratch : (handScratch.push(new THREE.Vector3(), new THREE.Vector3()), handScratch);
+      S.m.wrR.getWorldPosition(r);
+      S.m.wrL.getWorldPosition(l);
+      const deeper = r.z < l.z ? 'R' : 'L';
+      if (!v.hand || (deeper !== v.hand && Math.abs(r.z - l.z) > 0.04)) v.hand = deeper;
+      const goal = v.hand === 'R' ? r : l;
+      if (v.followed) v.target.lerp(goal, 0.2); else { v.target.copy(goal); v.followed = true; }
+    } else if (!spec.follow) {
+      v.followed = false;
+      v.target.set(-0.25, 0, -0.12);
+    }
     cam.position.copy(v.target).addScaledVector(v.dir, dist);
     cam.lookAt(v.target);
   }

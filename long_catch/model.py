@@ -15,8 +15,8 @@ from typing import Literal
 
 Emphasis = Literal['back', 'triceps', 'core', 'balanced']
 EMPHASES: tuple[Emphasis, ...] = ('back', 'triceps', 'core', 'balanced')
-ViewAngle = Literal['top', 'side', 'front', 'below']
-VIEW_ANGLES: tuple[ViewAngle, ...] = ('top', 'side', 'front', 'below')
+ViewAngle = Literal['top', 'side', 'front', 'below', 'hand']
+VIEW_ANGLES: tuple[ViewAngle, ...] = ('top', 'side', 'front', 'below', 'hand')
 Trail = Literal['off', 'hands', 'feet', 'both']
 TRAILS: tuple[Trail, ...] = ('off', 'hands', 'feet', 'both')
 

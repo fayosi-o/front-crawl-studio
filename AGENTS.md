@@ -76,6 +76,7 @@ never appear in "Fix first".
 The **Water flow** view (`ViewState.flow`, `updateFlow` in `engine.js`, visual only) releases tracers at each pulling palm:
 the share that holds rides back with the hand (teal) and the slipping share spills sideways (red), read from the same
 per-arm slip as the hand colour plus the palm's sideways sweep.
+Turning it on also opens the split view on the **Hand** angle (`VIEWS.hand`), a close-up that follows the deeper wrist.
 The push path has three switches that only shift the hand's height in `arm()` (`dy`): **Pressing down** (a fault),
 **Parallel push** and **Late upsweep** (good form, `push` < 0).
 

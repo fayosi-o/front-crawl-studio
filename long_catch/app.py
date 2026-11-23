@@ -156,7 +156,7 @@ SLIDER_SPECS = {spec.key: spec for spec in SLIDERS}
 MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive')
 
 EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
-ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below'}
+ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below', 'hand': 'Hand'}
 TRAIL_LABELS = {'off': 'Off', 'hands': 'Hands', 'feet': 'Feet', 'both': 'Both'}
 assert set(EMPHASIS_LABELS) == set(EMPHASES)
 
@@ -623,7 +623,12 @@ class LongCatchPage:
 
     def set_switch(self, name: str, value: Any) -> None:
         """A view switch (split view, water pressure, water flow); only true or false from the browser count."""
-        if isinstance(value, bool):
+        if not isinstance(value, bool):
+            return
+        if name == 'flow' and value and not self.view.split:
+            # Water flow is best read up close: open the split view on the pulling hand.
+            self.update(flow=True, split=True, angle='hand')
+        else:
             self.update(**{name: value})
 
     def _move_sliders(self, settings: StrokeSettings) -> None:
