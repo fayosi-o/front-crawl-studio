@@ -748,6 +748,20 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }), -1);
       return map;
     });
+    // A soft contact shadow on the floor, well below: the swimmer blocks the light from above.
+    const shade = canvasTexture(128, (g, n) => {
+      const grad = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+      grad.addColorStop(0, 'rgba(0,15,25,0.9)');
+      grad.addColorStop(1, 'rgba(0,15,25,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, n, n);
+    });
+    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.1), new THREE.MeshBasicMaterial({
+      map: shade, transparent: true, depthWrite: false, opacity: 0.45,
+    }));
+    shadow.position.z = FLOOR_Z + 0.012;
+    shadow.renderOrder = 0;
+    pool.add(shadow);
     scene.add(pool);
     setupLighting(pool);
     sharpen(S.el.renderer);
@@ -775,7 +789,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       return values;
     });
-    m.pool = { tiles, caustics, flow, ripple, rippleB, fixed, heights, waves, time: 0, dirty: true };
+    m.pool = { tiles, caustics, shadow, flow, ripple, rippleB, fixed, heights, waves, time: 0, dirty: true };
     return true;
   }
 
@@ -784,6 +798,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   function updateWater(m, P, dt) {
     if (!setupWater(m)) return;
     const pool = m.pool, t = (pool.time += dt), off = S.offset, fx = m.fx;
+    const at = m.chest.getWorldPosition(pool.at ||= S.el.scene.position.clone());
+    pool.shadow.position.set(at.x - 0.35, at.y, pool.shadow.position.z);
     const pos = m.water.geometry.attributes.position, a = pos.array;
     const pace = Math.min(1, P.speed), ripples = fx ? fx.ripples : [], wash = fx ? fx.wash : 0, footX = fx ? fx.footX : -1.6;
     if (dt === 0 && !pool.dirty && pool.pace === pace) return;

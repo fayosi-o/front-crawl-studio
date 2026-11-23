@@ -296,11 +296,13 @@ class SwimmerBuilder:
                     ellipsoid(0.115, 0.043, 0.026, skin).move(-0.075, 0, -0.01)
 
     def _lane_ropes(self) -> None:
-        """Two ropes of alternating buoys; the engine scrolls them to suggest forward speed."""
+        """Two lane lines: a thin rope through alternating barrel floats; the engine scrolls the floats."""
         # The near (right, -y) rope sits lower so it frames rather than hides the swimmer.
         buoys = []
         for y, z in ((1.2, 0.02), (-1.2, -0.01)):
+            ui.scene.cylinder(0.005, 0.005, 12).material(self.colors.rubber).rotate(0, 0, math.pi / 2).move(-0.5, y, z)
             for i in range(18):
                 color = self.colors.hold if i % 2 else self.colors.text
-                buoys.append(ui.scene.sphere(0.045, 24, 16).material(color).move(-4.25 + i * 0.5, y, z).id)
+                barrel = ui.scene.cylinder(0.032, 0.032, 0.13, 24).material(color, 1.0)
+                buoys.append(barrel.rotate(0, 0, math.pi / 2).move(-4.25 + i * 0.5, y, z).id)
         self.ids['buoys'] = buoys
