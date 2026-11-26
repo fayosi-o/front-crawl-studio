@@ -1206,7 +1206,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!w || !h) return;
     if (el.camera_tween) { el.camera_tween.stop(); el.camera_tween = null; }
     const t = Math.tan(cam.fov * D / 2);
-    const dist = Math.max(spec.min || 0, 1.15 * spec.half[1] / t, 1.15 * spec.half[0] / (t * w / h));
+    const half = spec.follow && S.params && S.params.flow ? [0.85, 0.55] : spec.half;  // flow: the whole stroke in frame
+    const dist = Math.max(spec.min || 0, 1.15 * half[1] / t, 1.15 * half[0] / (t * w / h));
     v.dir.set(...spec.dir).normalize();
     cam.up.set(...spec.up);
     if (spec.follow && S.m && S.m.wrR) {
@@ -1216,8 +1217,16 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       S.m.wrL.getWorldPosition(l);
       const deeper = r.z < l.z ? 'R' : 'L';
       if (!v.hand || (deeper !== v.hand && Math.abs(r.z - l.z) > 0.04)) v.hand = deeper;
-      const goal = v.hand === 'R' ? r : l;
-      if (v.followed) v.target.lerp(goal, 0.2); else { v.target.copy(goal); v.followed = true; }
+      let goal = v.hand === 'R' ? r : l, ease = 0.2;
+      if (S.params && S.params.flow) {
+        // Water flow: hold still on the pulling side's whole stroke (shoulder to hip, a little ahead of
+        // the shoulder), so the tracers read against a steady frame instead of a camera chasing the hand.
+        const sh = v.hand === 'R' ? S.m.shR : S.m.shL;
+        sh.getWorldPosition(r);
+        goal = r.set(r.x + 0.1, r.y, -0.3);
+        ease = 0.03;
+      }
+      if (v.followed) v.target.lerp(goal, ease); else { v.target.copy(goal); v.followed = true; }
     } else if (!spec.follow) {
       v.followed = false;
       v.target.set(-0.25, 0, -0.12);
