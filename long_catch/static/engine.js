@@ -1206,7 +1206,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!w || !h) return;
     if (el.camera_tween) { el.camera_tween.stop(); el.camera_tween = null; }
     const t = Math.tan(cam.fov * D / 2);
-    const half = spec.follow && S.params && S.params.flow ? [0.85, 0.55] : spec.half;  // flow: the whole stroke in frame
+    const half = spec.follow && S.params && S.params.flow ? [0.6, 0.4] : spec.half;  // flow: the whole stroke in frame
     const dist = Math.max(spec.min || 0, 1.15 * half[1] / t, 1.15 * half[0] / (t * w / h));
     v.dir.set(...spec.dir).normalize();
     cam.up.set(...spec.up);
