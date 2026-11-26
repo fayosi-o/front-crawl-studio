@@ -148,7 +148,7 @@ async page => {
         run(preset, 30, 6);
         for (const frontGlide of [-0.08, 0.08]) run({...preset, frontGlide, catchDelay: catchDelay(frontGlide)}, 30, 6);
       }
-      run({faults: ['crossover', 'overrotation', 'overreach', 'flathips', 'sinking', 'snaking', 'kneekick', 'rushing',
+      run({faults: ['crossover', 'overrotation', 'overreach', 'flathips', 'sinking', 'snaking', 'samesidekick', 'kneekick', 'rushing',
         'earlyexit', 'droppedelbow', 'lopsided', 'earlyroll', 'wristpress', 'shoulderreach', 'hipfinish', 'pushdown', 'flatpush', 'upsweep', 'paddles'], rush: 0.72, exit: 0.68}, 30, 12);
       run({}, 30, 60);
       const paused = JSON.stringify(pose());

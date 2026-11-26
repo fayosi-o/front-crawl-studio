@@ -77,6 +77,10 @@ The **Water flow** view (`ViewState.flow`, `updateFlow` in `engine.js`, visual o
 the share that holds rides back with the hand (teal) and the slipping share spills sideways (red), read from the same
 per-arm slip as the hand colour plus the palm's sideways sweep.
 Turning it on also opens the split view on the **Hand** angle (`VIEWS.hand`), a close-up that follows the deeper wrist.
+The **Cross-body link** view (`ViewState.chain`, `showChain` in `engine.js`, visual only) stretches a band from each
+shoulder to the opposite hip that loads with that arm's felt load; its colour follows drive and the faults that break
+the diagonal chain (Flat hips, **Same-side kick**, Crossover, Snaking, Early rotation). Same-side kick swaps the leg
+timing so the downbeat lands with the same-side catch and drops the kick-driven roll (`kickTiming`).
 The push path has three switches that only shift the hand's height in `arm()` (`dy`): **Pressing down** (a fault),
 **Parallel push** and **Late upsweep** (good form, `push` < 0).
 

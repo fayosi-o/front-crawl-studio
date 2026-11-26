@@ -247,6 +247,7 @@ def test_pull_shape_keeps_the_hold_in_the_power_diamond():
     assert (params['width'], params['pressure']) == (1, True)
     assert ViewState(flow=True).render_params()['flow'] is True
     assert ViewState().render_params()['flow'] is False
+    assert ViewState(chain=True).render_params()['chain'] is True
 
 
 def test_roll_outside_its_band_costs_drag():

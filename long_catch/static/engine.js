@@ -388,6 +388,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       Object.assign(m[k].material, { depthWrite: false, depthTest: false });
       m[k].renderOrder = 10;
     }
+    for (const k of ['chainR', 'chainL']) {
+      Object.assign(m[k].material, { depthWrite: false, depthTest: false, transparent: true });
+      m[k].renderOrder = 11;
+    }
     m.basePos = m.buoys.map(b => b.position.x);
     // Roll about the body axis first, then yaw it (snaking) in the water plane.
     m.chest.rotation.order = 'ZYX';
@@ -1354,7 +1358,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   const KICK_START = 0.94;
 
   // 0 for a six-beat flutter, 1 for a two-beat kick that drives the roll; a knee kick loses that link.
-  const kickTiming = (P, F) => (F.kneekick ? 0 : clamp((6 - (P.beats ?? 6)) / 4, 0, 1));
+  const kickTiming = (P, F) => (F.kneekick || F.samesidekick ? 0 : clamp((6 - (P.beats ?? 6)) / 4, 0, 1));
 
   // Healthy kicks drive from the hips; a knee kick drops the thighs and bends the knees hard.
   // Each beat varies a little in size and timing (t is stroke time; zero kick stays still).
@@ -1367,7 +1371,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const k = base * (1 + 0.12 * noise(3 * t, offset ? 52 : 51));
       if (beats === 2 && !knees) {
         // Bigger single beats: the downbeat has to turn the hips as well as balance the legs.
-        const q = wrap(body - P.catchDelay - KICK_START - (offset ? 0 : 0.5)
+        const q = wrap(body - P.catchDelay - KICK_START - (offset ? 0 : 0.5) - (F.samesidekick ? 0.5 : 0)
           + 0.01 * noise(2 * t, offset ? 62 : 61));
         const big = 1.25 * k;
         m['leg' + side].rotation.set(0, big * keyed(q, TWO_BEAT.hip), 0);
@@ -1375,7 +1379,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         m['ankle' + side].rotation.set(0, -0.12 - 0.35 * big * keyed(q, TWO_BEAT.ankle), 0);
         continue;
       }
-      const angle = kick + offset + 0.15 * noise(2 * t, offset ? 62 : 61);
+      const angle = kick + offset + (F.samesidekick ? Math.PI : 0) + 0.15 * noise(2 * t, offset ? 62 : 61);
       const hip = knees ? -0.12 * k + 0.06 * k * Math.sin(angle) : 0.26 * k * Math.sin(angle);
       const knee = knees ? 0.2 + 1.3 * k * Math.max(0, Math.sin(angle - 0.3)) : 0.45 * k * Math.max(0, Math.sin(angle - 0.7));
       m['leg' + side].rotation.set(0, hip, 0);
@@ -1594,7 +1598,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const lift = F.headlift ? Math.abs(breath) : 0, sink = sinkAtPace(P, F);
     const pitch = -14 * D * sink - 8 * D * lift, legPitch = -24 * D * sink - 10 * D * lift;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
-    const yaw = (F.snaking ? 7 * D * Math.sin(w * (body - ROLL_PEAK)) : 0) + 0.8 * D * noise(st, 31);
+    const yaw = (F.snaking ? 7 : F.samesidekick ? 3 : 0) * D * Math.sin(w * (body - ROLL_PEAK)) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
     m.pelvis.rotation.set(roll * hipShare * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
@@ -1642,7 +1646,34 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     patch(m.core, ec * k * core);
     patch(m.hipR, ec * k * core);
     patch(m.hipL, ec * k * core);
+    showChain(m, P, F, right, left);
     return [right, left, slipness];
+  }
+
+  // Cross-body link (visual only): a band from each shoulder to the opposite hip that loads as that
+  // hand catches. How well it connects follows the drive and the faults that break the diagonal chain.
+  const chainScratch = [];
+  function showChain(m, P, F, right, left) {
+    for (const s of ['R', 'L']) m['chain' + s].visible = !!P.chain;
+    if (!P.chain) return;
+    if (!chainScratch.length) for (let i = 0; i < 3; i++) chainScratch.push(new THREE.Vector3());
+    const [a, b, up] = chainScratch;
+    const link = (0.35 + 0.65 * P.drive) * (F.flathips ? 0.35 : 1) * (F.samesidekick ? 0.35 : 1)
+      * (F.crossover ? 0.6 : 1) * (F.snaking ? 0.6 : 1) * (F.earlyroll ? 0.6 : 1);
+    const col = C.hold.map((v, i) => lerp(C.slip[i], v, clamp(link, 0, 1)));
+    for (const [s, other, a0] of [['R', 'L', right], ['L', 'R', left]]) {
+      const band = m['chain' + s], load = clamp(a0.under ? a0.load : 0, 0, 1);
+      m['sh' + s].getWorldPosition(a);
+      m['leg' + other].getWorldPosition(b);
+      b.sub(a);
+      const len = b.length();
+      band.position.copy(a).addScaledVector(b, 0.5);
+      band.quaternion.setFromUnitVectors(up.set(0, 1, 0), b.normalize());
+      const thick = 0.6 + 1.2 * load * link;
+      band.scale.set(thick, len, thick);
+      band.material.color.setRGB(col[0], col[1], col[2]);
+      band.material.opacity = clamp(0.3 + 0.6 * load * (0.4 + 0.6 * link), 0, 0.9);
+    }
   }
 
   function advance(scaled) {

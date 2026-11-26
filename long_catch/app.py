@@ -165,6 +165,7 @@ assert set(PLAYBACK_LABELS) == set(PLAYBACK_SPEEDS)
 
 FAULT_ICONS = {
     'crossover': 'compare_arrows',
+    'samesidekick': 'swap_horiz',
     'overrotation': 'rotate_right',
     'overreach': 'front_hand',
     'flathips': 'horizontal_rule',
@@ -539,6 +540,14 @@ class LongCatchPage:
             pressure.classes('lc-pressure-toggle').tooltip(
                 'Simulated pressure: clouds build where the palm, forearm and feet load the water, '
                 'are pushed backward, and dissipate. Slipping hands build little.'
+            )
+            chain = ui.switch(
+                'Cross-body link', value=self.view.chain, on_change=lambda e: self.set_switch('chain', e.value)
+            )
+            chain.classes('lc-chain-toggle').tooltip(
+                'The diagonal chain from each shoulder to the opposite hip: it loads as that hand catches and '
+                'snaps as the hips turn. Teal when the arm, core and opposite kick work as one line; red when '
+                'the link breaks.'
             )
             flow = ui.switch('Water flow', value=self.view.flow, on_change=lambda e: self.set_switch('flow', e.value))
             flow.classes('lc-flow-toggle').tooltip(

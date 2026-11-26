@@ -466,6 +466,14 @@ FAULTS: dict[str, Fault] = {
         'Keep the hips under the chest and kick straight down the lane.',
         drag=0.07,
     ),
+    'samesidekick': Fault(
+        'Same-side kick',
+        "The downbeat lands with the same-side hand's catch instead of the opposite one, so the diagonal link "
+        'from shoulder to opposite hip never loads: the hips sway and the legs have to correct.',
+        'Kick down with the opposite leg as each hand catches: right hand, left foot.',
+        catch=0.05,
+        drag=0.04,
+    ),
     'kneekick': Fault(
         'Knee kick',
         'Bicycle-style kick bent from the knees instead of driven from the hips.',
@@ -829,10 +837,11 @@ class ViewState:
     trail_seconds: float = 1.5
     pressure: bool = False
     flow: bool = False
+    chain: bool = False
     drill: DrillName = 'off'
 
     def __post_init__(self) -> None:
-        for name in ('playing', 'split', 'pressure', 'flow'):
+        for name in ('playing', 'split', 'pressure', 'flow', 'chain'):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f'{name} must be true or false')
         if self.emphasis not in EMPHASES:
@@ -906,6 +915,7 @@ class ViewState:
             'trailSeconds': self.trail_seconds,
             'pressure': self.pressure,
             'flow': self.flow,
+            'chain': self.chain,
             'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
