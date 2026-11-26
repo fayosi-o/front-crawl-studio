@@ -81,6 +81,8 @@ The **Cross-body link** view (`ViewState.chain`, `showChain` in `engine.js`, vis
 shoulder to the opposite hip that loads with that arm's felt load; its colour follows drive and the faults that break
 the diagonal chain (Flat hips, **Same-side kick**, Crossover, Snaking, Early rotation). Same-side kick swaps the leg
 timing so the downbeat lands with the same-side catch and drops the kick-driven roll (`kickTiming`).
+A pulse runs up each band from the opposite leg's downbeat (`m.kickPulse`, set in `poseLegs`) and fades when it
+reaches a hand that is out of the water. The flutter kick uses the same phase (`catchDelay + KICK_START`) as the two-beat.
 The push path has three switches that only shift the hand's height in `arm()` (`dy`): **Pressing down** (a fault),
 **Parallel push** and **Late upsweep** (good form, `push` < 0).
 

@@ -381,7 +381,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
     }
     m.water.material.depthWrite = false;
-    for (const k of ['chainR', 'chainL']) {
+    for (const k of ['chainR', 'chainL', 'chainPulseR', 'chainPulseL']) {
       Object.assign(m[k].material, { depthWrite: false, depthTest: false, transparent: true });
       m[k].renderOrder = 11;
     }
@@ -1353,7 +1353,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   function poseLegs(m, P, F, t, body) {
     const knees = F.kneekick ? 1 : 0, base = knees ? Math.max(P.kick, 0.6) : P.kick;
     const beats = knees ? 6 : P.beats ?? 6;
-    const kick = 2 * Math.PI * (beats / 2) * body;
+    // The flutter shares the two-beat timing: each leg's downbeat lands with the opposite catch.
+    const kick = 2 * Math.PI * (beats / 2) * (body - P.catchDelay - KICK_START);
+    m.kickPulse = m.kickPulse || {};
     for (const [side, offset] of [['R', 0], ['L', Math.PI]]) {
       const k = base * (1 + 0.12 * noise(3 * t, offset ? 52 : 51));
       if (beats === 2 && !knees) {
@@ -1364,6 +1366,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         m['leg' + side].rotation.set(0, big * keyed(q, TWO_BEAT.hip), 0);
         m['knee' + side].rotation.set(0, big * keyed(q, TWO_BEAT.knee), 0);
         m['ankle' + side].rotation.set(0, -0.12 - 0.35 * big * keyed(q, TWO_BEAT.ankle), 0);
+        // Pulse progress up the cross-body link: starts with the downbeat's snap, about a third of a cycle.
+        m.kickPulse[side] = base > 0.05 && q > 0.03 && q < 0.33 ? (q - 0.03) / 0.3 : -1;
         continue;
       }
       const angle = kick + offset + (F.samesidekick ? Math.PI : 0) + 0.15 * noise(2 * t, offset ? 62 : 61);
@@ -1372,6 +1376,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       m['leg' + side].rotation.set(0, hip, 0);
       m['knee' + side].rotation.set(0, knee, 0);
       m['ankle' + side].rotation.set(0, -0.12 + k * (knees ? 0.25 : 0.10) * Math.sin(angle - 0.5), 0);
+      // Each flutter downbeat sends a shorter pulse (0.15 of a cycle) from just before its snap.
+      const u = wrap((angle - 0.5 - Math.PI / 2) / (2 * Math.PI) + 0.04), span = 0.075 * beats;
+      m.kickPulse[side] = base > 0.05 && u < span ? u / span : -1;
     }
   }
 
@@ -1628,28 +1635,38 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   // Cross-body link (visual only): a band from each shoulder to the opposite hip that loads as that
-  // hand catches. How well it connects follows the drive and the faults that break the diagonal chain.
+  // hand catches, and a pulse that runs up it from the opposite leg's downbeat: kick, hips turn, the
+  // catch takes the load. How well it connects follows the drive and the faults that break the chain.
   const chainScratch = [];
   function showChain(m, P, F, right, left) {
-    for (const s of ['R', 'L']) m['chain' + s].visible = !!P.chain;
+    for (const s of ['R', 'L']) m['chain' + s].visible = m['chainPulse' + s].visible = !!P.chain;
     if (!P.chain) return;
     if (!chainScratch.length) for (let i = 0; i < 3; i++) chainScratch.push(new THREE.Vector3());
     const [a, b, up] = chainScratch;
     const link = (0.35 + 0.65 * P.drive) * (F.flathips ? 0.35 : 1) * (F.samesidekick ? 0.35 : 1)
-      * (F.crossover ? 0.6 : 1) * (F.snaking ? 0.6 : 1) * (F.earlyroll ? 0.6 : 1);
+      * (F.crossover ? 0.6 : 1) * (F.snaking ? 0.6 : 1) * (F.earlyroll ? 0.6 : 1) * (F.kneekick ? 0.6 : 1);
     const col = C.hold.map((v, i) => lerp(C.slip[i], v, clamp(link, 0, 1)));
     for (const [s, other, a0] of [['R', 'L', right], ['L', 'R', left]]) {
-      const band = m['chain' + s], load = clamp(a0.under ? a0.load : 0, 0, 1);
+      const band = m['chain' + s], pulse = m['chainPulse' + s];
+      const load = clamp(a0.under ? a0.load : 0, 0, 1);
+      // A pulse that reaches a hand out of the water has nothing to drive: it fades.
+      const pr = m.kickPulse?.[other] ?? -1, env = pr >= 0 ? Math.sin(Math.PI * pr) : 0;
+      const meets = a0.under ? 1 : 0.2;
       m['sh' + s].getWorldPosition(a);
       m['leg' + other].getWorldPosition(b);
+      pulse.position.copy(b).lerp(a, smooth(clamp(pr, 0, 1)));
+      pulse.scale.setScalar(0.7 + 0.6 * env * link);
+      pulse.material.color.setRGB(col[0], col[1], col[2]);
+      pulse.material.opacity = clamp(env * meets * (0.35 + 0.6 * link), 0, 0.95);
       b.sub(a);
       const len = b.length();
       band.position.copy(a).addScaledVector(b, 0.5);
       band.quaternion.setFromUnitVectors(up.set(0, 1, 0), b.normalize());
-      const thick = 0.6 + 1.2 * load * link;
+      // The band thickens with the hand's load and snaps a little thicker as the pulse passes.
+      const thick = 0.6 + 1.2 * load * link + 0.7 * env * meets * link;
       band.scale.set(thick, len, thick);
       band.material.color.setRGB(col[0], col[1], col[2]);
-      band.material.opacity = clamp(0.3 + 0.6 * load * (0.4 + 0.6 * link), 0, 0.9);
+      band.material.opacity = clamp(0.3 + 0.6 * Math.max(load, 0.6 * env * meets) * (0.4 + 0.6 * link), 0, 0.9);
     }
   }
 

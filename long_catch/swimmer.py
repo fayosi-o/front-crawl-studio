@@ -149,10 +149,12 @@ class SwimmerBuilder:
         return self.ids
 
     def _chain(self) -> None:
-        """Cross-body link bands (shoulder to opposite hip); the engine stretches them between the joints."""
+        """Cross-body link bands (shoulder to opposite hip) and the kick pulse that runs up each one."""
         for side, _ in SIDES:
             band = ui.scene.cylinder(0.022, 0.022, 1, 12).material(self.colors.patch, 0.0)
             self._register('chain' + side, band).visible(False)
+            pulse = ui.scene.sphere(0.045, 16, 12).material(self.colors.patch, 0.0)
+            self._register('chainPulse' + side, pulse).visible(False)
 
     def _register(self, name: str, obj):
         """Record ``obj``'s id under ``name`` for the engine and return it for chaining."""
