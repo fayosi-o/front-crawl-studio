@@ -159,24 +159,18 @@ class SwimmerBuilder:
         self.ids[name] = obj.id
         return obj
 
-    def _patch(self, name: str, obj):
-        """Amber emphasis overlay, invisible until the engine sets its opacity."""
-        return self._register(name, obj.material(self.colors.patch, 0.0))
-
     def _water(self) -> None:
         """Double-sided surface plane at z = 0; the engine adds waves and the pool floor."""
         self._register('water', ui.scene.plane(10, 4).material(self.colors.water, 0.16, 'both').move(-0.5, 0, 0.0))
 
     def _torso(self) -> None:
-        """Smooth tapered trunk, chest and waist volumes, and back-muscle overlays."""
+        """Smooth tapered trunk, chest and waist volumes, volumes."""
         skin = self.colors.skin
         # One closed, rounded surface from the waist (-x) to the shoulders (+x), so no flat ends show.
         trunk = ui.scene.lathe([[r, h - 0.025] for r, h in TRUNK_PROFILE], 48).material(skin, 1.0, 'both')
         trunk.rotate(0, 0, -math.pi / 2).scale(1, 1, 0.62)
         ui.scene.sphere(1, 32, 20).material(skin).scale(0.09, 0.20, 0.12).move(0.20, 0, 0)
         ui.scene.sphere(1, 32, 20).material(skin).scale(0.21, 0.135, 0.095).move(-0.27, 0, 0)
-        for side, sign in SIDES:
-            self._patch('back' + side, ellipsoid(0.18, 0.055, 0.03, self.colors.patch)).move(0.01, sign * 0.12, 0.10)
 
     def _head(self) -> None:
         """Neck, head, jaw, swim cap, and goggles; the face points down (-z).
@@ -256,7 +250,6 @@ class SwimmerBuilder:
             ellipsoid(0.085, 0.07, 0.072, skin).move(0.03, 0, 0.004)  # deltoid cap
             limb_x(b.upper_arm, 0.058, 0.041, skin)
             ellipsoid(0.10, 0.05, 0.056, skin).move(0.14, 0, 0.006)  # biceps and triceps
-            self._patch('tri' + side, ellipsoid(0.095, 0.038, 0.025, self.colors.patch)).move(0.13, 0, 0.035)
             with self._register('el' + side, ui.scene.group().move(b.upper_arm, 0, 0)):
                 ui.scene.sphere(0.042, 28, 18).material(skin)
                 ui.scene.sphere(0.028, 24, 16).material(skin).move(-0.006, 0, 0.026)  # olecranon (elbow point)
@@ -281,12 +274,8 @@ class SwimmerBuilder:
             strap.scale(0.5, 1, 1).rotate(0, math.pi / 2, 0).move(0.035, 0, 0.022)
 
     def _pelvis(self) -> None:
-        """Hips in suit colour, plus the core and hip-drive emphasis patches."""
+        """Hips in suit colour."""
         ellipsoid(0.16, 0.165, 0.12, self.colors.suit).move(-0.02, 0, 0)
-        self._patch('core', ellipsoid(0.10, 0.13, 0.105, self.colors.patch)).move(0.13, 0, 0.015)
-        for side, sign in SIDES:
-            hip = ui.scene.sphere(0.065, 16, 10).material(self.colors.patch, 0.0)
-            self._patch('hip' + side, hip).scale(1.3, 0.5, 0.8).move(-0.02, sign * 0.15, 0.025)
 
     def _leg(self, side: str, sign: int) -> None:
         """Nested hip -> knee -> ankle groups, pointing back (-x) from the pelvis."""

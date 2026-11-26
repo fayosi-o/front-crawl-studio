@@ -120,8 +120,8 @@ elbow with a six-beat kick). A new fault needs:
   with no dip or jump in pace across the range, and must cost more effort. Above
   50 spm a weak catch slips, so its best rate is below the top of the range.
 - A draggy body must lose more speed in the glide than a streamlined one.
-- Muscle highlighting is an illustrative overlay. Don't present numbers as
-  measured, and don't add disclaimer text to the UI.
+- Don't present the visual overlays' numbers as measured, and don't add
+  disclaimer text to the UI.
 
 ## Hard constraints
 

@@ -13,8 +13,6 @@ from typing import Literal
 
 # --- View options: each Literal is paired with the tuple the UI iterates over ---
 
-Emphasis = Literal['back', 'triceps', 'core', 'balanced']
-EMPHASES: tuple[Emphasis, ...] = ('back', 'triceps', 'core', 'balanced')
 ViewAngle = Literal['top', 'side', 'front', 'below', 'hand']
 VIEW_ANGLES: tuple[ViewAngle, ...] = ('top', 'side', 'front', 'below', 'hand')
 Trail = Literal['off', 'hands', 'feet', 'both']
@@ -666,11 +664,6 @@ def timeline_boundaries(
     return tuple(stroke_time(loaded_time(b, exit, feel, rush), glide) for b in bounds)
 
 
-def highlight_intensity(hold_quality: float, drive_balance: float) -> float:
-    """Muscle-overlay strength (0.15–1.0); a strong glow needs both hold and drive."""
-    return 0.15 + 0.85 * (clamp(hold_quality, 0.0, 1.0) * clamp(drive_balance, 0.0, 1.0)) ** 1.5
-
-
 def waterline_pose(speed: float) -> tuple[float, float]:
     """Visual buoyancy targets in metres: body lift and extra hip drop.
 
@@ -827,7 +820,6 @@ class ViewState:
     """
 
     settings: StrokeSettings = field(default_factory=StrokeSettings)
-    emphasis: Emphasis = 'back'
     playing: bool = True
     playback: float = 1.0
     faults: frozenset[str] = frozenset()
@@ -844,8 +836,6 @@ class ViewState:
         for name in ('playing', 'split', 'pressure', 'flow', 'chain'):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f'{name} must be true or false')
-        if self.emphasis not in EMPHASES:
-            raise ValueError(f'unknown emphasis {self.emphasis!r}')
         if self.drill not in DRILLS:
             raise ValueError(f'unknown drill {self.drill!r}')
         if self.playback not in PLAYBACK_SPEEDS:
@@ -902,7 +892,6 @@ class ViewState:
             'depth': s.depth / 100,
             'entry': s.entry,
             'roll': s.roll,
-            'emphasis': self.emphasis,
             'playing': self.playing,
             'playback': self.playback,
             'length': length,
@@ -916,7 +905,6 @@ class ViewState:
             'pressure': self.pressure,
             'flow': self.flow,
             'chain': self.chain,
-            'intensity': highlight_intensity(m.hold_quality, s.drive / 100),
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
             # Share of each stroke spent coasting; the engine shapes the speed surge from it.

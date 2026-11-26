@@ -33,7 +33,6 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   const hash = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return 2 * (v - Math.floor(v)) - 1; };
   const noise = (t, seed) => { const i = Math.floor(t); return lerp(hash(i, seed), hash(i + 1, seed), smooth(t - i)); };
   const C = { hold: rgb(CONFIG.colors.hold), slip: rgb(CONFIG.colors.slip), skin: rgb(CONFIG.colors.skin) };
-  const EMPHASIS = { back: [1, 0, 0], triceps: [0, 1, 0], core: [0, 0, 1], balanced: [0.55, 0.55, 0.55] };
   const PHASES = CONFIG.phases;
   const [UPPER, FOREARM] = CONFIG.arm;
   // Shoulder-to-wrist distance for an elbow bent by `bend` degrees; reach is limited to 8–145°.
@@ -221,7 +220,6 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       x, out, height: height + dy, elbow, recovery, elbowDir, palm, shrug: front,
       reach: rch * keyed(p, [[0, 1], [0.2, 1], [0.36, 0], [preEntry, 0], [1, 1]]),
       wrist: wrist * D, under, stage, load: (P.feel || 0) * loadShare(p, P), pace: loadPace(p, P),
-      back: bump(p, 0.10, fin + 0.02), triceps: bump(p, push, exit),
     };
   }
 
@@ -383,11 +381,6 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
     }
     m.water.material.depthWrite = false;
-    // Emphasis patches are an x-ray overlay so limbs and torso never hide them.
-    for (const k of ['backR', 'backL', 'triR', 'triL', 'core', 'hipR', 'hipL']) {
-      Object.assign(m[k].material, { depthWrite: false, depthTest: false });
-      m[k].renderOrder = 10;
-    }
     for (const k of ['chainR', 'chainL']) {
       Object.assign(m[k].material, { depthWrite: false, depthTest: false, transparent: true });
       m[k].renderOrder = 11;
@@ -1241,12 +1234,6 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     mesh.material.color.setRGB(col[0], col[1], col[2]);
   }
 
-  // Emphasis overlay opacity; sqrt keeps weak contributions visible.
-  function patch(mesh, value) {
-    mesh.material.opacity = clamp(Math.sqrt(Math.max(0, value)) * 0.85, 0, 0.85);
-    mesh.visible = value > 0.02;
-  }
-
   // Fixed-length two-bone inverse kinematics for one arm in the rolled chest frame.
   function poseArm(m, side, a, P, slipness, bodyRoll, pitch = 0) {
     const sgn = side === 'R' ? -1 : 1, sh = m['sh' + side], r = m.rigs[side];
@@ -1636,16 +1623,6 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     poseLegs(m, P, F, st, body);
     moveThroughWater(m, P, scaled, slipness, breath, previousX, resetMotion);
 
-    const [eb, et, ec] = EMPHASIS[P.emphasis] || EMPHASIS.balanced;
-    const k = P.intensity;
-    const core = Math.abs(Math.sin(w * (body - ROLL_PEAK + lead))) * (0.35 + 0.65 * P.drive) * (F.flathips ? 0.3 : 1);
-    patch(m.backR, eb * k * right.back);
-    patch(m.backL, eb * k * left.back);
-    patch(m.triR, et * k * right.triceps);
-    patch(m.triL, et * k * left.triceps);
-    patch(m.core, ec * k * core);
-    patch(m.hipR, ec * k * core);
-    patch(m.hipL, ec * k * core);
     showChain(m, P, F, right, left);
     return [right, left, slipness];
   }

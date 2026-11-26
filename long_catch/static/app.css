@@ -83,7 +83,6 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
 .lc-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .lc-dot-hold { background: var(--lc-hold); }
 .lc-dot-slip { background: var(--lc-slip); }
-.lc-dot-patch { background: var(--lc-patch); }
 
 .lc-arms { display: flex; flex: 0 0 246px; width: 246px; box-sizing: border-box; gap: 2px; padding: 6px; }
 .lc-arm { flex: 0 0 115px; width: 115px; box-sizing: border-box; padding: 4px 6px; }

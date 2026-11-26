@@ -14,7 +14,6 @@ from long_catch.auth import hosted
 from long_catch.engine import BrowserEngine, RaceEngine, engine_script
 from long_catch.model import (
     DRILLS,
-    EMPHASES,
     FAULTS,
     PHASE_LABELS,
     PLAYBACK_SPEEDS,
@@ -155,10 +154,8 @@ assert {spec.key for spec in SLIDERS} == set(SETTING_RANGES)
 SLIDER_SPECS = {spec.key: spec for spec in SLIDERS}
 MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive')
 
-EMPHASIS_LABELS = {'back': 'Back', 'triceps': 'Triceps', 'core': 'Hips/core', 'balanced': 'Balanced'}
 ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below', 'hand': 'Hand'}
 TRAIL_LABELS = {'off': 'Off', 'hands': 'Hands', 'feet': 'Feet', 'both': 'Both'}
-assert set(EMPHASIS_LABELS) == set(EMPHASES)
 
 PLAYBACK_LABELS = {0.25: '¼×', 0.5: '½×', 1.0: '1×'}
 assert set(PLAYBACK_LABELS) == set(PLAYBACK_SPEEDS)
@@ -385,7 +382,7 @@ class LongCatchPage:
                 with ui.element('div').classes('lc-glass lc-brand'):
                     self.brand = ui.label(BRAND).classes('lc-subtitle')
                     with ui.row().classes('lc-legend'):
-                        for css, text in (('hold', 'holding'), ('slip', 'slipping'), ('patch', 'emphasis')):
+                        for css, text in (('hold', 'holding'), ('slip', 'slipping')):
                             with ui.element('span').classes('lc-legend-item'):
                                 ui.element('span').classes(f'lc-dot lc-dot-{css}')
                                 ui.label(text)
@@ -489,13 +486,6 @@ class LongCatchPage:
             self._build_faults()
             self._build_coach()
             self._build_drills()
-
-            with ui.element('div').classes('lc-card'):
-                section_title('Muscle emphasis')
-                emphasis = ui.toggle(
-                    EMPHASIS_LABELS, value=self.view.emphasis, on_change=lambda e: self.update(emphasis=e.value)
-                )
-                emphasis.props('no-caps spread unelevated').classes('lc-segmented')
 
             self._build_view()
 

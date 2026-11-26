@@ -322,7 +322,7 @@ def test_outputs_are_finite_and_consistent():
     assert result.strokes_per_25 == pytest.approx(25 / result.distance_per_stroke)
     assert result.seconds_per_25 == pytest.approx(result.strokes_per_25 * 60 / 40)
     params = ViewState().render_params()
-    assert all(0 <= params[key] <= 1 for key in ('catch', 'slip', 'drive', 'kick', 'length', 'exit', 'intensity'))
+    assert all(0 <= params[key] <= 1 for key in ('catch', 'slip', 'drive', 'kick', 'length', 'exit'))
     assert params['exit'] == exit_phase(params['length'])
 
 
@@ -342,7 +342,6 @@ def test_view_options_validate_and_trail_reaches_the_engine():
         {'angle': 'behind'},
         {'trail': 'elbows'},
         {'trail_seconds': 9.0},
-        {'emphasis': 'legs'},
         {'playback': 3.0},
         {'pressure': list(range(1000))},
         {'split': 'yes'},
