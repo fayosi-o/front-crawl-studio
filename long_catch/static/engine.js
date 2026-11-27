@@ -1523,7 +1523,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // A lifted head drops the hips for the length of each breath; a kick holds sinking legs up a little.
     // A head held high or buried drags all the time.
     const head = headOff(P);
-    const dragShape = 1 + 2 * P.hipDrop + 0.35 * legSink(P, S.faults) + 0.6 * head.hi + 0.25 * head.lo
+    const dragShape = 1 + 2 * P.hipDrop + 0.35 * legSink(P, S.faults) + 0.6 * head.hi + 0.25 * head.lo + 0.4 * Math.max(0, (P.arch ?? 0) - 8) / 22
       + (S.faults.headlift ? 0.5 * Math.abs(breath) : 0) + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
@@ -1634,9 +1634,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // The chest leans up and out from the hips: the pelvis and legs stay low as the pivot while the back
     // arches and the chest rises forward, instead of the whole body tilting as one.
     const arch = Math.min(1, 0.5 * sink + 0.6 * lift + 0.9 * head.hi);
+    // The Back arch slider adds to that. The arch swells as the hips turn through the middle of each roll
+    // (twice a stroke) and eases to a new setting instead of snapping; paused, it jumps to the setting.
+    const set = P.arch ?? 0, archWant = 18 * D * arch + set * D * (1 + 0.18 * Math.cos(2 * w * (body - ROLL_PEAK)));
+    S.arch = S.arch === undefined ? archWant : lerp(S.arch, archWant, scaled > 0 ? settle : 1);
     const pitchBase = -14 * D * sink - 8 * D * lift - 7 * D * head.hi + 6 * D * head.lo;
-    const pitch = pitchBase - 18 * D * arch;
-    const legPitch = -24 * D * sink - 10 * D * lift - 16 * D * head.hi + 5 * D * head.lo;
+    const pitch = pitchBase - S.arch;
+    const legPitch = -24 * D * sink - 10 * D * lift - 16 * D * head.hi + 5 * D * head.lo - 0.3 * Math.max(0, set - 8) * D;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 : F.samesidekick ? 3 : 0) * D * Math.sin(w * (body - ROLL_PEAK)) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);

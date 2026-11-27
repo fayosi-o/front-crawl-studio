@@ -56,6 +56,7 @@ def engine_script() -> str:
         'lopsidedCatch': LOPSIDED_CATCH,
         'headBand': list(HEAD_BAND),
         'headRange': list(SETTING_RANGES['head']),
+        'archRange': list(SETTING_RANGES['arch']),
         'arm': [BODY.upper_arm, BODY.forearm],
     }
     source = (STATIC_DIR / 'engine.js').read_text(encoding='utf-8')

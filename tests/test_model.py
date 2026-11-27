@@ -28,6 +28,7 @@ from long_catch.model import (
     StrokeSettings,
     ViewState,
     advice,
+    arch_drag,
     arm_phases,
     cycle_duration,
     drive_seconds,
@@ -621,6 +622,22 @@ def test_head_outside_its_band_costs_drag():
     with pytest.raises(ValueError):
         StrokeSettings(head=41)
     assert ViewState(settings=StrokeSettings(head=-10)).render_params()['head'] == -10
+
+
+def test_back_arch_beyond_its_band_costs_drag():
+    assert arch_drag(0) == arch_drag(8) == 0.0
+    assert arch_drag(30) == pytest.approx(0.08) and arch_drag(15) < arch_drag(22)
+    assert arch_drag(30, sink=1.2) > arch_drag(30)
+    base = StrokeSettings().metrics().distance_per_stroke
+    assert StrokeSettings(arch=30).metrics().distance_per_stroke < base
+    assert StrokeSettings(arch=6).metrics().distance_per_stroke == base
+    with pytest.raises(ValueError):
+        StrokeSettings(arch=31)
+    assert ViewState(settings=StrokeSettings(arch=12)).render_params()['arch'] == 12
+    tip = next(
+        t for t in advice(ViewState(settings=StrokeSettings(arch=30)), limit=10) if t.title == 'Ease the back arch'
+    )
+    assert tip.settings == (('arch', 8),)
 
 
 def test_advice_levels_a_lifted_or_buried_head():

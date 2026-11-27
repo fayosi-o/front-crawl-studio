@@ -80,6 +80,12 @@ HEAD_BAND = (0, 15)  # degrees
 HEAD_HIGH_COST = 0.10
 HEAD_LOW_COST = 0.05
 
+# Back arch: how far the chest leans up and out from the hips, in degrees. A little is natural and free
+# (ARCH_BAND); a hollow back sinks the legs and drags, more so at pace. The cost is the distance lost at
+# the top of the slider's range.
+ARCH_BAND = (0, 8)  # degrees
+ARCH_COST = 0.08
+
 # Effort: the work rate of a stroke against an all-out sprint (EFFORT_SPRINT). Pushing the drag
 # takes power that grows with the cube of speed, a slipping hand wastes some of it moving water,
 # swinging the arms over faster costs more, and a big, frequent kick is expensive for its thrust.
@@ -324,6 +330,14 @@ def roll_drag(roll: float) -> float:
     if roll > hi:
         return ROLL_COST * ((roll - hi) / (roll_hi - hi)) ** 2
     return 0.0
+
+
+def arch_drag(arch: float, sink: float = 1.0) -> float:
+    """Fraction of distance lost to a back arched beyond ``ARCH_BAND``; none inside it."""
+    hi = ARCH_BAND[1]
+    if arch <= hi:
+        return 0.0
+    return ARCH_COST * sink * ((arch - hi) / (SETTING_RANGES['arch'][1] - hi)) ** 2
 
 
 def head_drag(head: float, sink: float = 1.0) -> float:
@@ -667,6 +681,7 @@ def body_drag(settings: StrokeSettings, faults: frozenset[str] = frozenset(), sp
         fault_drag(faults, settings, sink),
         roll_drag(settings.roll),
         head_drag(settings.head, sink),
+        arch_drag(settings.arch, sink),
         kick_drag(settings.kick / 100, sink),
         speed_drag(speed, settings.height),
     )
@@ -706,6 +721,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'catch': (0, 100),
     'roll': (20, 62),
     'head': (-20, 40),
+    'arch': (0, 30),
     'slip': (0, 100),
     'width': (0, 100),
     'depth': (0, 100),
@@ -729,6 +745,7 @@ class StrokeSettings:
     catch: int = 92
     roll: int = 46
     head: int = 5  # head angle from the spine line in degrees: 0 = eyes on the floor, + looks forward
+    arch: int = 0  # back arch in degrees: the chest leaning up and out from the hips
     slip: int = 8
     width: int = 35  # pull width: 0 = hand sweeps in under the body, 100 = wide of the shoulder line
     depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
@@ -918,6 +935,7 @@ class ViewState:
             'entry': s.entry,
             'roll': s.roll,
             'head': s.head,
+            'arch': s.arch,
             'playing': self.playing,
             'playback': self.playback,
             'length': length,
@@ -1027,6 +1045,9 @@ def advice(view: ViewState, limit: int = 3) -> tuple[Advice, ...]:
             else 'Lift the chin off your chest and look at the floor below, not back at your hips.'
         )
         options.append(Advice('Level the head', cue, settings=(('head', level),)))
+    if s.arch > ARCH_BAND[1]:
+        cue = 'Keep the ribs down and the belly lightly braced so the lower back stays long, not hollow.'
+        options.append(Advice('Ease the back arch', cue, settings=(('arch', ARCH_BAND[1]),)))
     base = view.metrics().seconds_per_100
     scored = [replace(a, seconds_per_100=base - a.apply(view).metrics().seconds_per_100) for a in options]
     ranked = sorted((a for a in scored if a.seconds_per_100 >= MIN_SAVING), key=lambda a: -a.seconds_per_100)

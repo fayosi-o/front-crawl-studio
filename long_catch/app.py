@@ -84,6 +84,15 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'looking forward',
     ),
     SliderSpec(
+        'arch',
+        'Back arch',
+        '°',
+        'How far the chest leans up and out from the hips. A few degrees is natural and free; a hollow back '
+        'sinks the legs and adds drag, more so at a fast pace.',
+        'flat',
+        'arched',
+    ),
+    SliderSpec(
         'glide',
         'Glide length',
         '%',
@@ -273,7 +282,7 @@ def stroke_controls(
     for spec in SLIDERS:
         if spec.key in MAIN_SLIDERS:
             build(spec)
-    caption = 'Glide, roll, head, width, depth, entry, kick, breathing and height'
+    caption = 'Glide, roll, head, arch, width, depth, entry, kick, breathing and height'
     with ui.expansion('Motion details', caption=caption).classes('lc-motion-details w-full'):
         for spec in SLIDERS:
             if spec.key not in MAIN_SLIDERS:

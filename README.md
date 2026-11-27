@@ -162,7 +162,7 @@ both tabs, logout and private-tab access, including on iPhone.
 
 1. Pick one of four presets; edits change its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
-   Expand **Motion details** for glide length, roll, head position, pull width, depth, entry angle, kick size,
+   Expand **Motion details** for glide length, roll, head position, back arch, pull width, depth, entry angle, kick size,
    kick timing (2-, 4- or 6-beat), breathing (every 2–5 strokes) and the
    swimmer's height (150–200 cm; presets keep it).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.

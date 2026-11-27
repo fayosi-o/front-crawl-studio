@@ -92,6 +92,8 @@ band, shows a coral gaze line from the goggles (`showGaze`, a child of the head)
 The push path has three switches that only shift the hand's height in `arm()` (`dy`): **Pressing down** (a fault),
 **Parallel push** and **Late upsweep** (good form, `push` < 0).
 
+**Back arch** (`arch`, 0–30°) is a slider too: the chest leans up and out from hips that hold their place. 0–8° is free; more sinks the legs and adds `arch_drag`. The engine adds it to the arch that a lifted head or sinking legs already produce, eases to new values (snapping when paused) and swells it twice a stroke with the roll.
+
 **Hand paddles** (`paddles`) is training equipment: `good` and `kit`, listed under "Equipment". The paddled
 hand holds more water (less slip, more push), feels heavier (`felt_load(..., hand_area(faults))`, so the hand
 also moves more slowly through the pull) and its arm work costs `PADDLE_EFFORT` more (`work_rate`'s `arm_load`).
