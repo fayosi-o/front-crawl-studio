@@ -162,7 +162,7 @@ both tabs, logout and private-tab access, including on iPhone.
 
 1. Pick one of four presets; edits change its label to **Custom**.
 2. Tune **rate**, **catch**, **slip** and **drive**; estimates update above them.
-   Expand **Motion details** for glide length, roll, pull width, depth, entry angle, kick size,
+   Expand **Motion details** for glide length, roll, head position, pull width, depth, entry angle, kick size,
    kick timing (2-, 4- or 6-beat), breathing (every 2–5 strokes) and the
    swimmer's height (150–200 cm; presets keep it).
 3. Enable **stroke faults** to compare technique; **Clear** removes them all.
@@ -207,7 +207,10 @@ More slip reduces distance per stroke, and extra drive cannot rescue a poor catc
   rate or long glide coasts longer, and a draggy body slows faster while it
   coasts, so a long glide pays off only with a good streamline.
 - **Body and legs.** Roll between about 35° and 55° is free; flatter or further
-  adds drag. Still legs sink a little; a kick lifts them and wins back part of
+  adds drag. **Head position** between 0° (eyes on the floor) and 15° is free:
+  lifted to look forward, the hips and legs sink (more so at pace); tucked chin to
+  chest, the head buries and the front end dives. Outside that band a coral line
+  shows where the swimmer is looking. Still legs sink a little; a kick lifts them and wins back part of
   the **Sinking legs** cost, which grows with pace (drag rises with speed squared; the legs sink deeper on screen too). A six-beat kick adds a little speed for a lot of
   effort, a big two-beat kick only adds drag, and **Head lift** costs more the
   more often you breathe.

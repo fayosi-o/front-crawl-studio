@@ -11,6 +11,7 @@ from nicegui import Client, ui
 from long_catch.model import (
     CATCH_START,
     FINISH_START,
+    HEAD_BAND,
     KICK_LIFT,
     LOAD_DWELL,
     LOAD_RELEASE,
@@ -19,6 +20,7 @@ from long_catch.model import (
     PHASE_LABELS,
     PULL_START,
     PUSH_START,
+    SETTING_RANGES,
     SINK_REF_SPEED,
     SINK_SPEED_RANGE,
 )
@@ -52,6 +54,8 @@ def engine_script() -> str:
         'sinkRefSpeed': SINK_REF_SPEED,
         'sinkSpeedRange': list(SINK_SPEED_RANGE),
         'lopsidedCatch': LOPSIDED_CATCH,
+        'headBand': list(HEAD_BAND),
+        'headRange': list(SETTING_RANGES['head']),
         'arm': [BODY.upper_arm, BODY.forearm],
     }
     source = (STATIC_DIR / 'engine.js').read_text(encoding='utf-8')

@@ -51,7 +51,7 @@ These instructions are platform-neutral. Windows notes are at the end;
   `pull_shape`), stroke length (`path_length`, one curve for the whole rate
   range), thrust against drag (distance per stroke falls with the square root of
   the rate), momentum (`drive_seconds`, `momentum_carry` with the body's drag),
-  body drag (`body_drag`: faults, `roll_drag`, `kick_drag`, and `speed_drag`, the wave-making loss above the default pace, per sqrt of height, so slower strokes keep their calibration), `kick_thrust`,
+  body drag (`body_drag`: faults, `roll_drag`, `head_drag`, `kick_drag`, and `speed_drag`, the wave-making loss above the default pace, per sqrt of height, so slower strokes keep their calibration), `kick_thrust`,
   each fault's lost `push`, and height. Effort (`work_rate`) is scaled to
   `EFFORT_SPRINT` and counts the stroke's own push, so drag faults don't lower
   it. Entry angle and the breathing pattern on its own are visual only;
@@ -76,13 +76,19 @@ never appear in "Fix first".
 The **Water flow** view (`ViewState.flow`, `updateFlow` in `engine.js`, visual only) releases tracers at each pulling palm:
 the share that holds rides back with the hand (teal) and the slipping share spills sideways (red), read from the same
 per-arm slip as the hand colour plus the palm's sideways sweep.
-Turning it on also opens the split view on the **Hand** angle (`VIEWS.hand`), a close-up that follows the deeper wrist.
+Turning it on also opens the split view on the **Hand** angle (`VIEWS.hand`), a close-up that follows the deeper wrist;
+with Water flow on it holds a steady frame on the pulling side's stroke instead of chasing the hand.
 The **Cross-body link** view (`ViewState.chain`, `showChain` in `engine.js`, visual only) stretches a band from each
 shoulder to the opposite hip that loads with that arm's felt load; its colour follows drive and the faults that break
 the diagonal chain (Flat hips, **Same-side kick**, Crossover, Snaking, Early rotation). Same-side kick swaps the leg
 timing so the downbeat lands with the same-side catch and drops the kick-driven roll (`kickTiming`).
 A pulse runs up each band from the opposite leg's downbeat (`m.kickPulse`, set in `poseLegs`) and fades when it
 reaches a hand that is out of the water. The flutter kick uses the same phase (`catchDelay + KICK_START`) as the two-beat.
+**Head position** (`head`, degrees from the spine line, 0 = eyes on the floor) is a slider, not a fault: inside
+`HEAD_BAND` (0–15°) it is free; lifted, `head_drag` costs up to `HEAD_HIGH_COST` (scaled with pace like Sinking legs),
+and tucked up to `HEAD_LOW_COST`. Fix first offers "Level the head". In `engine.js` (`headOff`) it tilts the head,
+pitches the chest and legs (lifted: hips sink; buried: front dives, hips rise), grows the bow wave and, outside the
+band, shows a coral gaze line from the goggles (`showGaze`, a child of the head).
 The push path has three switches that only shift the hand's height in `arm()` (`dy`): **Pressing down** (a fault),
 **Parallel push** and **Late upsweep** (good form, `push` < 0).
 

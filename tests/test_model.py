@@ -35,6 +35,7 @@ from long_catch.model import (
     exit_phase,
     felt_load,
     format_duration,
+    head_drag,
     load_profile,
     loaded_time,
     matching_preset,
@@ -606,6 +607,28 @@ def test_advice_ranks_real_savings_biggest_first():
     assert {tip.fault for tip in tips} >= {'sinking', 'rushing', 'headlift'}
     assert tips[0].fault == 'rushing'
     assert advice(view) == tips[:3]
+
+
+def test_head_outside_its_band_costs_drag():
+    assert head_drag(0) == head_drag(5) == head_drag(15) == 0.0
+    assert head_drag(40) == pytest.approx(0.10) and head_drag(-20) == pytest.approx(0.05)
+    assert head_drag(25) < head_drag(30) and head_drag(-5) < head_drag(-10)
+    assert head_drag(40, sink=1.2) > head_drag(40)  # a lifted head sinks the legs harder at pace
+    base = StrokeSettings().metrics().distance_per_stroke
+    assert StrokeSettings(head=40).metrics().distance_per_stroke < StrokeSettings(head=25).metrics().distance_per_stroke
+    assert StrokeSettings(head=-20).metrics().distance_per_stroke < base
+    assert StrokeSettings(head=12).metrics().distance_per_stroke == base
+    with pytest.raises(ValueError):
+        StrokeSettings(head=41)
+    assert ViewState(settings=StrokeSettings(head=-10)).render_params()['head'] == -10
+
+
+def test_advice_levels_a_lifted_or_buried_head():
+    for head, level in ((35, 15), (-20, 0)):
+        view = ViewState(settings=StrokeSettings(head=head))
+        tip = next(tip for tip in advice(view, limit=10) if tip.title == 'Level the head')
+        assert tip.settings == (('head', level),)
+    assert not any(tip.title == 'Level the head' for tip in advice(ViewState(), limit=10))
 
 
 def test_advice_changes_one_thing_at_a_time():

@@ -764,12 +764,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     sharpen(S.el.renderer);
     setupSheen(m);
     const pos = m.water.geometry.attributes.position, a = pos.array;
-    const fixed = new Float64Array(pos.count), heights = new Float64Array(pos.count);
+    const fixed = new Float64Array(pos.count), bow = new Float64Array(pos.count), heights = new Float64Array(pos.count);
     for (let i = 0; i < pos.count; i++) {
       const x = a[3 * i] + SURFACE.x, y = a[3 * i + 1], d = 0.55 - x;
       // Bow wave: a hump pushed up ahead of the head and a trough beside the shoulders.
-      fixed[i] = 0.034 * Math.exp(-((x - 0.62) ** 2) / 0.025 - y * y / 0.04)
+      bow[i] = 0.034 * Math.exp(-((x - 0.62) ** 2) / 0.025 - y * y / 0.04)
         - 0.022 * Math.exp(-((x - 0.3) ** 2) / 0.04 - y * y / 0.1);
+      fixed[i] = 0;
       // Wake: two V-shaped wave trains spreading back from the shoulders.
       if (d > 0) {
         const wing = Math.abs(y) - 0.36 * d, width = 0.06 + 0.05 * d;
@@ -786,7 +787,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       }
       return values;
     });
-    m.pool = { tiles, caustics, shadow, flow, ripple, rippleB, fixed, heights, waves, time: 0, dirty: true };
+    m.pool = { tiles, caustics, shadow, flow, ripple, rippleB, fixed, bow, heights, waves, time: 0, dirty: true };
     return true;
   }
 
@@ -799,7 +800,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     pool.shadow.position.set(at.x - 0.35, at.y, pool.shadow.position.z);
     const pos = m.water.geometry.attributes.position, a = pos.array;
     const pace = Math.min(1, P.speed), ripples = fx ? fx.ripples : [], wash = fx ? fx.wash : 0, footX = fx ? fx.footX : -1.6;
-    if (dt === 0 && !pool.dirty && pool.pace === pace) return;
+    // A lifted head ploughs a bigger bow wave; a buried one rides under it.
+    const {hi, lo} = headOff(P), bowGain = pace * (1 + 1.6 * hi - 0.5 * lo);
+    if (dt === 0 && !pool.dirty && pool.pace === pace && pool.bowGain === bowGain) return;
     const heights = pool.heights, [wave0, wave1, wave2] = pool.waves;
     const [c0, s0, c1, s1, c2, s2] = SWELL.flatMap(([kx, , kt]) => {
       const phase = kx * off + kt * t;
@@ -809,7 +812,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const x = a[3 * i] + SURFACE.x + off, y = a[3 * i + 1], lx = a[3 * i] + SURFACE.x;
       const j = 2 * i;
       let h = wave0[j] * c0 + wave0[j + 1] * s0 + wave1[j] * c1 + wave1[j + 1] * s1
-        + wave2[j] * c2 + wave2[j + 1] * s2 + pool.fixed[i] * pace;
+        + wave2[j] * c2 + wave2[j + 1] * s2 + pool.fixed[i] * pace + pool.bow[i] * bowGain;
       // Kick wash: choppy water over and behind the feet that is carried back with the water.
       const behind = footX + 0.15 - lx;
       if (wash > 0.001 && behind > 0 && behind < 2) {
@@ -843,6 +846,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.water.geometry.computeVertexNormals();
     pool.dirty = false;
     pool.pace = pace;
+    pool.bowGain = bowGain;
     pool.tiles.offset.x = wrap(off);
     // Positive UV offset moves the streaks back across the swimmer-relative surface.
     pool.flow.offset.x = wrap(off * pool.flow.repeat.x / SURFACE.w);
@@ -1517,7 +1521,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const legDrag = ['R', 'L'].reduce((sum, side) => sum + Math.sin(m['leg' + side].rotation.y) ** 2
       + Math.sin(m['knee' + side].rotation.y) ** 2, 0);
     // A lifted head drops the hips for the length of each breath; a kick holds sinking legs up a little.
-    const dragShape = 1 + 2 * P.hipDrop + 0.35 * legSink(P, S.faults)
+    // A head held high or buried drags all the time.
+    const head = headOff(P);
+    const dragShape = 1 + 2 * P.hipDrop + 0.35 * legSink(P, S.faults) + 0.6 * head.hi + 0.25 * head.lo
       + (S.faults.headlift ? 0.5 * Math.abs(breath) : 0) + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
@@ -1548,6 +1554,12 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     body.updateMatrixWorld(true);
   }
 
+  // Head position (P.head, degrees from the spine line, + looks forward): how far (0-1) it sits past the
+  // neutral band toward the lifted (hi) or buried (lo) end of its slider, as in model.head_drag.
+  function headOff(P) {
+    const [lo, hi] = CONFIG.headBand, [min, max] = CONFIG.headRange, h = P.head ?? 5;
+    return {hi: clamp((h - hi) / (max - hi), 0, 1), lo: clamp((lo - h) / (lo - min), 0, 1)};
+  }
   // Sinking legs, less the share a kick holds up (model.KICK_LIFT): 0 without the fault.
   const legSink = (P, F) => (F.sinking ? 1 - CONFIG.kickLift * P.kick : 0);
   // The legs also sink deeper the faster the swimmer goes (model.sink_scale: drag grows with speed squared).
@@ -1557,6 +1569,24 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   const lopsided = P => ({...P, catch: P.catch * CONFIG.lopsidedCatch, slip: clamp(P.slip + 0.2, 0, 1)});
   const slipShare = P => smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
   const gripOf = (P, slipness) => (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch);
+
+  // Gaze line (visual only): with the head outside its neutral band a coral line runs from the goggles
+  // along the line of sight, forward toward the wall when lifted, back toward the hips when tucked.
+  // It is a child of the head, so it turns with the breath and the head angle.
+  function showGaze(m, head) {
+    const off = Math.max(head.hi, head.lo);
+    if (!m.gaze) {
+      if (!off) return;
+      const geometry = new THREE.CylinderGeometry(0.006, 0.006, 1, 8).translate(0, -0.5, 0).rotateX(Math.PI / 2);
+      m.gaze = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+        color: new THREE.Color(...C.slip), transparent: true, depthWrite: false,
+      }));
+      m.gaze.position.set(0.25, 0, -0.09);  // between the goggles, in the head's frame (swimmer.py)
+      m.head.add(m.gaze);
+    }
+    m.gaze.visible = off > 0;
+    m.gaze.material.opacity = 0.4 + 0.5 * Math.min(1, 3 * off);
+  }
 
   function poseSwimmer(P, m, scaled, resetMotion) {
     // Measure the prescribed stroke in a neutral frame, never the previous steering response.
@@ -1598,8 +1628,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const turnEarly = (v, share) => lerp(v, -Math.sign(early), share * Math.abs(early));
     const bodyRoll = roll * turnEarly(rollAt(body - 0.04 * sharp), 0.7) + 6 * D * breath;
     // Head lift: each breath lifts the head forward, tips the chest up and lets the hips sink.
-    const lift = F.headlift ? Math.abs(breath) : 0, sink = sinkAtPace(P, F);
-    const pitch = -14 * D * sink - 8 * D * lift, legPitch = -24 * D * sink - 10 * D * lift;
+    // Head position: a lifted head tips the chest up and lets the hips and legs sink; a buried head
+    // (chin tucked) drives the chest down and the hips up.
+    const lift = F.headlift ? Math.abs(breath) : 0, sink = sinkAtPace(P, F), head = headOff(P);
+    const pitch = -14 * D * sink - 8 * D * lift - 7 * D * head.hi + 6 * D * head.lo;
+    const legPitch = -24 * D * sink - 10 * D * lift - 16 * D * head.hi + 5 * D * head.lo;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 : F.samesidekick ? 3 : 0) * D * Math.sin(w * (body - ROLL_PEAK)) + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
@@ -1609,15 +1642,16 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.pelvis.position.x = -0.36 * Math.cos(pitch);
     // Keep only small pose variation here; the common body parent carries buoyancy and pull lift.
     const heave = 0.003 * noise(1.5 * st, 21);
-    m.chest.position.z = heave + S.ride.height;
-    m.pelvis.position.z = 0.36 * Math.sin(pitch) - 0.05 * sink
+    m.chest.position.z = heave + S.ride.height - 0.025 * head.lo;
+    m.pelvis.position.z = 0.36 * Math.sin(pitch) - 0.05 * sink - 0.05 * head.hi + 0.015 * head.lo
       + 0.6 * heave + S.ride.height - S.ride.hips;
     // The head stays steady while the body rolls beneath it (the neck takes up half the roll),
     // then turns with the roll to breathe, one goggle staying in the water. A head lifter turns
     // less and lifts the face forward out of the water instead.
     const steady = -0.5 * bodyRoll, turn = Math.sign(breath) * (F.headlift ? 40 : 78) * D - bodyRoll;
     m.head.rotation.x = clamp(lerp(steady, turn, Math.abs(breath)), -70 * D, 70 * D) + 1.5 * D * noise(3 * st, 41);
-    m.head.rotation.y = -24 * D * lift;
+    m.head.rotation.y = -24 * D * lift - (P.head ?? 5) * D;
+    showGaze(m, head);
 
     // Both arms keep the same timing; only the lopsided right arm's shape and grip change.
     const PR = F.lopsided ? lopsided(P) : P;

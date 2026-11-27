@@ -72,6 +72,14 @@ HULL_COST = 0.6  # distance lost at 1.5x that pace is this times 0.25
 HULL_MAX = 0.3
 HEADLIFT_BREATH = 3  # breathing pattern at which Head lift costs its listed drag
 
+# Head position: the head's angle from the line of the spine (0° looks straight down at the floor,
+# positive looks forward). Inside HEAD_BAND it costs nothing. Lifted further, the hips and legs sink
+# (more so at pace, like Sinking legs); tucked chin to chest, the head buries and drives the front
+# end down. The costs are the distance lost at each end of the slider's range.
+HEAD_BAND = (0, 15)  # degrees
+HEAD_HIGH_COST = 0.10
+HEAD_LOW_COST = 0.05
+
 # Effort: the work rate of a stroke against an all-out sprint (EFFORT_SPRINT). Pushing the drag
 # takes power that grows with the cube of speed, a slipping hand wastes some of it moving water,
 # swinging the arms over faster costs more, and a big, frequent kick is expensive for its thrust.
@@ -315,6 +323,20 @@ def roll_drag(roll: float) -> float:
         return ROLL_COST * ((lo - roll) / (lo - roll_lo)) ** 2
     if roll > hi:
         return ROLL_COST * ((roll - hi) / (roll_hi - hi)) ** 2
+    return 0.0
+
+
+def head_drag(head: float, sink: float = 1.0) -> float:
+    """Fraction of distance lost to the head's position outside ``HEAD_BAND``; none inside it.
+
+    ``sink`` scales the lifted head's cost with pace, as the sinking legs drag harder at speed.
+    """
+    lo, hi = HEAD_BAND
+    head_lo, head_hi = SETTING_RANGES['head']
+    if head > hi:
+        return HEAD_HIGH_COST * sink * ((head - hi) / (head_hi - hi)) ** 2
+    if head < lo:
+        return HEAD_LOW_COST * ((lo - head) / (lo - head_lo)) ** 2
     return 0.0
 
 
@@ -639,11 +661,12 @@ def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None, s
 
 
 def body_drag(settings: StrokeSettings, faults: frozenset[str] = frozenset(), speed: float = SINK_REF_SPEED) -> float:
-    """Fraction of distance lost to the body's drag: faults, body roll, the legs and, at a fast pace, waves."""
+    """Fraction of distance lost to the body's drag: faults, roll, the head, the legs and, at a fast pace, waves."""
     sink = sink_scale(speed)
     parts = (
         fault_drag(faults, settings, sink),
         roll_drag(settings.roll),
+        head_drag(settings.head, sink),
         kick_drag(settings.kick / 100, sink),
         speed_drag(speed, settings.height),
     )
@@ -682,6 +705,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'rate': (22, 72),
     'catch': (0, 100),
     'roll': (20, 62),
+    'head': (-20, 40),
     'slip': (0, 100),
     'width': (0, 100),
     'depth': (0, 100),
@@ -699,11 +723,12 @@ SETTING_STEPS: dict[str, int] = {'beats': 2}
 
 @dataclass(frozen=True, slots=True)
 class StrokeSettings:
-    """User-facing settings: percentages 0–100, rate in spm, roll and entry in degrees, height in cm."""
+    """User-facing settings: percentages 0–100, rate in spm, roll, head and entry in degrees, height in cm."""
 
     rate: int = 42
     catch: int = 92
     roll: int = 46
+    head: int = 5  # head angle from the spine line in degrees: 0 = eyes on the floor, + looks forward
     slip: int = 8
     width: int = 35  # pull width: 0 = hand sweeps in under the body, 100 = wide of the shoulder line
     depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
@@ -795,7 +820,7 @@ def estimate_metrics(settings: StrokeSettings, faults: frozenset[str] = frozense
     - Thrust against drag: distance per stroke falls with the square root of the rate, so a higher
       rate is faster but each extra stroke buys less.
     - Momentum: low rates, longer glides and a draggy body lose speed between strokes.
-    - Drag: faults, roll outside its band, still legs and a big kick each cost a fraction; a kick
+    - Drag: faults, roll or head outside its band, still legs and a big kick each cost a fraction; a kick
       adds a little thrust; an early exit loses part of each push. Height scales the stroke.
     - Effort: the work rate against an all-out sprint (``EFFORT_SPRINT``), capped at 1.
     """
@@ -892,6 +917,7 @@ class ViewState:
             'depth': s.depth / 100,
             'entry': s.entry,
             'roll': s.roll,
+            'head': s.head,
             'playing': self.playing,
             'playback': self.playback,
             'length': length,
@@ -978,7 +1004,8 @@ def advice(view: ViewState, limit: int = 3) -> tuple[Advice, ...]:
 
     Every suggestion keeps the stroke rate: rate is a pacing choice (sprint or
     distance), so the coach only ranks technique. Each active fault, one step of
-    catch, slip, or drive, and an over-long glide are scored through the same
+    catch, slip, or drive, an over-long glide and a head outside its neutral band
+    are scored through the same
     estimate as the header, and only savings of at least ``MIN_SAVING`` count.
     """
     active = [(key, fault) for key, fault in FAULTS.items() if key in view.faults and not fault.good]
@@ -992,6 +1019,14 @@ def advice(view: ViewState, limit: int = 3) -> tuple[Advice, ...]:
     if s.glide > 50:
         cue = 'Start the catch once the arm is long; a long pause in front bleeds speed.'
         options.append(Advice('Shorten the glide', cue, settings=(('glide', 50),)))
+    level = int(clamp(s.head, *HEAD_BAND))
+    if level != s.head:
+        cue = (
+            'Look at the floor just ahead of you; let the waterline cross the crown of your head.'
+            if s.head > level
+            else 'Lift the chin off your chest and look at the floor below, not back at your hips.'
+        )
+        options.append(Advice('Level the head', cue, settings=(('head', level),)))
     base = view.metrics().seconds_per_100
     scored = [replace(a, seconds_per_100=base - a.apply(view).metrics().seconds_per_100) for a in options]
     ranked = sorted((a for a in scored if a.seconds_per_100 >= MIN_SAVING), key=lambda a: -a.seconds_per_100)

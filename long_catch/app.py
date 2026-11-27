@@ -74,6 +74,16 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'Peak rotation of the chest about the long axis. About 35–55° costs nothing; flatter or further adds drag.',
     ),
     SliderSpec(
+        'head',
+        'Head position',
+        '°',
+        'Angle of the head from the line of the spine: 0° looks straight down at the floor, and about 0–15° '
+        'costs nothing. Lifted to look forward, the hips and legs sink; tucked chin to chest, the head buries '
+        'and drives the front end down.',
+        'chin tucked',
+        'looking forward',
+    ),
+    SliderSpec(
         'glide',
         'Glide length',
         '%',
@@ -263,9 +273,8 @@ def stroke_controls(
     for spec in SLIDERS:
         if spec.key in MAIN_SLIDERS:
             build(spec)
-    with ui.expansion('Motion details', caption='Glide, roll, width, depth, entry, kick, breathing and height').classes(
-        'lc-motion-details w-full'
-    ):
+    caption = 'Glide, roll, head, width, depth, entry, kick, breathing and height'
+    with ui.expansion('Motion details', caption=caption).classes('lc-motion-details w-full'):
         for spec in SLIDERS:
             if spec.key not in MAIN_SLIDERS:
                 build(spec)
