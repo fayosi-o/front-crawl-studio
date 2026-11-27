@@ -439,6 +439,16 @@ class LongCatchPage:
                                 ui.label('Load').classes('lc-load-label')
                                 with ui.element('div').classes('lc-load-track'):
                                     ui.element('div').classes('lc-load-fill')
+                # Anchor view only: the engine fills these two bars and the verdict every frame.
+                with ui.element('div').classes('lc-glass lc-anchor-card').props('aria-hidden=true'):
+                    ui.label('Hand vs body, through the water').classes('lc-anchor-title')
+                    for key, text in (('body', 'Body'), ('hand', 'Hand')):
+                        with ui.element('div').classes(f'lc-anchor-row lc-anchor-{key}'):
+                            ui.label(text).classes('lc-anchor-name')
+                            with ui.element('div').classes('lc-load-track'):
+                                ui.element('div').classes('lc-anchor-fill')
+                            ui.label('').classes('lc-anchor-value')
+                    ui.label('').classes('lc-anchor-verdict')
             ui.label('Drag to orbit / scroll to zoom').classes('lc-camera-hint')
             self._build_transport()
             self.dock_button = self._icon_button('expand_more', 'Hide / show controls (H)', self.toggle_dock)

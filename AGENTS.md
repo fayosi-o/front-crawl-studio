@@ -84,6 +84,9 @@ split view on the Hand angle. A line from elbow to wrist shows the forearm again
 card: about 75° for the default pull, about 98° with a dropped elbow.
 The **Anchor** view (`ViewState.anchor`, `showAnchor` in `engine.js`, visual only) plants a pin in the water where each hand
 catches, drifting back at swim speed, with a line to the hand: short and teal when the hand holds, long and red when it slides.
+With Anchor on, a **Hand vs body** card (`showAnchorCard`) puts two bars side by side: the body's speed through the water and the
+pulling hand's speed back past its pin, with a one-line verdict (parked, creeping or sliding). A held catch shows a tiny hand
+bar next to a long body bar; that gap is the anchor.
 While a hand is anchored the arm card adds its slide, for example "Pull · slid 12 cm" (about 3 cm at most for Long power, up to
 about 70 cm for Short slipping).
 **Keep anchor pins** (`ViewState.anchor_keep`, `leavePin`/`showKept`) leaves each stroke's final pin in the water, coloured by its

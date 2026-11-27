@@ -1820,7 +1820,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (!an) an = S.anchors[s] = makeAnchor();
       const on = !!P.anchor && a0.under;
       if (!on) {
-        an.slideCm = -1;
+        an.slideCm = -1; an.lastSlide = undefined;
         // Keep anchor pins: the pin stays behind in the water, frozen at its colour, and fades as it drifts away.
         if (an.planted && P.anchor && P.anchorKeep) leavePin(an);
         an.planted = false; an.pin.visible = an.line.visible = false; continue;
@@ -1829,7 +1829,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (!an.planted && a0.load > 0.08) { an.at.copy(an.tip); an.planted = true; }
       if (!an.planted) continue;
       if (dt > 0) an.at.x -= (S.flow ?? P.speed) * dt;
-      const slide = clamp((an.at.x - an.tip.x) / ANCHOR_SLIP, 0, 1);
+      const slideM = Math.max(0, an.at.x - an.tip.x);
+      // Hand speed through the water: how fast the hand is moving back past its pin (smoothed).
+      if (dt > 0) an.speed = lerp(an.speed ?? 0, Math.max(0, (slideM - (an.lastSlide ?? slideM)) / dt), Math.min(1, dt * 8));
+      an.lastSlide = slideM;
+      const slide = clamp(slideM / ANCHOR_SLIP, 0, 1);
       const [r, g, b] = C.hold.map((v, i) => lerp(v, C.slip[i], slide));
       an.pin.position.copy(an.at);
       an.pin.material.color.setRGB(r, g, b);
@@ -1844,6 +1848,36 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       an.slide = slide;
       an.slideCm = Math.max(0, an.at.x - an.tip.x) * 100;
     }
+    showAnchorCard(P, right, left);
+  }
+
+  // The Anchor card: body speed against the pulling hand's speed through the water, with a plain verdict.
+  const ANCHOR_BAR = 2.5;  // m/s at which a bar is full
+  function showAnchorCard(P, right, left) {
+    const card = find('anchorCard', '.lc-anchor-card');
+    if (!card) return;
+    card.classList.toggle('on', !!P.anchor);
+    if (!P.anchor) return;
+    const pulling = ['R', 'L'].map(s => [S.anchors?.[s], s === 'R' ? right : left]).filter(([an, a]) => an?.planted && a.under);
+    const body = Math.max(0, S.flow ?? P.speed);
+    const bar = (key, speed, colour) => {
+      const fill = find(key + 'Bar', `.lc-anchor-${key} .lc-anchor-fill`), val = find(key + 'Val', `.lc-anchor-${key} .lc-anchor-value`);
+      if (fill) { fill.style.transform = `scaleX(${clamp(speed / ANCHOR_BAR, 0, 1).toFixed(2)})`; fill.style.background = colour; }
+      if (val) val.textContent = speed.toFixed(2) + ' m/s';
+    };
+    let verdict = 'Waiting for a hand to catch…', hand = 0, ratio = 0;
+    if (pulling.length) {
+      const [an] = pulling.reduce((a, b) => (b[1].load > a[1].load ? b : a));
+      hand = an.speed ?? 0;
+      ratio = body > 0.05 ? clamp(hand / body, 0, 1) : 0;
+      verdict = ratio < 0.15 ? 'Hand parked in the water: the body is pulled past it.'
+        : ratio < 0.5 ? 'Hand creeping back: part of the pull is just moving water.'
+          : 'Hand slides back nearly as fast as you move: no anchor, mostly pushing water.';
+    }
+    const [hr, hg, hb] = C.hold.map((v, i) => Math.round(255 * lerp(v, C.slip[i], clamp(ratio * 1.6, 0, 1))));
+    bar('body', body, 'rgb(150, 190, 220)');
+    bar('hand', hand, `rgb(${hr}, ${hg}, ${hb})`);
+    setText('anchorVerdict', '.lc-anchor-verdict', verdict);
   }
 
   // Cross-body link (visual only): a band from each shoulder to the opposite hip that loads as that
