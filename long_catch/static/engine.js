@@ -125,13 +125,13 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     let x = from(fin) ? flowing(ahead, [
       [fin, finishX], [exit, exitX], [lift, exitX + 0.09], [midRec, -0.17], [lateRec, 0.12],
       [preEntry, 0.30], [1, entryX], [1 + REACHED, enterX + reachX],
-    ]) : keyed(p, [
-      [REACHED, enterX + reachX], [0.16, glideX - 0.01 + reachX],
-      [0.22, lerp(0.30, 0.40, c) + reachX], [pull, pullX],
+    ]) : flowing(p, [
+      // One uninterrupted sweep from the catch through the pull to the hip. The hand keeps drifting back
+      // as the pull begins (it never stops at the keyframe), then speeds up through the push; the
+      // slight timing bias puts peak rearward speed in the push, not at a stop under the shoulder.
+      [REACHED, enterX + reachX], [0.16, glideX - 0.01 + reachX], [0.22, lerp(0.30, 0.40, c) + reachX],
+      ...[pull, 0.40, push, 0.58, fin].map(q => [q, lerp(pullX, finishX, smooth(((q - pull) / (fin - pull)) ** 1.25))]),
     ]);
-    // One uninterrupted sweep: pull under the chest, then extend back toward the hip.
-    // The slight timing bias puts peak rearward hand speed in the push, not at a stop under the shoulder.
-    if (p >= pull && p < fin) x = lerp(pullX, finishX, smooth(((p - pull) / (fin - pull)) ** 1.25));
     // Pull width: a narrow pull sweeps the hand in under the chest while the elbow stays out (the
     // "power diamond" of the hand, forearm, and upper arm); a wide one keeps the hand outside the
     // shoulder line with a straighter arm. Both open slightly out at the catch first.
