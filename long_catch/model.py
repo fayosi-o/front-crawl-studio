@@ -978,6 +978,12 @@ PRESETS: dict[str, StrokeSettings] = {
         rate=50, catch=95, roll=54, slip=6, width=25, depth=55, entry=8, drive=90, kick=70, beats=6, glide=40
     ),
     'Long power': StrokeSettings(rate=42, catch=92, roll=46, slip=8, width=35, drive=85, kick=45, beats=2),
+    # Adam Walker's Ocean Walker stroke as far as these controls reach: a hip-led turn with relaxed
+    # shoulders, eyes down, a low cadence with a long glide and a light two-beat kick. Its roll is
+    # taught as a full 180 degrees of hip turn; the studio's roll stops at 62.
+    'Ocean Walker': StrokeSettings(
+        rate=28, catch=85, roll=60, head=0, slip=10, width=30, depth=40, entry=5, drive=100, kick=25, beats=2, glide=85
+    ),
     'Long light': StrokeSettings(rate=44, catch=88, roll=44, slip=10, width=40, drive=70, kick=30, beats=2),
     'Compact connected': StrokeSettings(rate=52, catch=82, roll=40, slip=14, width=30, drive=68, kick=55, beats=4),
     'Short slipping': StrokeSettings(rate=56, catch=42, roll=34, slip=62, width=85, drive=35, kick=40, beats=6),
