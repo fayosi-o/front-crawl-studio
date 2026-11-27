@@ -1636,7 +1636,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const arch = Math.min(1, 0.5 * sink + 0.6 * lift + 0.9 * head.hi);
     // The Back arch slider adds to that. The arch swells as the hips turn through the middle of each roll
     // (twice a stroke) and eases to a new setting instead of snapping; paused, it jumps to the setting.
-    const set = P.arch ?? 0, archWant = 18 * D * arch + set * D * (1 + 0.18 * Math.cos(2 * w * (body - ROLL_PEAK)));
+    const set = P.arch ?? 0, archWant = 10 * D * arch + 0.5 * set * D * (1 + 0.18 * Math.cos(2 * w * (body - ROLL_PEAK)));
     S.arch = S.arch === undefined ? archWant : lerp(S.arch, archWant, scaled > 0 ? settle : 1);
     const pitchBase = -14 * D * sink - 8 * D * lift - 7 * D * head.hi + 6 * D * head.lo;
     const pitch = pitchBase - S.arch;
