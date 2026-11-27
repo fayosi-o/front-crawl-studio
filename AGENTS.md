@@ -84,6 +84,9 @@ split view on the Hand angle. A line from elbow to wrist shows the forearm again
 card: about 75° for the default pull, about 98° with a dropped elbow.
 The **Anchor** view (`ViewState.anchor`, `showAnchor` in `engine.js`, visual only) plants a pin in the water where each hand
 catches, drifting back at swim speed, with a line to the hand: short and teal when the hand holds, long and red when it slides.
+**Keep anchor pins** (`ViewState.anchor_keep`, `leavePin`/`showKept`) leaves each stroke's final pin in the water, coloured by its
+slide, for seven seconds (ten at most) so the body visibly swims past a line of anchors. Catch quality, Slip and Glide
+length are the controls for how early and firmly the hand sets.
 The **Cross-body link** view (`ViewState.chain`, `showChain` in `engine.js`, visual only) stretches a band from each
 shoulder to the opposite hip that loads with that arm's felt load; its colour follows drive and the faults that break
 the diagonal chain (Flat hips, **Same-side kick**, Crossover, Snaking, Early rotation). Same-side kick swaps the leg

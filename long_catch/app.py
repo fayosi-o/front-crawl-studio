@@ -562,6 +562,15 @@ class LongCatchPage:
                 'snaps as the hips turn. Teal when the arm, core and opposite kick work as one line; red when '
                 'the link breaks.'
             )
+            keep = ui.switch(
+                'Keep anchor pins',
+                value=self.view.anchor_keep,
+                on_change=lambda e: self.set_switch('anchor_keep', e.value),
+            )
+            keep.classes('lc-keep-toggle').tooltip(
+                "Leave each stroke's pin in the water, coloured by how far the hand slid, so you can watch the body "
+                'swim past a line of anchors and compare one stroke with the next.'
+            )
             focus = ui.switch(
                 'Catch focus', value=self.view.catch_focus, on_change=lambda e: self.set_switch('catch_focus', e.value)
             )

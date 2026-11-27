@@ -252,6 +252,8 @@ def test_pull_shape_keeps_the_hold_in_the_power_diamond():
     assert ViewState(chain=True).render_params()['chain'] is True
     assert ViewState(anchor=True).render_params()['anchor'] is True
     assert ViewState().render_params()['anchor'] is False
+    assert ViewState(anchor_keep=True).render_params()['anchorKeep'] is True
+    assert ViewState().render_params()['anchorKeep'] is False
     assert ViewState(catch_focus=True).render_params()['catchFocus'] is True
     assert ViewState().render_params()['catchFocus'] is False
 

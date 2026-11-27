@@ -1774,15 +1774,48 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     S.el.scene.add(pin, line);
     return {pin, line, at: new THREE.Vector3(), tip: new THREE.Vector3(), planted: false};
   }
+  const KEEP_PINS = 10, KEEP_SECONDS = 7;
+  function leavePin(an) {
+    S.kept = S.kept || {pins: [], meshes: []};
+    const k = S.kept;
+    if (!k.meshes.length) for (let i = 0; i < KEEP_PINS; i++) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), new THREE.MeshBasicMaterial({transparent: true}));
+      mesh.frustumCulled = false; mesh.renderOrder = 6; mesh.visible = false;
+      S.el.scene.add(mesh);
+      k.meshes.push(mesh);
+    }
+    k.pins.push({at: an.at.clone(), color: an.pin.material.color.clone(), age: 0});
+    while (k.pins.length > KEEP_PINS) k.pins.shift();
+  }
+  function showKept(P, dt) {
+    const k = S.kept;
+    if (!k) return;
+    if (!P.anchor || !P.anchorKeep) k.pins.length = 0;
+    for (const q of k.pins) { q.at.x -= (S.flow ?? P.speed) * dt; q.age += dt; }
+    while (k.pins.length && k.pins[0].age > KEEP_SECONDS) k.pins.shift();
+    k.meshes.forEach((mesh, i) => {
+      const q = k.pins[i];
+      mesh.visible = !!q;
+      if (!q) return;
+      mesh.position.copy(q.at);
+      mesh.material.color.copy(q.color);
+      mesh.material.opacity = 0.7 * (1 - q.age / KEEP_SECONDS) ** 1.2;
+    });
+  }
   function showAnchor(m, P, dt, right, left) {
     if (!THREE) return;
     S.anchors = S.anchors || {};
+    showKept(P, dt);
     for (const [s, a0] of [['R', right], ['L', left]]) {
       let an = S.anchors[s];
       if (!P.anchor && !an) continue;
       if (!an) an = S.anchors[s] = makeAnchor();
       const on = !!P.anchor && a0.under;
-      if (!on) { an.planted = false; an.pin.visible = an.line.visible = false; continue; }
+      if (!on) {
+        // Keep anchor pins: the pin stays behind in the water, frozen at its colour, and fades as it drifts away.
+        if (an.planted && P.anchor && P.anchorKeep) leavePin(an);
+        an.planted = false; an.pin.visible = an.line.visible = false; continue;
+      }
       m['wr' + s].localToWorld(an.tip.set(0.13, 0, 0));
       if (!an.planted && a0.load > 0.08) { an.at.copy(an.tip); an.planted = true; }
       if (!an.planted) continue;

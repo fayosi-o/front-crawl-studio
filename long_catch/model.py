@@ -873,11 +873,12 @@ class ViewState:
     flow: bool = False
     chain: bool = False
     anchor: bool = False
+    anchor_keep: bool = False  # leave each stroke's pin in the water as the body swims past
     catch_focus: bool = False
     drill: DrillName = 'off'
 
     def __post_init__(self) -> None:
-        for name in ('playing', 'split', 'pressure', 'flow', 'chain', 'anchor', 'catch_focus'):
+        for name in ('playing', 'split', 'pressure', 'flow', 'chain', 'anchor', 'anchor_keep', 'catch_focus'):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f'{name} must be true or false')
         if self.drill not in DRILLS:
@@ -952,6 +953,7 @@ class ViewState:
             'flow': self.flow,
             'chain': self.chain,
             'anchor': self.anchor,
+            'anchorKeep': self.anchor_keep,
             'catchFocus': self.catch_focus,
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
