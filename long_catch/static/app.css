@@ -386,6 +386,8 @@ html { scroll-padding-top: calc(var(--lc-header-height) + 12px); }
   .lc-race { flex-direction: column; height: auto; }
   .lc-race-stage { flex: none; height: 720px; }
   .lc-race .lc-panel { flex: none; width: 100%; height: auto; border-left: 0; }
+  /* The race page scrolls here; let a vertical swipe over a lane scroll it instead of being swallowed by the scene. */
+  .lc-race-lane, .lc-race-lane canvas { touch-action: pan-y !important; }
 }
 @media (max-width: 760px) {
   .lc-root { flex-direction: column; height: auto; }
