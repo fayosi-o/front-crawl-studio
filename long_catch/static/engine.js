@@ -1695,7 +1695,49 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     moveThroughWater(m, P, scaled, slipness, breath, previousX, resetMotion);
 
     showChain(m, P, F, right, left);
+    showAnchor(m, P, scaled, right, left);
     return [right, left, slipness];
+  }
+
+  // Anchor (visual only): a pin fixed in the water where each hand catches, and a line from it to the
+  // hand. The pin drifts back with the water, so a held hand stays on it while the body is pulled past;
+  // a slipping hand slides back off it and the line stretches (teal to red).
+  const ANCHOR_SLIP = 0.3;  // metres of slide at which the pin reads fully slipped
+  function makeAnchor() {
+    const pin = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), new THREE.MeshBasicMaterial({transparent: true}));
+    const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({transparent: true}));
+    for (const obj of [pin, line]) { obj.frustumCulled = false; obj.renderOrder = 6; obj.visible = false; }
+    S.el.scene.add(pin, line);
+    return {pin, line, at: new THREE.Vector3(), tip: new THREE.Vector3(), planted: false};
+  }
+  function showAnchor(m, P, dt, right, left) {
+    if (!THREE) return;
+    S.anchors = S.anchors || {};
+    for (const [s, a0] of [['R', right], ['L', left]]) {
+      let an = S.anchors[s];
+      if (!P.anchor && !an) continue;
+      if (!an) an = S.anchors[s] = makeAnchor();
+      const on = !!P.anchor && a0.under;
+      if (!on) { an.planted = false; an.pin.visible = an.line.visible = false; continue; }
+      m['wr' + s].localToWorld(an.tip.set(0.13, 0, 0));
+      if (!an.planted && a0.load > 0.08) { an.at.copy(an.tip); an.planted = true; }
+      if (!an.planted) continue;
+      if (dt > 0) an.at.x -= (S.flow ?? P.speed) * dt;
+      const slide = clamp((an.at.x - an.tip.x) / ANCHOR_SLIP, 0, 1);
+      const [r, g, b] = C.hold.map((v, i) => lerp(v, C.slip[i], slide));
+      an.pin.position.copy(an.at);
+      an.pin.material.color.setRGB(r, g, b);
+      an.line.material.color.setRGB(r, g, b);
+      an.pin.material.opacity = 0.95;
+      an.line.material.opacity = 0.8;
+      const pos = an.line.geometry.attributes.position;
+      pos.setXYZ(0, an.at.x, an.at.y, an.at.z);
+      pos.setXYZ(1, an.tip.x, an.tip.y, an.tip.z);
+      pos.needsUpdate = true;
+      an.pin.visible = an.line.visible = true;
+      an.slide = slide;
+    }
   }
 
   // Cross-body link (visual only): a band from each shoulder to the opposite hip that loads as that

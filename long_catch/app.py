@@ -562,6 +562,14 @@ class LongCatchPage:
                 'snaps as the hips turn. Teal when the arm, core and opposite kick work as one line; red when '
                 'the link breaks.'
             )
+            anchor = ui.switch(
+                'Anchor', value=self.view.anchor, on_change=lambda e: self.set_switch('anchor', e.value)
+            )
+            anchor.classes('lc-anchor-toggle').tooltip(
+                'A pin fixed in the water where each hand catches, with a line to the hand. A held catch keeps '
+                'the hand on the pin while the body is pulled past it (teal); a slipping hand slides back off '
+                'the pin and the line stretches (red).'
+            )
             flow = ui.switch('Water flow', value=self.view.flow, on_change=lambda e: self.set_switch('flow', e.value))
             flow.classes('lc-flow-toggle').tooltip(
                 'Watch the water at each hand: a hand that holds carries it back in teal; a slipping hand lets it '

@@ -872,10 +872,11 @@ class ViewState:
     pressure: bool = False
     flow: bool = False
     chain: bool = False
+    anchor: bool = False
     drill: DrillName = 'off'
 
     def __post_init__(self) -> None:
-        for name in ('playing', 'split', 'pressure', 'flow', 'chain'):
+        for name in ('playing', 'split', 'pressure', 'flow', 'chain', 'anchor'):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f'{name} must be true or false')
         if self.drill not in DRILLS:
@@ -949,6 +950,7 @@ class ViewState:
             'pressure': self.pressure,
             'flow': self.flow,
             'chain': self.chain,
+            'anchor': self.anchor,
             'speed': speed,  # metres per second, averaged over the cycle
             'momentum': m.momentum,
             # Share of each stroke spent coasting; the engine shapes the speed surge from it.
