@@ -67,7 +67,7 @@ cloud services or downloaded models.
   swimmer moves to it: the hand slows through the heaviest water and the
   recovery speeds up to keep the stroke rate. A slipping hand feels light.
 - **Inspection:** orbit and split cameras, hand/foot trails,
-  simulated **water pressure**, a **water flow** view of slipping, a **cross-body link** view (shoulder to opposite hip), slow playback and a six-phase timeline.
+  simulated **water pressure**, a **water flow** view of slipping, a **cross-body link** view (shoulder to opposite hip; a loose core twists the trunk and loses drive), slow playback and a six-phase timeline.
 - **Feedback:** live distance-per-stroke, stroke-count, pace, momentum-carry and
   effort estimates for rates from 22 to 72 spm. Hands turn teal when holding
   water and coral when slipping.

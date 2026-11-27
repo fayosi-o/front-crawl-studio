@@ -129,7 +129,12 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'toward floor',
     ),
     SliderSpec(
-        'drive', 'Drive balance', '%', 'How much the hips lead and connect the pull.', 'arm-driven', 'hip-connected'
+        'drive',
+        'Drive balance',
+        '%',
+        'How much the hips lead and connect the pull. Arm-driven pulls twist the trunk and lose drive.',
+        'arm-driven',
+        'hip-connected',
     ),
     SliderSpec(
         'kick',

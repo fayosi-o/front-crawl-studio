@@ -83,7 +83,9 @@ shoulder to the opposite hip that loads with that arm's felt load; its colour fo
 the diagonal chain (Flat hips, **Same-side kick**, Crossover, Snaking, Early rotation). Same-side kick swaps the leg
 timing so the downbeat lands with the same-side catch and drops the kick-driven roll (`kickTiming`).
 A pulse runs up each band from the opposite leg's downbeat (`m.kickPulse`, set in `poseLegs`) and fades when it
-reaches a hand that is out of the water. The flutter kick uses the same phase (`catchDelay + KICK_START`) as the two-beat.
+reaches a hand that is out of the water.
+The same link (`coreLink` in `engine.js`) drives the physics: a loose core leaks up to 35% of each pull's forward force into a
+trunk twist (`moveThroughWater`) and a chest-versus-hip counter-yaw (`poseSwimmer`). It is zero when fully connected. The flutter kick uses the same phase (`catchDelay + KICK_START`) as the two-beat.
 **Head position** (`head`, degrees from the spine line, 0 = eyes on the floor) is a slider, not a fault: inside
 `HEAD_BAND` (0–15°) it is free; lifted, `head_drag` costs up to `HEAD_HIGH_COST` (scaled with pace like Sinking legs),
 and tucked up to `HEAD_LOW_COST`. Fix first offers "Level the head". In `engine.js` (`headOff`) it tilts the head,

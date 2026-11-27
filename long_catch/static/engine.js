@@ -1477,6 +1477,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     }
     const s = m.motion;
     let forward = 0, sideways = 0, vertical = 0, torque = 0, tipping = 0, kickDrive = 0;
+    // A loose core: part of each pull twists the trunk toward the pulling arm instead of moving the body.
+    const leak = 1 - coreLink(P, S.faults);
     body.updateMatrixWorld(true);
     for (const p of m.probes) {
       const joint = m[p.joint];
@@ -1500,7 +1502,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
         const grip = p.hand ? m.grip[p.joint.slice(-1)] : 0.2 * P.kick;
         const load = -probeGain(p, P) * wet * grip * q * Math.abs(q);
         const fx = load * p.normal.x, fy = load * p.normal.y, fz = load * p.normal.z;
-        if (p.hand) forward += fx;
+        if (p.hand) {
+          forward += fx * (1 - 0.35 * leak);
+          torque -= 0.35 * leak * Math.abs(fx) * Math.sign(p.pos.y);
+        }
         else {
           const knee = m[p.joint === 'ankleR' ? 'kneeR' : 'kneeL'].rotation.y;
           // A small paddle approximation: submerged downbeats help, deeply bent knees waste them.
@@ -1646,7 +1651,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const pitch = pitchBase - S.arch;
     const legPitch = -24 * D * sink - 10 * D * lift - 16 * D * head.hi + 5 * D * head.lo - 0.3 * Math.max(0, set - 8) * D;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
-    const yaw = (F.snaking ? 7 : F.samesidekick ? 3 : 0) * D * Math.sin(w * (body - ROLL_PEAK)) + 0.8 * D * noise(st, 31);
+    // A loose core lets each pull bend the trunk: the chest turns toward the pulling arm, the hips the other way.
+    const leak = 1 - coreLink(P, F);
+    const yaw = ((F.snaking ? 7 : F.samesidekick ? 3 : 0) + 4 * leak) * D * Math.sin(w * (body - ROLL_PEAK))
+      + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
     m.pelvis.rotation.set(roll * hipShare * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
@@ -1694,14 +1702,17 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // hand catches, and a pulse that runs up it from the opposite leg's downbeat: kick, hips turn, the
   // catch takes the load. How well it connects follows the drive and the faults that break the chain.
   const chainScratch = [];
+  // How well the core joins the pull to the body (0–1): the drive and the faults that break the chain.
+  function coreLink(P, F) {
+    return clamp((0.35 + 0.65 * P.drive) * (F.flathips ? 0.35 : 1) * (F.samesidekick ? 0.35 : 1)
+      * (F.crossover ? 0.6 : 1) * (F.snaking ? 0.6 : 1) * (F.earlyroll ? 0.6 : 1) * (F.kneekick ? 0.6 : 1), 0, 1);
+  }
   function showChain(m, P, F, right, left) {
     for (const s of ['R', 'L']) m['chain' + s].visible = m['chainPulse' + s].visible = !!P.chain;
     if (!P.chain) return;
     if (!chainScratch.length) for (let i = 0; i < 3; i++) chainScratch.push(new THREE.Vector3());
     const [a, b, up] = chainScratch;
-    const link = (0.35 + 0.65 * P.drive) * (F.flathips ? 0.35 : 1) * (F.samesidekick ? 0.35 : 1)
-      * (F.crossover ? 0.6 : 1) * (F.snaking ? 0.6 : 1) * (F.earlyroll ? 0.6 : 1) * (F.kneekick ? 0.6 : 1);
-    const col = C.hold.map((v, i) => lerp(C.slip[i], v, clamp(link, 0, 1)));
+    const col = C.hold.map((v, i) => lerp(C.slip[i], v, coreLink(P, F)));
     for (const [s, other, a0] of [['R', 'L', right], ['L', 'R', left]]) {
       const band = m['chain' + s], pulse = m['chainPulse' + s];
       const load = clamp(a0.under ? a0.load : 0, 0, 1);
