@@ -47,6 +47,7 @@ from long_catch.model import (
     preset_for,
     pull_shape,
     rate_slip,
+    rhythm_durations,
     roll_drag,
     sink_scale,
     speed_drag,
@@ -745,3 +746,27 @@ def test_a_looser_core_costs_distance_and_reaches_the_engine():
     assert ViewState(settings=loose).render_params()['core'] == 0.0
     with pytest.raises(ValueError):
         StrokeSettings(core=101)
+
+
+def test_rhythm_swing_stretches_the_pattern_and_keeps_the_average_stroke_time():
+    assert rhythm_durations('even', 100) == (1.0,)
+    assert rhythm_durations('gallop', 0) == (1.0, 1.0)
+    for name in ('gallop', 'waltz'):
+        durations = rhythm_durations(name, 100)
+        assert math.isclose(sum(durations) / len(durations), 1.0)
+        assert durations[0] > 1.0 > durations[-1] > 0.0
+        assert rhythm_durations(name, 40)[0] < durations[0]  # a lower multiplier is less uneven
+    assert len(rhythm_durations('waltz', 50)) == 3
+
+
+def test_rhythm_reaches_the_engine_only_where_both_arms_alternate_and_never_changes_the_estimates():
+    assert ViewState().render_params()['rhythm'] == [1.0]
+    gallop = ViewState(rhythm='gallop')
+    assert len(gallop.render_params()['rhythm']) == 2
+    assert gallop.render_params()['rhythm'] == list(rhythm_durations('gallop', 50))
+    assert ViewState(rhythm='gallop', drill='catchup').render_params()['rhythm'] == [1.0]
+    assert gallop.metrics() == ViewState().metrics()
+    with pytest.raises(ValueError):
+        ViewState(rhythm='polka')
+    with pytest.raises(ValueError):
+        StrokeSettings(swing=101)

@@ -309,6 +309,46 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     return f >= HOLD ? (f - HOLD) / 2 : (f + 1 - HOLD) / 2;
   }
 
+  // ---- rhythm -----------------------------------------------------------------
+  // Visual only. P.rhythm is the relative time of each stroke in a repeating group (mean 1): [1.45, 0.55]
+  // is a gallop (long, short), [1.9, 0.55, 0.55] a waltz (long, short, short). The group is a smooth, monotone
+  // warp of the stroke clock, so the arms, roll and kick all speed up and slow down together; the
+  // warped clock is what the pose reads (S.rtotal in cycles, S.rphase its fraction). Catch-up and
+  // one-arm never get a rhythm (Python sends even strokes there).
+  function rhythmWarp(total, d) {
+    const n = d.length, sum = d.reduce((a, b) => a + b, 0);
+    const key = d.join(',');
+    if (S.rkey !== key) {
+      const keys = [];
+      for (let g = -1; g <= 1; g++) {
+        let at = g * n;
+        for (let i = 0; i < n; i++) { keys.push([at, g * n + i]); at += d[i] * n / sum; }
+      }
+      keys.push([2 * n, 2 * n]);
+      S.rkeys = keys; S.rkey = key;
+    }
+    const u = 2 * total, g = Math.floor(u / n);
+    return (g * n + flowing(u - g * n, S.rkeys)) / 2;
+  }
+  const rhythmOf = P => (P.rhythm && P.rhythm.length > 1 && P.rhythm.some(v => Math.abs(v - 1) > 1e-3) ? P.rhythm : null);
+  function applyRhythm(P) {
+    const total = S.cycles + S.phase, d = rhythmOf(P);
+    S.rtotal = d ? rhythmWarp(total, d) : total;
+    S.rphase = wrap(S.rtotal);
+  }
+  const clockNow = () => S.rphase ?? S.phase;
+  // Clock phase whose (rhythm-warped) timeline position is f: the timeline marker follows the warped clock.
+  function seekPhase(f, P) {
+    const base = wrap(clockFor(f, P)), d = rhythmOf(P);
+    if (!d) return base;
+    let best = base, gap = Infinity;
+    for (let i = 0; i < 360; i++) {
+      const p = i / 360, v = wrap(rhythmWarp(S.cycles + p, d)), e = Math.abs(v - f);
+      if (Math.min(e, 1 - e) < gap) { gap = Math.min(e, 1 - e); best = p; }
+    }
+    return best;
+  }
+
   // Fist drill: the hands close (thumbs tucked), so the palm loads little and the forearm does the catching.
   const FIST_GAIN = { wr: 0.25, el: 1.5 };
   // Hand paddles enlarge the palm, so the hand probe loads more water (not with the fist drill).
@@ -349,7 +389,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Returns -1..1: negative turns the face to the right (-y), positive to the left.
   function breathing(P, rightArm, leftArm) {
     // A loaded hand leaves the water a little later (see loadedTime); the breath waits for it.
-    const t = S.cycles + S.phase, exit = P.exit + loadDelay(P), every = P.breath || 3;
+    const t = S.rtotal ?? S.cycles + S.phase, exit = P.exit + loadDelay(P), every = P.breath || 3;
     const turnWindow = p => keyed(p, [[exit - 0.22, 0], [exit - 0.04, 1], [exit + 0.08, 1], [exit + 0.2, 0]]);
     const breathes = n => ((n % every) + every) % every === 0;  // n counts hand entries: right even, left odd
     const right = breathes(2 * Math.floor(t)) ? turnWindow(rightArm) : 0;
@@ -1448,7 +1488,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const colour = `rgb(${C.hold.map((v, i) => Math.round(255 * lerp(v, C.slip[i], slipness))).join(', ')})`;
     setLoad('rightLoad', '.lc-load-right .lc-load-fill', right.load, colour);
     setLoad('leftLoad', '.lc-load-left .lc-load-fill', left.load, colour);
-    const shown = drillArms(S.phase, S.params)[0];
+    const shown = drillArms(clockNow(), S.params)[0];
     setText('cycle', '.lc-cycle', Math.floor(shown * 100 + 1e-8) % 100 + '%');
     const marker = find('marker', '.lc-timeline-marker');
     const position = (shown * 100).toFixed(1) + '%';
@@ -1546,7 +1586,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Imbalance (a head held high, a hollow back, sinking legs) makes the body rock: the front lifts and
     // the hips drop with each pull, bobbing, and the tail fishtails a little. Zero when balanced.
     const imb = Math.max(head.hi, 0.6 * head.lo, Math.max(0, (P.arch ?? 0) - 8) / 22, legSink(P, S.faults) * 0.7);
-    const rock = imb * Math.sin(4 * Math.PI * S.phase), fishtail = imb * Math.sin(2 * Math.PI * S.phase);
+    const rock = imb * Math.sin(4 * Math.PI * clockNow()), fishtail = imb * Math.sin(2 * Math.PI * clockNow());
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
       s.load += (Math.max(0, forward) - s.load) * (1 - Math.exp(-h * P.rate / 240));
@@ -1632,7 +1672,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Body roll: positive = right shoulder down, deepest at the right catch. Connected drive lets the hips lead.
     // Flat hips moves the rotation into the shoulders; sinking legs pitches the chest up and the pelvis down.
     // Breathing deepens the roll a few degrees toward the breathing side; roll size also wanders slightly.
-    const [rightArm, rightHeld, leftArm, leftHeld] = drillArms(S.phase, P);
+    applyRhythm(P);
+    const [rightArm, rightHeld, leftArm, leftHeld] = drillArms(S.rphase, P);
     const F = S.faults, w = 2 * Math.PI, st = S.cycles + S.phase, breath = breathing(P, rightArm, leftArm);
     const chestGain = F.overrotation ? 1.65 : F.flathips ? 1.25 : 1;
     const roll = Math.min(80, P.roll * chestGain * (1 + 0.04 * noise(2 * st, 11))) * D;
@@ -1642,7 +1683,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Two-beat timing: the kick turns the hips first and the chest follows a moment later, then both
     // hold on the side. A six-beat kick leaves the steady, even rotation. Catch-up always holds on the
     // side, on its own timing (see bodyPhase).
-    const body = bodyPhase(S.phase, P), sharp = P.drill === 'catchup' ? 1 : kickTiming(P, F);
+    const body = bodyPhase(S.rphase, P), sharp = P.drill === 'catchup' ? 1 : kickTiming(P, F);
     const rollAt = p => lerp(Math.cos(w * (p - ROLL_PEAK)), kickRoll(p - P.catchDelay), sharp);
     // Early rotation: while an arm is still pushing, the body is already rolling to the next side, the
     // shoulders well ahead of the hips (twice the turn), so the torso twists. `early` is non-zero only
@@ -1726,7 +1767,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
   function catchFocusEnv(P) {
     if (!P.catchFocus || P.drill === 'catchup') return 0;
-    const [r, , l] = drillArms(S.phase, P);
+    const [r, , l] = drillArms(clockNow(), P);
     return Math.max(catchEnv(r, P), catchEnv(l, P));
   }
   const focusScratch = [];
@@ -1750,7 +1791,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       let f = S.focus[s];
       if (!P.catchFocus && !f) continue;
       if (!f) f = S.focus[s] = makeFocus();
-      const env = P.catchFocus && a0.under && P.drill !== 'catchup' ? catchEnv(s === 'R' ? drillArms(S.phase, P)[0] : drillArms(S.phase, P)[2], P) : 0;
+      const env = P.catchFocus && a0.under && P.drill !== 'catchup' ? catchEnv(s === 'R' ? drillArms(clockNow(), P)[0] : drillArms(clockNow(), P)[2], P) : 0;
       f.fore.visible = f.vert.visible = env > 0.02;
       f.angle = 0;
       if (env <= 0.02) continue;
@@ -1959,7 +2000,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const node = bar || find('timeline', '.lc-timeline');
       if (!node) return;
       const rect = node.getBoundingClientRect();
-      S.phase = wrap(clockFor(clamp((event.clientX - rect.left) / rect.width, 0, 0.999), S.params));
+      S.phase = seekPhase(clamp((event.clientX - rect.left) / rect.width, 0, 0.999), S.params);
       S.last = null;
       S.trailReset = true;
     };
@@ -1982,7 +2023,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (step) document.querySelector(root)?.querySelector(step)?.click();
       else {
         pause();
-        S.phase = clockFor(e.key === 'Home' ? 0 : 0.999, S.params);
+        S.phase = seekPhase(e.key === 'Home' ? 0 : 0.999, S.params);
         S.last = null; S.trailReset = true;
       }
     });

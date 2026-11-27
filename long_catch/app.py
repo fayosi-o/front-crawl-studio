@@ -20,6 +20,7 @@ from long_catch.model import (
     PRESETS,
     RACE_DISTANCES,
     RACE_PLAYBACK_SPEEDS,
+    RHYTHMS,
     SETTING_RANGES,
     TRAIL_SECONDS,
     Advice,
@@ -166,6 +167,15 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'braced',
     ),
     SliderSpec(
+        'swing',
+        'Rhythm swing',
+        '%',
+        'The rhythm multiplier: how uneven the chosen Rhythm is. 0 keeps every stroke equal; 100 makes the long '
+        'strokes about three times the short ones. Animation only, in the Full and Fist drills.',
+        'even',
+        'pronounced',
+    ),
+    SliderSpec(
         'kick',
         'Kick amplitude',
         '%',
@@ -238,6 +248,7 @@ FAULT_ICONS = {
 }
 assert set(FAULT_ICONS) == set(FAULTS)
 
+RHYTHM_LABELS = {name: r.label for name, r in RHYTHMS.items()}
 DRILL_LABELS = {'off': 'Full', 'catchup': 'Catch-up', 'single': 'One arm', 'fist': 'Fist'}
 assert set(DRILL_LABELS) == set(DRILLS)
 BRAND = 'Front-crawl stroke explorer'
@@ -679,6 +690,10 @@ class LongCatchPage:
             drill = ui.toggle(DRILL_LABELS, value=self.view.drill, on_change=lambda e: self.update(drill=e.value))
             drill.props('no-caps spread unelevated').classes('lc-segmented lc-drill-toggle')
             self.drill_hint = ui.label().classes('lc-drill-hint')
+            section_title('Rhythm')
+            rhythm = ui.toggle(RHYTHM_LABELS, value=self.view.rhythm, on_change=lambda e: self.update(rhythm=e.value))
+            rhythm.props('no-caps spread unelevated').classes('lc-segmented lc-rhythm-toggle')
+            self.rhythm_hint = ui.label().classes('lc-drill-hint')
 
     # ---- state ---------------------------------------------------------------------------------
 
@@ -806,6 +821,14 @@ class LongCatchPage:
         hint = DRILLS[drill].hint
         self.drill_hint.text = hint if drill == 'off' else f'{hint} Estimates stay on the full stroke.'
         self.brand.text = BRAND if drill == 'off' else f'{DRILLS[drill].label} drill'
+        rhythm = self.view.rhythm
+        note = ' Set the Rhythm swing slider for how uneven it is; estimates stay on even strokes.'
+        if drill not in ('off', 'fist'):
+            self.rhythm_hint.text = 'Rhythm follows in the Full and Fist drills; this drill keeps even strokes.'
+        else:
+            self.rhythm_hint.text = f'Count {RHYTHMS[rhythm].counts}. {RHYTHMS[rhythm].hint}' + (
+                '' if rhythm == 'even' else note
+            )
 
     def _render_view(self) -> None:
         """Show or hide the second camera; it is created on first use so a single view stays cheap."""

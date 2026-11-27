@@ -655,6 +655,46 @@ DRILLS: dict[DrillName, Drill] = {
 }
 
 
+RhythmName = Literal['even', 'gallop', 'waltz']
+
+# How far Rhythm swing at 100% stretches the longest stroke past an even one (1.45x) and squeezes
+# the shortest (0.55x). Illustrative, not measured.
+SWING_MAX = 0.45
+
+
+@dataclass(frozen=True, slots=True)
+class Rhythm:
+    """A repeating pattern of stroke lengths. Rhythms are visual only: the estimates stay on even strokes."""
+
+    label: str
+    counts: str  # how a coach would count it
+    hint: str
+    shape: tuple[float, ...]  # each stroke's stretch in the repeating group; sums to zero
+
+
+RHYTHMS: dict[RhythmName, Rhythm] = {
+    'even': Rhythm('Even', '1 1', 'Every stroke takes the same time.', (0.0,)),
+    'gallop': Rhythm(
+        'Gallop',
+        '1 2 1 2',
+        'Long, short, long, short: each right-left pair keeps its time but the second arm hurries after the first.',
+        (1.0, -1.0),
+    ),
+    'waltz': Rhythm(
+        'Waltz',
+        '1 2 3',
+        'One long stroke then two short ones, repeating every three strokes, so the long stroke swaps sides each time.',
+        (2.0, -1.0, -1.0),
+    ),
+}
+
+
+def rhythm_durations(rhythm: RhythmName, swing: int) -> tuple[float, ...]:
+    """Relative time of each stroke in the repeating group (mean 1): the pattern scaled by the Rhythm swing."""
+    amount = SWING_MAX * clamp(swing / 100, 0.0, 1.0)
+    return tuple(1.0 + amount * v for v in RHYTHMS[rhythm].shape)
+
+
 def fault_drag(faults: frozenset[str], settings: StrokeSettings | None = None, sink: float = 1.0) -> float:
     """Combined fractional distance loss from drag-type faults.
 
@@ -730,6 +770,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'entry': (0, 40),
     'drive': (0, 100),
     'core': (0, 100),
+    'swing': (0, 100),
     'kick': (0, 100),
     'beats': (2, 6),
     'glide': (0, 100),
@@ -756,6 +797,7 @@ class StrokeSettings:
     depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
     entry: int = 5
     drive: int = 85
+    swing: int = 50  # Rhythm swing: how uneven the chosen rhythm is (0 = even strokes); animation only
     core: int = 100  # how firmly the trunk transmits the pull: 0 = loose, twists and sags, 100 = braced
     kick: int = 45
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
@@ -883,6 +925,7 @@ class ViewState:
     anchor_keep: bool = False  # leave each stroke's pin in the water as the body swims past
     catch_focus: bool = False
     drill: DrillName = 'off'
+    rhythm: RhythmName = 'even'
 
     def __post_init__(self) -> None:
         for name in ('playing', 'split', 'pressure', 'flow', 'chain', 'anchor', 'anchor_keep', 'catch_focus'):
@@ -890,6 +933,8 @@ class ViewState:
                 raise ValueError(f'{name} must be true or false')
         if self.drill not in DRILLS:
             raise ValueError(f'unknown drill {self.drill!r}')
+        if self.rhythm not in RHYTHMS:
+            raise ValueError(f'unknown rhythm {self.rhythm!r}')
         if self.playback not in PLAYBACK_SPEEDS:
             raise ValueError(f'unsupported playback speed {self.playback!r}')
         if self.angle not in VIEW_ANGLES:
@@ -919,7 +964,9 @@ class ViewState:
         """Estimates for the settings with every active fault applied."""
         return estimate_metrics(self.settings, self.faults)
 
-    def render_params(self, metrics: Metrics | None = None) -> dict[str, int | float | str | bool | list[str]]:
+    def render_params(
+        self, metrics: Metrics | None = None
+    ) -> dict[str, int | float | str | bool | list[str] | list[float]]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
         s = self.settings
         m = metrics if metrics is not None else self.metrics()
@@ -939,6 +986,8 @@ class ViewState:
             'breath': s.breath,
             'drill': self.drill,
             'cycleScale': DRILLS[self.drill].cycle_scale,
+            # Only drills where both arms keep alternating follow a rhythm; catch-up and one-arm stay even.
+            'rhythm': list(rhythm_durations(self.rhythm if self.drill in ('off', 'fist') else 'even', s.swing)),
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,
