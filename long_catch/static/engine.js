@@ -1525,6 +1525,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const head = headOff(P);
     const dragShape = 1 + 2 * P.hipDrop + 0.35 * legSink(P, S.faults) + 0.6 * head.hi + 0.25 * head.lo + 0.4 * Math.max(0, (P.arch ?? 0) - 8) / 22
       + (S.faults.headlift ? 0.5 * Math.abs(breath) : 0) + 2 * Math.abs(s.pitch) + 0.12 * legDrag;
+    // Imbalance (a head held high, a hollow back, sinking legs) makes the body rock: the front lifts and
+    // the hips drop with each pull, bobbing, and the tail fishtails a little. Zero when balanced.
+    const imb = Math.max(head.hi, 0.6 * head.lo, Math.max(0, (P.arch ?? 0) - 8) / 22, legSink(P, S.faults) * 0.7);
+    const rock = imb * Math.sin(4 * Math.PI * S.phase), fishtail = imb * Math.sin(2 * Math.PI * S.phase);
     const steps = Math.ceil(dt * 120), h = steps ? dt / steps : 0;
     for (let i = 0; i < steps; i++) {
       s.load += (Math.max(0, forward) - s.load) * (1 - Math.exp(-h * P.rate / 240));
@@ -1533,14 +1537,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       s.speed = clamp(s.speed + (0.6 * (forward + kickThrust) - drag * s.speed ** 2) * h,
         0.15 * P.speed, 1.7 * P.speed);
       s.surge += (s.speed - P.speed - 1.3 * s.surge) * h;
-      s.turn += (2.4 * torque - 5 * s.turn) * h;
+      s.turn += (2.4 * (torque + 0.12 * fishtail) - 5 * s.turn) * h;
       s.yaw += s.turn * h;
       s.drift += (0.8 * sideways + s.speed * Math.sin(4 * D * Math.tanh(s.yaw / (4 * D)))
         - 4 * s.drift) * h;
       s.sway += s.drift * h;
-      s.rise += (0.12 * vertical + 22 * (0.006 * Math.abs(breath) - s.height) - 7 * s.rise) * h;
+      s.rise += (0.12 * vertical + 22 * (0.006 * Math.abs(breath) + 0.009 * rock - s.height) - 7 * s.rise) * h;
       s.height += s.rise * h;
-      s.pitchRate += (0.14 * tipping - 18 * (s.pitch + 0.7 * D * Math.abs(breath)) - 6 * s.pitchRate) * h;
+      s.pitchRate += (0.14 * tipping - 18 * (s.pitch + 0.7 * D * Math.abs(breath) + 4 * D * rock) - 6 * s.pitchRate) * h;
       s.pitch += s.pitchRate * h;
     }
     // A follow-frame window bounds the illustration, not a spring pulling him to lane centre.
