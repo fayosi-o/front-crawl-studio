@@ -337,6 +337,15 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     S.rphase = wrap(S.rtotal);
   }
   const clockNow = () => S.rphase ?? S.phase;
+  // An arm's catch, pull and push all happen in the stroke it enters on, so that stroke's rhythm sets its
+  // hold: a short stroke hurries the catch (slips more, shorter path), a long one holds and reaches further.
+  // Python sends each stroke's catch, slip, path length, exit and felt load in P.rhythmStrokes (empty when even).
+  function strokeParams(P, side) {
+    const list = P.rhythmStrokes;
+    if (!list || !list.length || S.rtotal === undefined) return P;
+    const entry = side === 'R' ? 2 * Math.floor(S.rtotal) : 2 * Math.floor(S.rtotal - 0.5) + 1;
+    return {...P, ...list[((entry % list.length) + list.length) % list.length]};
+  }
   // Clock phase whose (rhythm-warped) timeline position is f: the timeline marker follows the warped clock.
   function seekPhase(f, P) {
     const base = wrap(clockFor(f, P)), d = rhythmOf(P);
@@ -1732,9 +1741,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     showGaze(m, head);
 
     // Both arms keep the same timing; only the lopsided right arm's shape and grip change.
-    const PR = F.lopsided ? lopsided(P) : P;
-    const right = arm(underwater(strokePhase(rightArm, P), P), PR, F);
-    const left = arm(underwater(strokePhase(leftArm, P), P), P, F);
+    const PRs = strokeParams(P, 'R'), PL = strokeParams(P, 'L'), PR = F.lopsided ? lopsided(PRs) : PRs;
+    const right = arm(underwater(strokePhase(rightArm, PRs), PRs), PR, F);
+    const left = arm(underwater(strokePhase(leftArm, PL), PL), PL, F);
     m.pace = {R: right.pace, L: left.pace};
     right.held = rightHeld;
     left.held = leftHeld;
@@ -1743,11 +1752,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     vary(left, st + 0.5, 5);
     shapeHands(m, P);
     showPaddles(m, P);
-    const slipness = slipShare(P), slipR = slipShare(PR);
+    const slipness = slipShare(PL), slipR = slipShare(PR);
     m.slip = {R: slipR, L: slipness};
-    m.grip = {R: gripOf(PR, slipR), L: gripOf(P, slipness)};
+    m.grip = {R: gripOf(PR, slipR), L: gripOf(PL, slipness)};
     poseArm(m, 'R', right, PR, slipR, bodyRoll, pitch);
-    poseArm(m, 'L', left, P, slipness, bodyRoll, pitch);
+    poseArm(m, 'L', left, PL, slipness, bodyRoll, pitch);
     poseLegs(m, P, F, st, body);
     moveThroughWater(m, P, scaled, slipness, breath, previousX, resetMotion);
 

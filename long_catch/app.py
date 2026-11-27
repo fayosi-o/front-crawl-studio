@@ -170,8 +170,9 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'swing',
         'Rhythm swing',
         '%',
-        'The rhythm multiplier: how uneven the chosen Rhythm is. 0 keeps every stroke equal; 100 makes the long '
-        'strokes about three times the short ones. Animation only, in the Full and Fist drills.',
+        'The rhythm multiplier: how uneven the chosen Rhythm (in Drills) is. 0 keeps every stroke equal; 100 makes '
+        'the long strokes about three times the short ones. Short strokes hurry the catch and slip, long ones '
+        'glide and lose momentum, so an uneven rhythm costs pace. Full and Fist drills only.',
         'even',
         'pronounced',
     ),
@@ -215,7 +216,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
 # Import-time checks that the UI tables stay in step with the model.
 assert {spec.key for spec in SLIDERS} == set(SETTING_RANGES)
 SLIDER_SPECS = {spec.key: spec for spec in SLIDERS}
-MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive', 'core')
+MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive', 'core', 'swing')
 
 ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below', 'hand': 'Hand'}
 TRAIL_LABELS = {'off': 'Off', 'hands': 'Hands', 'feet': 'Feet', 'both': 'Both'}
@@ -822,7 +823,7 @@ class LongCatchPage:
         self.drill_hint.text = hint if drill == 'off' else f'{hint} Estimates stay on the full stroke.'
         self.brand.text = BRAND if drill == 'off' else f'{DRILLS[drill].label} drill'
         rhythm = self.view.rhythm
-        note = ' Set the Rhythm swing slider for how uneven it is; estimates stay on even strokes.'
+        note = ' Rhythm swing sets how uneven it is: short strokes slip more, long ones lose momentum, and pace slows.'
         if drill not in ('off', 'fist'):
             self.rhythm_hint.text = 'Rhythm follows in the Full and Fist drills; this drill keeps even strokes.'
         else:

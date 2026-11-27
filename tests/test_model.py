@@ -759,14 +759,42 @@ def test_rhythm_swing_stretches_the_pattern_and_keeps_the_average_stroke_time():
     assert len(rhythm_durations('waltz', 50)) == 3
 
 
-def test_rhythm_reaches_the_engine_only_where_both_arms_alternate_and_never_changes_the_estimates():
+def test_rhythm_reaches_the_engine_only_where_both_arms_alternate():
     assert ViewState().render_params()['rhythm'] == [1.0]
+    assert ViewState().render_params()['rhythmStrokes'] == []
     gallop = ViewState(rhythm='gallop')
-    assert len(gallop.render_params()['rhythm']) == 2
     assert gallop.render_params()['rhythm'] == list(rhythm_durations('gallop', 50))
-    assert ViewState(rhythm='gallop', drill='catchup').render_params()['rhythm'] == [1.0]
-    assert gallop.metrics() == ViewState().metrics()
+    strokes = gallop.render_params()['rhythmStrokes']
+    assert len(strokes) == 2
+    long_stroke, short_stroke = strokes  # a long stroke has a longer path; a short one hurries the catch
+    assert long_stroke['length'] > short_stroke['length']
+    assert long_stroke['slip'] <= short_stroke['slip']
+    catchup = ViewState(rhythm='gallop', drill='catchup').render_params()
+    assert catchup['rhythm'] == [1.0] and catchup['rhythmStrokes'] == []
     with pytest.raises(ValueError):
         ViewState(rhythm='polka')
     with pytest.raises(ValueError):
         StrokeSettings(swing=101)
+
+
+def test_an_uneven_rhythm_slows_the_pace_more_the_more_uneven_it_is():
+    even = ViewState().metrics()
+    assert ViewState(rhythm='even').metrics() == even
+    assert ViewState(settings=StrokeSettings(swing=0), rhythm='gallop').metrics() == even
+    previous = even
+    for swing in (25, 50, 100):
+        metrics = ViewState(settings=StrokeSettings(swing=swing), rhythm='gallop').metrics()
+        assert metrics.seconds_per_25 > previous.seconds_per_25
+        previous = metrics
+    waltz = ViewState(settings=StrokeSettings(swing=100), rhythm='waltz').metrics()
+    assert waltz.seconds_per_25 > previous.seconds_per_25
+    # Drills that do not alternate arms stay on even strokes.
+    assert ViewState(rhythm='waltz', drill='single').metrics() == even
+
+
+def test_no_rhythm_beats_even_strokes_for_any_preset():
+    for settings in PRESETS.values():
+        even = ViewState(settings=settings).metrics().seconds_per_25
+        for rhythm in ('gallop', 'waltz'):
+            uneven = ViewState(settings=settings.with_values(swing=100), rhythm=rhythm).metrics().seconds_per_25
+            assert uneven >= even - 1e-9

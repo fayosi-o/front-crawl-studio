@@ -662,9 +662,15 @@ RhythmName = Literal['even', 'gallop', 'waltz']
 SWING_MAX = 0.45
 
 
+# What an uneven rhythm costs beyond the local effects below: the share of each stroke's distance lost per
+# unit of squared spread in stroke times (their variance, mean 1). A surging, uneven pace wastes energy
+# against drag that grows with speed squared. Illustrative, not measured.
+RHYTHM_COST = 0.3
+
+
 @dataclass(frozen=True, slots=True)
 class Rhythm:
-    """A repeating pattern of stroke lengths. Rhythms are visual only: the estimates stay on even strokes."""
+    """A repeating pattern of stroke lengths. Each stroke is judged at its own local rate (see ``estimate_metrics``)."""
 
     label: str
     counts: str  # how a coach would count it
@@ -797,7 +803,7 @@ class StrokeSettings:
     depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
     entry: int = 5
     drive: int = 85
-    swing: int = 50  # Rhythm swing: how uneven the chosen rhythm is (0 = even strokes); animation only
+    swing: int = 50  # Rhythm swing: how uneven the chosen rhythm is (0 = even strokes)
     core: int = 100  # how firmly the trunk transmits the pull: 0 = loose, twists and sags, 100 = braced
     kick: int = 45
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
@@ -875,7 +881,25 @@ def _sprint_power() -> float:
     return _stroke(EFFORT_SPRINT, frozenset())[3]
 
 
-def estimate_metrics(settings: StrokeSettings, faults: frozenset[str] = frozenset()) -> Metrics:
+def at_rate(settings: StrokeSettings, rate: float) -> StrokeSettings:
+    """A copy of ``settings`` at a local stroke rate that may sit outside the slider's range.
+
+    An uneven rhythm gives a long stroke a rate below the slider's floor and a short one a rate above its
+    ceiling; the stroke curves handle both, so the range check is skipped for this internal copy.
+    """
+    local = replace(settings)
+    object.__setattr__(local, 'rate', rate)
+    return local
+
+
+def is_uneven(rhythm: tuple[float, ...]) -> bool:
+    """True when the stroke times in the repeating group are not all equal."""
+    return any(abs(d - 1.0) > 1e-9 for d in rhythm)
+
+
+def estimate_metrics(
+    settings: StrokeSettings, faults: frozenset[str] = frozenset(), rhythm: tuple[float, ...] = (1.0,)
+) -> Metrics:
     """Estimate a stroke's efficiency and effort from its settings and active faults.
 
     - Hold: catch and slip, after faults and the extra slip of a quick turnover, kept or lost by
@@ -889,8 +913,20 @@ def estimate_metrics(settings: StrokeSettings, faults: frozenset[str] = frozense
     - Drag: faults, roll or head outside its band, still legs and a big kick each cost a fraction; a kick
       adds a little thrust; an early exit loses part of each push. Height scales the stroke.
     - Effort: the work rate against an all-out sprint (``EFFORT_SPRINT``), capped at 1.
+    - Rhythm: with uneven stroke times each stroke is worked out at its own local rate (the average rate
+      is unchanged). A short stroke hurries the catch, slips more and has little glide; a long one has a
+      longer path and glides further but loses momentum. The distance is the average over the group, never
+      better than even strokes, less ``RHYTHM_COST`` times the spread in stroke times.
     """
     hold, distance_per_stroke, momentum, power = _stroke(settings, faults)
+    if is_uneven(rhythm):
+        rows = [_stroke(at_rate(settings, settings.rate / d), faults) for d in rhythm]
+        total = sum(rhythm)
+        mean = lambda i: sum(d * r[i] for d, r in zip(rhythm, rows, strict=True)) / total  # noqa: E731
+        spread = sum((d - 1.0) ** 2 for d in rhythm) / len(rhythm)
+        per_stroke = min(sum(r[1] for r in rows) / len(rows), distance_per_stroke) * (1.0 - RHYTHM_COST * spread)
+        hold, momentum, power = mean(0), mean(2), mean(3)
+        distance_per_stroke = clamp(per_stroke, 0.40, 2.60)
     strokes_per_25 = 25.0 / distance_per_stroke
     return Metrics(
         hold_quality=hold,
@@ -962,11 +998,37 @@ class ViewState:
 
     def metrics(self) -> Metrics:
         """Estimates for the settings with every active fault applied."""
-        return estimate_metrics(self.settings, self.faults)
+        return estimate_metrics(self.settings, self.faults, self.rhythm_times())
+
+    def rhythm_times(self) -> tuple[float, ...]:
+        """Relative stroke times of the rhythm in use: only drills where both arms keep alternating follow one."""
+        return rhythm_durations(self.rhythm if self.drill in ('off', 'fist') else 'even', self.settings.swing)
+
+    def stroke_params(self) -> list[dict[str, float]]:
+        """Each stroke of an uneven rhythm's catch, slip, path and load at its own local rate (empty if even)."""
+        times = self.rhythm_times()
+        if not is_uneven(times):
+            return []
+        s, strokes = self.settings, []
+        for d in times:
+            local = at_rate(s, s.rate / d)
+            catch, slip = effective_hold(local, self.faults)
+            hold = _stroke(local, self.faults)[0]
+            length = path_length(local.rate)
+            strokes.append(
+                {
+                    'catch': catch,
+                    'slip': slip,
+                    'length': length,
+                    'exit': exit_phase(length, 'earlyexit' in self.faults),
+                    'feel': felt_load(hold, s.drive / 100, hand_area(self.faults)),
+                }
+            )
+        return strokes
 
     def render_params(
         self, metrics: Metrics | None = None
-    ) -> dict[str, int | float | str | bool | list[str] | list[float]]:
+    ) -> dict[str, int | float | str | bool | list[str] | list[float] | list[dict[str, float]]]:
         """Parameters for the browser animation loop (fractions, not percentages)."""
         s = self.settings
         m = metrics if metrics is not None else self.metrics()
@@ -987,7 +1049,8 @@ class ViewState:
             'drill': self.drill,
             'cycleScale': DRILLS[self.drill].cycle_scale,
             # Only drills where both arms keep alternating follow a rhythm; catch-up and one-arm stay even.
-            'rhythm': list(rhythm_durations(self.rhythm if self.drill in ('off', 'fist') else 'even', s.swing)),
+            'rhythm': list(self.rhythm_times()),
+            'rhythmStrokes': self.stroke_params(),
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,

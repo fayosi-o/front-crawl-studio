@@ -92,12 +92,17 @@ about 70 cm for Short slipping).
 **Keep anchor pins** (`ViewState.anchor_keep`, `leavePin`/`showKept`) leaves each stroke's final pin in the water, coloured by its
 slide, for seven seconds (ten at most) so the body visibly swims past a line of anchors. Catch quality, Slip and Glide
 length are the controls for how early and firmly the hand sets.
-**Rhythm** (`ViewState.rhythm`, `RHYTHMS`, plus the **Rhythm swing** slider `StrokeSettings.swing`; visual only) gives the strokes an
-uneven timing: Even (1 1), Gallop (1 2 1 2, long then short) or Waltz (1 2 3, one long and two short, repeating every three strokes so
-the long stroke changes sides). `rhythm_durations` turns the pattern and swing into relative stroke times (mean 1; at 100% the longest is
-1.45x, or 1.9x for the waltz, and the shortest 0.55x: illustrative values, not measured). The engine (`rhythmWarp`, `applyRhythm`) warps the
-stroke clock smoothly and monotonically through those times, so arms, roll, kick and breathing all follow; the timeline marker and seeking
-use the warped clock. Only the Full and Fist drills follow it, and the estimates stay on even strokes.
+**Rhythm** (`ViewState.rhythm`, `RHYTHMS`, plus the **Rhythm swing** slider `StrokeSettings.swing`) gives the strokes an uneven timing:
+Even (1 1), Gallop (1 2 1 2, long then short) or Waltz (1 2 3, one long and two short, repeating every three strokes so the long stroke
+changes sides). `rhythm_durations` turns the pattern and swing into relative stroke times (mean 1; at 100% the longest is 1.45x, or 1.9x
+for the waltz, and the shortest 0.55x). It reaches three places, and only in the Full and Fist drills (`ViewState.rhythm_times`):
+- Estimates (`estimate_metrics(..., rhythm)`): each stroke is worked out at its own local rate (`at_rate`, rate / time, outside the slider
+  range if need be), so a short stroke hurries the catch and slips more and a long one has a longer path but loses momentum. The distance is
+  the group average, never better than even strokes, less `RHYTHM_COST` times the spread of the stroke times. Illustrative, not measured.
+- Animation: the engine (`rhythmWarp`, `applyRhythm`) warps the stroke clock smoothly and monotonically, so arms, roll, kick and breathing
+  follow, and the timeline marker and seeking use the warped clock. Each arm also takes the catch, slip, path length, exit and load of the
+  stroke it enters on (`strokeParams`, from `P.rhythmStrokes`).
+- Motion: the hands' changing speed through the water drives the same physics, so the body's surge and mean speed follow the rhythm.
 **Core connection** (`StrokeSettings.core`, 0–100, default 100 so existing strokes are unchanged) is how firmly the trunk carries the
 pull. In the estimates it scales the hold with Drive balance (`_stroke`); in the engine `coreLink` combines it with Drive balance and
 the chain faults, and a loose core twists the chest, leaks part of each pull into torque instead of surge (`moveThroughWater`) and
