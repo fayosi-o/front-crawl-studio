@@ -1631,7 +1631,10 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     // Head position: a lifted head tips the chest up and lets the hips and legs sink; a buried head
     // (chin tucked) drives the chest down and the hips up.
     const lift = F.headlift ? Math.abs(breath) : 0, sink = sinkAtPace(P, F), head = headOff(P);
-    const pitch = -14 * D * sink - 8 * D * lift - 7 * D * head.hi + 6 * D * head.lo;
+    // The chest comes up out of the hips: the pelvis stays the pivot and the back arches, so the upper
+    // chest lifts a little more than the lower and the waist bends instead of the body tilting as one.
+    const arch = Math.min(1, 0.5 * sink + 0.6 * lift + 0.9 * head.hi);
+    const pitch = -14 * D * sink - 8 * D * lift - 7 * D * head.hi + 6 * D * head.lo - 9 * D * arch;
     const legPitch = -24 * D * sink - 10 * D * lift - 16 * D * head.hi + 5 * D * head.lo;
     // Snaking: the chest yaws with each sweep and the hips swing the other way behind it.
     const yaw = (F.snaking ? 7 : F.samesidekick ? 3 : 0) * D * Math.sin(w * (body - ROLL_PEAK)) + 0.8 * D * noise(st, 31);
@@ -1639,11 +1642,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     m.pelvis.rotation.set(roll * hipShare * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
-    m.pelvis.position.x = -0.36 * Math.cos(pitch);
+    m.pelvis.position.x = -0.36 * Math.cos(pitch + 9 * D * arch);
     // Keep only small pose variation here; the common body parent carries buoyancy and pull lift.
     const heave = 0.003 * noise(1.5 * st, 21);
     m.chest.position.z = heave + S.ride.height - 0.025 * head.lo;
-    m.pelvis.position.z = 0.36 * Math.sin(pitch) - 0.05 * sink - 0.05 * head.hi + 0.015 * head.lo
+    m.pelvis.position.z = 0.36 * Math.sin(pitch + 9 * D * arch) - 0.05 * sink - 0.05 * head.hi + 0.015 * head.lo
       + 0.6 * heave + S.ride.height - S.ride.hips;
     // The head stays steady while the body rolls beneath it (the neck takes up half the roll),
     // then turns with the roll to breathe, one goggle staying in the water. A head lifter turns
