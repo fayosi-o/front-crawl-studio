@@ -74,6 +74,16 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'Peak rotation of the chest about the long axis. About 35–55° costs nothing; flatter or further adds drag.',
     ),
     SliderSpec(
+        'hips',
+        'Hip turn',
+        '°',
+        'Extra hip rotation on top of the body roll, so the hips turn further than the chest. The Ocean Walker '
+        'stroke powers itself this way, with the shoulders relaxed. A look at the animation only: it does '
+        'not change the estimates.',
+        'with the chest',
+        'hips lead',
+    ),
+    SliderSpec(
         'head',
         'Head position',
         '°',

@@ -369,6 +369,16 @@ def test_matching_preset_identifies_unchanged_presets_only():
     assert metrics['Long power'] > metrics['Compact connected'] > metrics['Short slipping']
 
 
+def test_hip_turn_reaches_the_engine_without_changing_the_estimates():
+    base = StrokeSettings()
+    assert base.hips == 0 and ViewState(settings=base).render_params()['hips'] == 0
+    turned = base.with_values(hips=45)
+    assert ViewState(settings=turned).render_params()['hips'] == 45
+    assert turned.metrics() == base.metrics()
+    with pytest.raises(ValueError):
+        base.with_values(hips=51)
+
+
 def test_kick_control_is_normalized_for_the_engine():
     assert ViewState(settings=StrokeSettings(kick=0)).render_params()['kick'] == 0
     assert ViewState(settings=StrokeSettings(kick=100)).render_params()['kick'] == 1

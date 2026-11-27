@@ -1667,7 +1667,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const yaw = ((F.snaking ? 7 : F.samesidekick ? 3 : 0) + 4 * leak) * D * Math.sin(w * (body - ROLL_PEAK))
       + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
-    m.pelvis.rotation.set(roll * hipShare * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
+    // Hip turn: extra degrees on the pelvis alone, so the hips lead a relaxed chest (flat hips lose it).
+    const hipPeak = Math.min(85 * D, roll * hipShare + (P.hips ?? 0) * D * (F.flathips ? 0.1 : 1));
+    m.pelvis.rotation.set(hipPeak * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.
     m.pelvis.position.x = -0.36 * Math.cos(pitch);
