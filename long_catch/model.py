@@ -1003,6 +1003,10 @@ PRESETS: dict[str, StrokeSettings] = {
         glide=90,
     ),
     'Long power': StrokeSettings(rate=42, catch=92, roll=46, slip=8, width=35, drive=85, kick=45, beats=2),
+    # A real 1,700 m lunch swim (25 Nov): 22 strokes a minute, 12.8 strokes and about 2:19 per 100 m
+    # over 25 m lengths, with a two-beat kick. Rate, beats, catch and slip are fitted to those numbers;
+    # the other values are reasonable guesses.
+    'Lunch swim': StrokeSettings(rate=22, catch=72, roll=45, slip=10, head=5, drive=85, kick=25, beats=2, glide=40),
     'Long light': StrokeSettings(rate=44, catch=88, roll=44, slip=10, width=40, drive=70, kick=30, beats=2),
     'Compact connected': StrokeSettings(rate=52, catch=82, roll=40, slip=14, width=30, drive=68, kick=55, beats=4),
     'Short slipping': StrokeSettings(rate=56, catch=42, roll=34, slip=62, width=85, drive=35, kick=40, beats=6),
