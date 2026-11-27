@@ -78,6 +78,10 @@ the share that holds rides back with the hand (teal) and the slipping share spil
 per-arm slip as the hand colour plus the palm's sideways sweep.
 Turning it on also opens the split view on the **Hand** angle (`VIEWS.hand`), a close-up that follows the deeper wrist;
 with Water flow on it holds a steady frame on the pulling side's stroke instead of chasing the hand.
+The **Catch focus** view (`ViewState.catch_focus`, `catchFocusEnv`/`showFocus` in `engine.js`, visual only) slows the stroke
+clock to a fifth through each hand's catch and early pull (eased at both edges), zooms the second camera in and opens the
+split view on the Hand angle. A line from elbow to wrist shows the forearm against vertical, with the angle in the arm
+card: about 75° for the default pull, about 98° with a dropped elbow.
 The **Anchor** view (`ViewState.anchor`, `showAnchor` in `engine.js`, visual only) plants a pin in the water where each hand
 catches, drifting back at swim speed, with a line to the hand: short and teal when the hand holds, long and red when it slides.
 The **Cross-body link** view (`ViewState.chain`, `showChain` in `engine.js`, visual only) stretches a band from each

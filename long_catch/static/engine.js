@@ -1210,7 +1210,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!w || !h) return;
     if (el.camera_tween) { el.camera_tween.stop(); el.camera_tween = null; }
     const t = Math.tan(cam.fov * D / 2);
-    const half = spec.follow && S.params && S.params.flow ? [0.6, 0.4] : spec.half;  // flow: the whole stroke in frame
+    const zoom = 1 - CATCH_ZOOM * (S.params && S.params.catchFocus ? S.catchEnv || 0 : 0);
+    const half0 = spec.follow && S.params && S.params.flow ? [0.6, 0.4] : spec.half;  // flow: the whole stroke in frame
+    const half = [half0[0] * zoom, half0[1] * zoom];
     const dist = Math.max(spec.min || 0, 1.15 * half[1] / t, 1.15 * half[0] / (t * w / h));
     v.dir.set(...spec.dir).normalize();
     cam.up.set(...spec.up);
@@ -1434,8 +1436,9 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   function updateHud(right, left, slipness) {
-    setText('right', '.lc-arm-right', right.held ? 'Holding' : PHASES[right.stage]);
-    setText('left', '.lc-arm-left', left.held ? 'Holding' : PHASES[left.stage]);
+    const tag = s => (S.params.catchFocus && S.focus?.[s]?.fore.visible ? ` ${Math.round(S.focus[s].angle)}°` : '');
+    setText('right', '.lc-arm-right', right.held ? 'Holding' : PHASES[right.stage] + tag('R'));
+    setText('left', '.lc-arm-left', left.held ? 'Holding' : PHASES[left.stage] + tag('L'));
     const colour = `rgb(${C.hold.map((v, i) => Math.round(255 * lerp(v, C.slip[i], slipness))).join(', ')})`;
     setLoad('rightLoad', '.lc-load-right .lc-load-fill', right.load, colour);
     setLoad('leftLoad', '.lc-load-left .lc-load-fill', left.load, colour);
@@ -1462,7 +1465,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const dt = S.last === null ? 0 : Math.min(0.1, (t - S.last) / 1000);
     S.last = t;
     const P = S.params;
-    const scaled = P.playing && !S.seekPausePending ? dt * (P.playback || 1) : 0;
+    // Catch focus eases the clock down to a fifth of its speed through each catch; the ease keeps the
+    // slow-down and the zoom from snapping at the window's edges.
+    const target = catchFocusEnv(P);
+    S.catchEnv = lerp(S.catchEnv ?? 0, target, 1 - Math.exp(-12 * dt));
+    const scaled = P.playing && !S.seekPausePending ? dt * (P.playback || 1) * (1 - CATCH_SLOW * S.catchEnv) : 0;
     advance(scaled);
   }
 
@@ -1696,7 +1703,63 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
 
     showChain(m, P, F, right, left);
     showAnchor(m, P, scaled, right, left);
+    showFocus(m, P, right, left);
     return [right, left, slipness];
+  }
+
+  // Catch focus (visual only): the catch is a tenth of the cycle, so this slows the clock through each
+  // hand's catch and early pull, zooms the second camera in and draws the forearm against vertical.
+  // catchEnv is 0 outside the window and 1 inside it, with eased edges, for the arm at clock phase p.
+  const CATCH_EDGE = 0.04, CATCH_SLOW = 0.8, CATCH_ZOOM = 0.4;
+  function catchEnv(p, P) {
+    const path = underwater(strokePhase(p, P), P), a = CONFIG.catchStart, b = CONFIG.pull + 0.06;
+    return smooth(clamp((path - (a - CATCH_EDGE)) / CATCH_EDGE, 0, 1)) * smooth(clamp(((b + CATCH_EDGE) - path) / CATCH_EDGE, 0, 1));
+  }
+  function catchFocusEnv(P) {
+    if (!P.catchFocus || P.drill === 'catchup') return 0;
+    const [r, , l] = drillArms(S.phase, P);
+    return Math.max(catchEnv(r, P), catchEnv(l, P));
+  }
+  const focusScratch = [];
+  function makeFocus() {
+    const mk = () => {
+      const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({transparent: true}));
+      line.frustumCulled = false; line.renderOrder = 6; line.visible = false;
+      S.el.scene.add(line);
+      return line;
+    };
+    return {fore: mk(), vert: mk(), angle: 0};
+  }
+  // The forearm line is teal near the default stroke's angle from vertical and reddens as the elbow drops.
+  function showFocus(m, P, right, left) {
+    if (!THREE) return;
+    S.focus = S.focus || {};
+    if (!focusScratch.length) for (let i = 0; i < 3; i++) focusScratch.push(new THREE.Vector3());
+    const [e, w, d] = focusScratch;
+    for (const [s, a0] of [['R', right], ['L', left]]) {
+      let f = S.focus[s];
+      if (!P.catchFocus && !f) continue;
+      if (!f) f = S.focus[s] = makeFocus();
+      const env = P.catchFocus && a0.under && P.drill !== 'catchup' ? catchEnv(s === 'R' ? drillArms(S.phase, P)[0] : drillArms(S.phase, P)[2], P) : 0;
+      f.fore.visible = f.vert.visible = env > 0.02;
+      f.angle = 0;
+      if (env <= 0.02) continue;
+      m['el' + s].getWorldPosition(e);
+      m['wr' + s].getWorldPosition(w);
+      d.subVectors(w, e);
+      f.angle = Math.acos(clamp(-d.z / Math.max(1e-6, d.length()), -1, 1)) / D;
+      const flat = clamp((f.angle - 70) / 30, 0, 1);  // the default pull reads about 75°, a dropped elbow about 98°
+      const [r, g, b] = C.hold.map((v, i) => lerp(v, C.slip[i], flat));
+      for (const [line, a, z] of [[f.fore, e, w], [f.vert, e, d.set(e.x, e.y, e.z - 0.32)]]) {
+        const pos = line.geometry.attributes.position;
+        pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, z.x, z.y, z.z); pos.needsUpdate = true;
+      }
+      f.fore.material.color.setRGB(r, g, b);
+      f.vert.material.color.setRGB(0.85, 0.92, 0.95);
+      f.fore.material.opacity = 0.95 * env;
+      f.vert.material.opacity = 0.45 * env;
+    }
   }
 
   // Anchor (visual only): a pin fixed in the water where each hand catches, and a line from it to the

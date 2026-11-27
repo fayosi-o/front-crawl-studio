@@ -562,6 +562,13 @@ class LongCatchPage:
                 'snaps as the hips turn. Teal when the arm, core and opposite kick work as one line; red when '
                 'the link breaks.'
             )
+            focus = ui.switch(
+                'Catch focus', value=self.view.catch_focus, on_change=lambda e: self.set_switch('catch_focus', e.value)
+            )
+            focus.classes('lc-focus-toggle').tooltip(
+                "Slows the stroke through each hand's catch and early pull, zooms in on the catching arm and "
+                'shows the forearm against vertical: teal when the elbow stays high, red as it drops.'
+            )
             anchor = ui.switch('Anchor', value=self.view.anchor, on_change=lambda e: self.set_switch('anchor', e.value))
             anchor.classes('lc-anchor-toggle').tooltip(
                 'A pin fixed in the water where each hand catches, with a line to the hand. A held catch keeps '
@@ -653,7 +660,9 @@ class LongCatchPage:
         """A view switch (split view, water pressure, water flow); only true or false from the browser count."""
         if not isinstance(value, bool):
             return
-        if name == 'flow' and value and not self.view.split:
+        if name == 'catch_focus' and value and not self.view.split:
+            self.update(catch_focus=True, split=True, angle='hand')
+        elif name == 'flow' and value and not self.view.split:
             # Water flow is best read up close: open the split view on the pulling hand.
             self.update(flow=True, split=True, angle='hand')
         else:
