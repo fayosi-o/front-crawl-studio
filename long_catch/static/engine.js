@@ -1436,7 +1436,11 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
 
   function updateHud(right, left, slipness) {
-    const tag = s => (S.params.catchFocus && S.focus?.[s]?.fore.visible ? ` ${Math.round(S.focus[s].angle)}°` : '');
+    const tag = s => {
+      const angle = S.params.catchFocus && S.focus?.[s]?.fore.visible ? ` ${Math.round(S.focus[s].angle)}°` : '';
+      const slide = S.params.anchor && S.anchors?.[s]?.slideCm >= 0 ? ` · slid ${Math.round(S.anchors[s].slideCm)} cm` : '';
+      return angle + slide;
+    };
     setText('right', '.lc-arm-right', right.held ? 'Holding' : PHASES[right.stage] + tag('R'));
     setText('left', '.lc-arm-left', left.held ? 'Holding' : PHASES[left.stage] + tag('L'));
     const colour = `rgb(${C.hold.map((v, i) => Math.round(255 * lerp(v, C.slip[i], slipness))).join(', ')})`;
@@ -1812,6 +1816,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       if (!an) an = S.anchors[s] = makeAnchor();
       const on = !!P.anchor && a0.under;
       if (!on) {
+        an.slideCm = -1;
         // Keep anchor pins: the pin stays behind in the water, frozen at its colour, and fades as it drifts away.
         if (an.planted && P.anchor && P.anchorKeep) leavePin(an);
         an.planted = false; an.pin.visible = an.line.visible = false; continue;
@@ -1833,6 +1838,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       pos.needsUpdate = true;
       an.pin.visible = an.line.visible = true;
       an.slide = slide;
+      an.slideCm = Math.max(0, an.at.x - an.tip.x) * 100;
     }
   }
 
