@@ -157,6 +157,15 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'hip-connected',
     ),
     SliderSpec(
+        'core',
+        'Core connection',
+        '%',
+        'How firmly the trunk carries the pull. A loose core lets each pull twist the chest and sag the middle: '
+        'the hand slides instead of anchoring and the body gains less. Watch it in Anchor and Cross-body link.',
+        'loose',
+        'braced',
+    ),
+    SliderSpec(
         'kick',
         'Kick amplitude',
         '%',
@@ -196,7 +205,7 @@ SLIDERS: tuple[SliderSpec, ...] = (
 # Import-time checks that the UI tables stay in step with the model.
 assert {spec.key for spec in SLIDERS} == set(SETTING_RANGES)
 SLIDER_SPECS = {spec.key: spec for spec in SLIDERS}
-MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive')
+MAIN_SLIDERS = ('rate', 'catch', 'slip', 'drive', 'core')
 
 ANGLE_LABELS = {'top': 'Top', 'side': 'Side', 'front': 'Front', 'below': 'Below', 'hand': 'Hand'}
 TRAIL_LABELS = {'off': 'Off', 'hands': 'Hands', 'feet': 'Feet', 'both': 'Both'}

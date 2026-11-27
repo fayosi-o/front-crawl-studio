@@ -1590,7 +1590,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // Lopsided pull: the right arm catches late and weak and slips, while the left holds.
   const lopsided = P => ({...P, catch: P.catch * CONFIG.lopsidedCatch, slip: clamp(P.slip + 0.2, 0, 1)});
   const slipShare = P => smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
-  const gripOf = (P, slipness) => (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch);
+  // A loose core also gives the hand less to push against, so it holds the water less firmly.
+  const gripOf = (P, slipness) => (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) * (0.55 + 0.45 * coreLink(P, S.faults));
 
   // Gaze line (visual only): with the head outside its neutral band a coral line runs from the goggles
   // along the line of sight, forward toward the wall when lifted, back toward the hips when tucked.
@@ -1870,8 +1871,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       const [an] = pulling.reduce((a, b) => (b[1].load > a[1].load ? b : a));
       hand = an.speed ?? 0;
       ratio = body > 0.05 ? clamp(hand / body, 0, 1) : 0;
-      verdict = ratio < 0.15 ? 'Hand parked in the water: the body is pulled past it.'
-        : ratio < 0.5 ? 'Hand creeping back: part of the pull is just moving water.'
+      verdict = ratio < 0.08 ? 'Hand parked in the water: the body is pulled past it.'
+        : ratio < 0.4 ? 'Hand creeping back: part of the pull is just moving water.'
           : 'Hand slides back nearly as fast as you move: no anchor, mostly pushing water.';
     }
     const [hr, hg, hb] = C.hold.map((v, i) => Math.round(255 * lerp(v, C.slip[i], clamp(ratio * 1.6, 0, 1))));
@@ -1886,7 +1887,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   const chainScratch = [];
   // How well the core joins the pull to the body (0–1): the drive and the faults that break the chain.
   function coreLink(P, F) {
-    return clamp((0.35 + 0.65 * P.drive) * (F.flathips ? 0.35 : 1) * (F.samesidekick ? 0.35 : 1)
+    return clamp((0.35 + 0.65 * P.drive) * (0.25 + 0.75 * (P.core ?? 1)) * (F.flathips ? 0.35 : 1) * (F.samesidekick ? 0.35 : 1)
       * (F.crossover ? 0.6 : 1) * (F.snaking ? 0.6 : 1) * (F.earlyroll ? 0.6 : 1) * (F.kneekick ? 0.6 : 1), 0, 1);
   }
   function showChain(m, P, F, right, left) {

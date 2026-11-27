@@ -92,6 +92,10 @@ about 70 cm for Short slipping).
 **Keep anchor pins** (`ViewState.anchor_keep`, `leavePin`/`showKept`) leaves each stroke's final pin in the water, coloured by its
 slide, for seven seconds (ten at most) so the body visibly swims past a line of anchors. Catch quality, Slip and Glide
 length are the controls for how early and firmly the hand sets.
+**Core connection** (`StrokeSettings.core`, 0–100, default 100 so existing strokes are unchanged) is how firmly the trunk carries the
+pull. In the estimates it scales the hold with Drive balance (`_stroke`); in the engine `coreLink` combines it with Drive balance and
+the chain faults, and a loose core twists the chest, leaks part of each pull into torque instead of surge (`moveThroughWater`) and
+lowers the hand's grip. The body then travels slower past the same hand, so the Anchor view's hand slides more.
 The **Cross-body link** view (`ViewState.chain`, `showChain` in `engine.js`, visual only) stretches a band from each
 shoulder to the opposite hip that loads with that arm's felt load; its colour follows drive and the faults that break
 the diagonal chain (Flat hips, **Same-side kick**, Crossover, Snaking, Early rotation). Same-side kick swaps the leg

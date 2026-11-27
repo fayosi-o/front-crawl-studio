@@ -729,6 +729,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'depth': (0, 100),
     'entry': (0, 40),
     'drive': (0, 100),
+    'core': (0, 100),
     'kick': (0, 100),
     'beats': (2, 6),
     'glide': (0, 100),
@@ -755,6 +756,7 @@ class StrokeSettings:
     depth: int = 50  # pull depth: 0 = hand close to the body, 100 = deep, straighter arm
     entry: int = 5
     drive: int = 85
+    core: int = 100  # how firmly the trunk transmits the pull: 0 = loose, twists and sags, 100 = braced
     kick: int = 45
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
     glide: int = 50  # front-end timing: 0 = earlier catch, 50 = normal, 100 = longer glide
@@ -789,7 +791,8 @@ def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, fl
     catch, slip = effective_hold(s, faults)
     hold = clamp(0.6 * catch + 0.4 * (1.0 - slip), 0.0, 1.0) * pull_shape(s.width, s.depth)
     # Drive multiplies the hold rather than adding to it.
-    connection = 0.7 + 0.3 * s.drive / 100
+    # A loose core leaks part of the pull into twisting the trunk (see ``core`` in the engine).
+    connection = (0.7 + 0.3 * s.drive / 100) * (0.6 + 0.4 * s.core / 100)
     length = path_length(s.rate)
     # Metres per stroke at REFERENCE_RATE: a long path carries further only when the hand holds.
     quality = 0.60 + 0.75 * hold * connection - 0.32 * slip + LONG_STROKE_M * length**2 * hold
@@ -930,6 +933,7 @@ class ViewState:
             'catch': catch,
             'slip': slip,
             'drive': s.drive / 100,
+            'core': s.core / 100,
             'kick': s.kick / 100,
             'beats': s.beats,
             'breath': s.breath,

@@ -736,3 +736,12 @@ def test_a_fast_pace_costs_wave_drag_that_a_slow_one_does_not():
     rates = range(22, 73, 2)
     speeds = [StrokeSettings(rate=r, kick=100, beats=6).metrics().distance_per_stroke * r / 60 for r in rates]
     assert all(b > a for a, b in pairwise(speeds))  # waves never make a higher rate slower
+
+
+def test_a_looser_core_costs_distance_and_reaches_the_engine():
+    braced, loose = StrokeSettings(core=100), StrokeSettings(core=0)
+    assert braced.metrics().distance_per_stroke > loose.metrics().distance_per_stroke
+    assert StrokeSettings().core == 100  # the default stroke is unchanged
+    assert ViewState(settings=loose).render_params()['core'] == 0.0
+    with pytest.raises(ValueError):
+        StrokeSettings(core=101)
