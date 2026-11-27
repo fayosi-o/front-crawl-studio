@@ -1712,7 +1712,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     if (!P.chain) return;
     if (!chainScratch.length) for (let i = 0; i < 3; i++) chainScratch.push(new THREE.Vector3());
     const [a, b, up] = chainScratch;
-    const col = C.hold.map((v, i) => lerp(C.slip[i], v, coreLink(P, F)));
+    const link = coreLink(P, F);
+    const col = C.hold.map((v, i) => lerp(C.slip[i], v, link));
     for (const [s, other, a0] of [['R', 'L', right], ['L', 'R', left]]) {
       const band = m['chain' + s], pulse = m['chainPulse' + s];
       const load = clamp(a0.under ? a0.load : 0, 0, 1);
