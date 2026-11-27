@@ -84,6 +84,16 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'hips lead',
     ),
     SliderSpec(
+        'lowarm',
+        'Arm recovery',
+        '%',
+        'How high the elbow rides as the arm swings forward over the water. 0% is the usual high bent elbow; '
+        'higher keeps the arm low and relaxed with the hand skimming the surface, easier on the shoulder. '
+        'A look at the animation only: it does not change the estimates.',
+        'high elbow',
+        'low and relaxed',
+    ),
+    SliderSpec(
         'head',
         'Head position',
         '°',

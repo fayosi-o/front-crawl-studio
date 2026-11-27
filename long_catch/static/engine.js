@@ -168,10 +168,12 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       + 0.10 * (F.upsweep ? 1 : 0) * bump(p, fin - 0.05, exit + 0.02);
     // Recovery is elbow-led and relaxed: the elbow lifts up and out to the side (not straight up)
     // while the forearm hangs loosely beneath it, bent about square, then swings forward past the head.
+    // Arm recovery: a low, relaxed arm keeps the elbow nearer the surface and a little lower out to the side.
+    const lowArm = P.lowarm ?? 0, up = 1 - 0.6 * lowArm, side = 1 - 0.2 * lowArm;
     const elbow = flowingVector(p, [
-      [exit, [-0.24, 0.12, 0.16]], [lift, [-0.18, 0.20, 0.30]], [midRec, [-0.06, 0.34, 0.22]],
-      [lateRec, [0.08, 0.32, 0.19]],
-      [preEntry, [0.14, 0.20, 0.15]], [1, [0.16, 0.10, 0.10]],
+      [exit, [-0.24, 0.12, 0.16]], [lift, [-0.18, 0.20 * side, 0.30 * up]], [midRec, [-0.06, 0.34 * side, 0.22 * up]],
+      [lateRec, [0.08, 0.32 * side, 0.19 * up]],
+      [preEntry, [0.14, 0.20 * side, 0.15 * up]], [1, [0.16, 0.10, 0.10]],
     ]);
     const recovery = p < exit ? 0 : smooth(clamp((p - exit) / 0.05, 0, 1)) * smooth(clamp((1 - p) / 0.07, 0, 1));
     const under = p < exit;
@@ -1668,7 +1670,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       + 0.8 * D * noise(st, 31);
     m.chest.rotation.set(bodyRoll, pitch, yaw);
     // Hip turn: extra degrees on the pelvis alone, so the hips lead a relaxed chest (flat hips lose it).
-    const hipPeak = Math.min(85 * D, roll * hipShare + (P.hips ?? 0) * D * (F.flathips ? 0.1 : 1));
+    const hipPeak = Math.min(90 * D, roll * hipShare + (P.hips ?? 0) * D * (F.flathips ? 0.1 : 1));
     m.pelvis.rotation.set(hipPeak * turnEarly(rollAt(body + lead * (1 - sharp)), 0.35), legPitch, -1.8 * yaw);
     m.pelvis.position.y = -0.36 * Math.sin(yaw);
     // Keep the waist joined to the pitched chest, then let the hips drop a little further.

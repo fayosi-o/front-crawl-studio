@@ -375,8 +375,11 @@ def test_hip_turn_reaches_the_engine_without_changing_the_estimates():
     turned = base.with_values(hips=45)
     assert ViewState(settings=turned).render_params()['hips'] == 45
     assert turned.metrics() == base.metrics()
+    low = base.with_values(lowarm=80)
+    assert ViewState(settings=low).render_params()['lowarm'] == 0.8
+    assert low.metrics() == base.metrics()
     with pytest.raises(ValueError):
-        base.with_values(hips=51)
+        base.with_values(hips=61)
 
 
 def test_kick_control_is_normalized_for_the_engine():

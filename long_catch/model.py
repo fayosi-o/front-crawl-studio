@@ -720,7 +720,8 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'rate': (22, 72),
     'catch': (0, 100),
     'roll': (20, 62),
-    'hips': (0, 50),
+    'hips': (0, 60),
+    'lowarm': (0, 100),
     'head': (-20, 40),
     'arch': (0, 30),
     'slip': (0, 100),
@@ -745,6 +746,7 @@ class StrokeSettings:
     rate: int = 42
     catch: int = 92
     roll: int = 46
+    lowarm: int = 0  # recovery arm: 0 = high bent elbow, 100 = low, relaxed arm that skims the surface
     hips: int = 0  # extra hip turn in degrees beyond the chest's roll; the hips lead, the shoulders stay easy
     head: int = 5  # head angle from the spine line in degrees: 0 = eyes on the floor, + looks forward
     arch: int = 0  # back arch in degrees: the chest leaning up and out from the hips
@@ -940,6 +942,7 @@ class ViewState:
             'entry': s.entry,
             'roll': s.roll,
             'hips': s.hips,
+            'lowarm': s.lowarm / 100,
             'head': s.head,
             'arch': s.arch,
             'playing': self.playing,
@@ -975,28 +978,29 @@ PRESETS: dict[str, StrokeSettings] = {
     'Phelps relaxed': StrokeSettings(
         rate=36, catch=95, roll=52, slip=6, width=25, depth=55, entry=8, drive=85, kick=50, beats=4, glide=55
     ),
+    # From underwater stills of Phelps: full reach, high-elbow catch under the body, a long push past the
+    # hip, big shoulder-and-hip roll and a steady six-beat kick.
+    'Phelps-style': StrokeSettings(
+        rate=50, catch=95, roll=54, slip=6, width=25, depth=55, entry=8, drive=90, kick=70, beats=6, glide=40
+    ),
     # Adam Walker's Ocean Walker stroke as far as these controls reach: a hip-led turn with relaxed
     # shoulders, eyes down, a low cadence with a long glide and a light two-beat kick. The hips turn
-    # close to the taught 180 degrees (about 80 either way) while the chest rolls less.
+    # close to the taught 180 degrees (about 85 either way) while the chest rolls less.
     'Ocean Walker': StrokeSettings(
         rate=28,
         catch=85,
         roll=38,
-        hips=45,
+        hips=55,
+        lowarm=80,
         head=0,
         slip=10,
         width=30,
         depth=40,
         entry=5,
         drive=100,
-        kick=25,
+        kick=15,
         beats=2,
-        glide=85,
-    ),
-    # From underwater stills of Phelps: full reach, high-elbow catch under the body, a long push past the
-    # hip, big shoulder-and-hip roll and a steady six-beat kick.
-    'Phelps-style': StrokeSettings(
-        rate=50, catch=95, roll=54, slip=6, width=25, depth=55, entry=8, drive=90, kick=70, beats=6, glide=40
+        glide=90,
     ),
     'Long power': StrokeSettings(rate=42, catch=92, roll=46, slip=8, width=35, drive=85, kick=45, beats=2),
     'Long light': StrokeSettings(rate=44, catch=88, roll=44, slip=10, width=40, drive=70, kick=30, beats=2),

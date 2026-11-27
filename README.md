@@ -226,11 +226,14 @@ It is a timing control, not metres; longer glides also reduce estimated momentum
 and distance per stroke. The kick-led roll follows the catch.
 
 **Hip turn** adds rotation to the hips alone, so they turn further than the
-chest. It only changes the animation, not the estimates. The **Ocean Walker**
-preset (after Adam Walker's stroke) uses it with a low rate, a long glide, a flat
-body, eyes down and a light two-beat kick. It reaches about 80° of hip turn either
-way against the 180° swing the technique teaches; there is no recovery-height
-control, so its low arm is approximated with Pull width and Stroke depth.
+chest, and **Arm recovery** keeps the recovering elbow low and relaxed. Both change
+only the animation, not the estimates. The **Ocean Walker** preset (after Adam
+Walker's stroke) combines them with a low rate, a long catch-up-like glide, a flat
+body with the head down and a light two-beat kick that only holds the legs in place.
+Its hips turn about 85° either way against the 180° swing the technique teaches.
+Walker pulls only to the hip; here the push still runs on with the stroke rate, so
+that one detail is not matched. The description comes from Walker's own site and a
+forum summary of his teaching, so treat it as an approximation.
 
 Watch the swimmer against the lane buoys to see pull-driven acceleration and
 coasting. Compare Crossover from the Top split view for heading and sideways
