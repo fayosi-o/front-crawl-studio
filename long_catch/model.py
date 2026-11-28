@@ -664,6 +664,10 @@ SWING_MAX = 0.45
 
 # Where in the stroke the waltz surge peaks: the Surge timing slider runs from 20% to 90% of the stroke.
 SURGE_EARLIEST, SURGE_SPAN = 0.2, 0.7
+# A surge before SURGE_NEUTRAL rips the hand through before the water has set, so it slips (up to SURGE_SLIP more at the
+# earliest, full surge). A surge after it adds a little push at the finish (SURGE_PUSH more distance) but the muscle
+# cost rises faster than the gain (SURGE_EFFORT more effort): late power buys no efficiency. Illustrative, not measured.
+SURGE_NEUTRAL, SURGE_SLIP, SURGE_PUSH, SURGE_EFFORT = 0.6, 0.20, 0.03, 0.10
 # What an uneven rhythm costs beyond the local effects below: the share of each stroke's distance lost per
 # unit of squared spread in stroke times (their variance, mean 1). A surging, uneven pace wastes energy
 # against drag that grows with speed squared. Illustrative, not measured.
@@ -678,7 +682,7 @@ class Rhythm:
     counts: str  # how a coach would count it
     hint: str
     shape: tuple[float, ...]  # each stroke's stretch in the repeating group; sums to zero
-    late: float = 0.0  # how strongly each stroke speeds up toward its finish at full swing (animation only)
+    late: float = 0.0  # how strongly each stroke speeds up toward its finish at full swing
 
 
 RHYTHMS: dict[RhythmName, Rhythm] = {
@@ -839,6 +843,13 @@ def effective_hold(settings: StrokeSettings, faults: frozenset[str] = frozenset(
     return catch, clamp(slip, 0.0, 1.0)
 
 
+def surge_effect(late: float, at: float) -> tuple[float, float, float]:
+    """Extra slip, distance factor and effort factor of a waltz surge of strength ``late`` peaking at ``at``."""
+    early = clamp((SURGE_NEUTRAL - at) / (SURGE_NEUTRAL - SURGE_EARLIEST), 0.0, 1.0)
+    after = clamp((at - SURGE_NEUTRAL) / (SURGE_EARLIEST + SURGE_SPAN - SURGE_NEUTRAL), 0.0, 1.0)
+    return SURGE_SLIP * late * early, 1.0 + SURGE_PUSH * late * after, 1.0 + SURGE_EFFORT * late * after
+
+
 def _stroke(settings: StrokeSettings, faults: frozenset[str]) -> tuple[float, float, float, float]:
     """Hold quality, distance per stroke, momentum carry and work rate (see ``estimate_metrics``)."""
     s = settings
@@ -904,7 +915,10 @@ def is_uneven(rhythm: tuple[float, ...]) -> bool:
 
 
 def estimate_metrics(
-    settings: StrokeSettings, faults: frozenset[str] = frozenset(), rhythm: tuple[float, ...] = (1.0,)
+    settings: StrokeSettings,
+    faults: frozenset[str] = frozenset(),
+    rhythm: tuple[float, ...] = (1.0,),
+    surge: tuple[float, float] = (0.0, 0.8),
 ) -> Metrics:
     """Estimate a stroke's efficiency and effort from its settings and active faults.
 
@@ -923,7 +937,13 @@ def estimate_metrics(
       is unchanged). A short stroke hurries the catch, slips more and has little glide; a long one has a
       longer path and glides further but loses momentum. The distance is the average over the group, never
       better than even strokes, less ``RHYTHM_COST`` times the spread in stroke times.
+    - Surge: a waltz's speed-up (strength, peak position in the stroke). Early, the hand rips through before
+      the water has set and slips; late, it adds a little push at the finish but costs more effort than it gains.
     """
+    extra_slip, push_gain, effort_gain = surge_effect(*surge)
+    if extra_slip > 0.0:
+        settings = replace(settings)
+        object.__setattr__(settings, 'slip', settings.slip + 100.0 * extra_slip)
     hold, distance_per_stroke, momentum, power = _stroke(settings, faults)
     if is_uneven(rhythm):
         rows = [_stroke(at_rate(settings, settings.rate / d), faults) for d in rhythm]
@@ -933,6 +953,8 @@ def estimate_metrics(
         per_stroke = min(sum(r[1] for r in rows) / len(rows), distance_per_stroke) * (1.0 - RHYTHM_COST * spread)
         hold, momentum, power = mean(0), mean(2), mean(3)
         distance_per_stroke = clamp(per_stroke, 0.40, 2.60)
+    distance_per_stroke = clamp(distance_per_stroke * push_gain, 0.40, 2.60)
+    power *= effort_gain
     strokes_per_25 = 25.0 / distance_per_stroke
     return Metrics(
         hold_quality=hold,
@@ -996,7 +1018,12 @@ class ViewState:
 
     def effective_hold(self) -> tuple[float, float]:
         """Catch quality and slip as fractions after hold-type faults and a quick turnover."""
-        return effective_hold(self.settings, self.faults)
+        catch, slip = effective_hold(self.settings, self.faults)
+        return catch, clamp(slip + surge_effect(*self.surge())[0], 0.0, 1.0)
+
+    def surge(self) -> tuple[float, float]:
+        """The waltz surge's strength and where in the stroke it peaks."""
+        return self.rhythm_late(), SURGE_EARLIEST + SURGE_SPAN * self.settings.surge / 100
 
     def exit_phase(self) -> float:
         """Phase where the hand leaves the water, after the Early exit fault."""
@@ -1004,7 +1031,7 @@ class ViewState:
 
     def metrics(self) -> Metrics:
         """Estimates for the settings with every active fault applied."""
-        return estimate_metrics(self.settings, self.faults, self.rhythm_times())
+        return estimate_metrics(self.settings, self.faults, self.rhythm_times(), self.surge())
 
     def rhythm_times(self) -> tuple[float, ...]:
         """Relative stroke times of the rhythm in use: only drills where both arms keep alternating follow one."""
@@ -1064,7 +1091,7 @@ class ViewState:
             'rhythm': list(self.rhythm_times()),
             'rhythmStrokes': self.stroke_params(),
             'rhythmLate': self.rhythm_late(),
-            'surgeAt': SURGE_EARLIEST + SURGE_SPAN * s.surge / 100,
+            'surgeAt': self.surge()[1],
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,

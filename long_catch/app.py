@@ -181,7 +181,8 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'Surge timing',
         '%',
         'When in each stroke the waltz speeds up: low rips through the water early in the stroke, high holds back '
-        'and surges right at the finish. Animation only; Waltz in the Full and Fist drills.',
+        'and surges right at the finish. Early means more slip; late adds a little push but costs more effort than it gains. '
+        'Waltz in the Full and Fist drills.',
         'early',
         'late',
     ),

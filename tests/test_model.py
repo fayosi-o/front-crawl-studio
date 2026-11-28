@@ -787,7 +787,6 @@ def test_an_uneven_rhythm_slows_the_pace_more_the_more_uneven_it_is():
         assert metrics.seconds_per_25 > previous.seconds_per_25
         previous = metrics
     waltz = ViewState(settings=StrokeSettings(swing=100), rhythm='waltz')
-    assert waltz.metrics() == even  # even strokes: its surge toward each finish is animation only
     assert (
         waltz.render_params()['rhythmLate']
         > ViewState(settings=StrokeSettings(swing=40), rhythm='waltz').render_params()['rhythmLate']
@@ -805,6 +804,23 @@ def test_an_uneven_rhythm_slows_the_pace_more_the_more_uneven_it_is():
 def test_no_rhythm_beats_even_strokes_for_any_preset():
     for settings in PRESETS.values():
         even = ViewState(settings=settings).metrics().seconds_per_25
-        for rhythm in ('gallop', 'waltz'):
+        for rhythm in ('gallop',):  # the waltz keeps even strokes; see the surge test
             uneven = ViewState(settings=settings.with_values(swing=100), rhythm=rhythm).metrics().seconds_per_25
             assert uneven >= even - 1e-9
+
+
+def test_an_early_waltz_surge_slips_and_a_late_one_buys_a_little_push_for_more_effort():
+    def waltz(surge: int, swing: int = 100) -> ViewState:
+        return ViewState(settings=StrokeSettings(surge=surge, swing=swing), rhythm='waltz')
+
+    even = ViewState().metrics()
+    early, middle, late = (waltz(s) for s in (0, 60, 100))
+    assert early.effective_hold()[1] > middle.effective_hold()[1] == ViewState().effective_hold()[1]
+    assert early.metrics().seconds_per_25 > even.seconds_per_25  # ripped through before the water set
+    assert early.render_params()['slip'] > late.render_params()['slip']  # the engine shows the extra slip
+    assert late.metrics().seconds_per_25 < even.seconds_per_25  # a little push at the finish...
+    assert late.metrics().seconds_per_25 > 0.97 * even.seconds_per_25  # ...only a little
+    gain = 1 - late.metrics().seconds_per_25 / even.seconds_per_25
+    cost = late.metrics().effort / even.effort - 1
+    assert cost > gain  # no efficiency gained for the muscle
+    assert waltz(0, swing=0).metrics() == even  # no swing, no surge
