@@ -828,7 +828,11 @@ class LongCatchPage:
             self.rhythm_hint.text = 'Rhythm follows in the Full and Fist drills; this drill keeps even strokes.'
         else:
             self.rhythm_hint.text = f'Count {RHYTHMS[rhythm].counts}. {RHYTHMS[rhythm].hint}' + (
-                '' if rhythm == 'even' else note
+                note
+                if rhythm == 'gallop'
+                else ' Rhythm swing sets how strongly it surges.'
+                if rhythm == 'waltz'
+                else ''
             )
 
     def _render_view(self) -> None:

@@ -676,6 +676,7 @@ class Rhythm:
     counts: str  # how a coach would count it
     hint: str
     shape: tuple[float, ...]  # each stroke's stretch in the repeating group; sums to zero
+    late: float = 0.0  # how strongly each stroke speeds up toward its finish at full swing (animation only)
 
 
 RHYTHMS: dict[RhythmName, Rhythm] = {
@@ -689,8 +690,9 @@ RHYTHMS: dict[RhythmName, Rhythm] = {
     'waltz': Rhythm(
         'Waltz',
         '1 2 3',
-        'One long stroke then two short ones, repeating every three strokes, so the long stroke swaps sides each time.',
-        (2.0, -1.0, -1.0),
+        'Every stroke takes the same time, but each one builds and speeds up toward its finish.',
+        (0.0,),
+        late=0.6,
     ),
 }
 
@@ -1004,6 +1006,12 @@ class ViewState:
         """Relative stroke times of the rhythm in use: only drills where both arms keep alternating follow one."""
         return rhythm_durations(self.rhythm if self.drill in ('off', 'fist') else 'even', self.settings.swing)
 
+    def rhythm_late(self) -> float:
+        """How much each stroke speeds up toward its finish (0 to 1): the waltz, in the drills that follow a rhythm."""
+        if self.drill not in ('off', 'fist'):
+            return 0.0
+        return RHYTHMS[self.rhythm].late * clamp(self.settings.swing / 100, 0.0, 1.0)
+
     def stroke_params(self) -> list[dict[str, float]]:
         """Each stroke of an uneven rhythm's catch, slip, path and load at its own local rate (empty if even)."""
         times = self.rhythm_times()
@@ -1051,6 +1059,7 @@ class ViewState:
             # Only drills where both arms keep alternating follow a rhythm; catch-up and one-arm stay even.
             'rhythm': list(self.rhythm_times()),
             'rhythmStrokes': self.stroke_params(),
+            'rhythmLate': self.rhythm_late(),
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,

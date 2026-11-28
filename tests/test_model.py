@@ -751,12 +751,12 @@ def test_a_looser_core_costs_distance_and_reaches_the_engine():
 def test_rhythm_swing_stretches_the_pattern_and_keeps_the_average_stroke_time():
     assert rhythm_durations('even', 100) == (1.0,)
     assert rhythm_durations('gallop', 0) == (1.0, 1.0)
-    for name in ('gallop', 'waltz'):
+    assert rhythm_durations('waltz', 100) == (1.0,)  # the waltz keeps every stroke the same length
+    for name in ('gallop',):
         durations = rhythm_durations(name, 100)
         assert math.isclose(sum(durations) / len(durations), 1.0)
         assert durations[0] > 1.0 > durations[-1] > 0.0
         assert rhythm_durations(name, 40)[0] < durations[0]  # a lower multiplier is less uneven
-    assert len(rhythm_durations('waltz', 50)) == 3
 
 
 def test_rhythm_reaches_the_engine_only_where_both_arms_alternate():
@@ -786,8 +786,15 @@ def test_an_uneven_rhythm_slows_the_pace_more_the_more_uneven_it_is():
         metrics = ViewState(settings=StrokeSettings(swing=swing), rhythm='gallop').metrics()
         assert metrics.seconds_per_25 > previous.seconds_per_25
         previous = metrics
-    waltz = ViewState(settings=StrokeSettings(swing=100), rhythm='waltz').metrics()
-    assert waltz.seconds_per_25 > previous.seconds_per_25
+    waltz = ViewState(settings=StrokeSettings(swing=100), rhythm='waltz')
+    assert waltz.metrics() == even  # even strokes: its surge toward each finish is animation only
+    assert (
+        waltz.render_params()['rhythmLate']
+        > ViewState(settings=StrokeSettings(swing=40), rhythm='waltz').render_params()['rhythmLate']
+        > 0
+    )
+    assert ViewState(rhythm='waltz', drill='single').render_params()['rhythmLate'] == 0.0
+    assert ViewState().render_params()['rhythmLate'] == 0.0
     # Drills that do not alternate arms stay on even strokes.
     assert ViewState(rhythm='waltz', drill='single').metrics() == even
 
