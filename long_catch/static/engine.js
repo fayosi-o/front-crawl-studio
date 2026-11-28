@@ -315,20 +315,25 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   // warp of the stroke clock, so the arms, roll and kick all speed up and slow down together; the
   // warped clock is what the pose reads (S.rtotal in cycles, S.rphase its fraction). Catch-up and
   // one-arm never get a rhythm (Python sends even strokes there).
+  // Each stroke is a cubic ease between its two boundaries. A boundary's speed is the slower of the strokes
+  // either side, so a long stroke runs at a steady pace (it never stalls mid-stroke) and a short one speeds
+  // up through its middle and eases back at the ends.
   function rhythmWarp(total, d) {
-    const n = d.length, sum = d.reduce((a, b) => a + b, 0);
-    const key = d.join(',');
+    const n = d.length, sum = d.reduce((a, b) => a + b, 0), key = d.join(',');
     if (S.rkey !== key) {
-      const keys = [];
-      for (let g = -1; g <= 1; g++) {
-        let at = g * n;
-        for (let i = 0; i < n; i++) { keys.push([at, g * n + i]); at += d[i] * n / sum; }
-      }
-      keys.push([2 * n, 2 * n]);
-      S.rkeys = keys; S.rkey = key;
+      const dur = d.map(v => v * n / sum);
+      let at = 0;
+      S.rcum = dur.map(v => (at += v) - v);
+      S.rdur = dur;
+      S.rtan = dur.map((v, i) => Math.min(1 / v, 1 / dur[(i + n - 1) % n]));  // speed at each stroke's start
+      S.rkey = key;
     }
-    const u = 2 * total, g = Math.floor(u / n);
-    return (g * n + flowing(u - g * n, S.rkeys)) / 2;
+    const u = 2 * total, g = Math.floor(u / n), x = u - g * n;
+    let i = n - 1;
+    while (i > 0 && x < S.rcum[i]) i--;
+    const dur = S.rdur[i], t = Math.min(1, (x - S.rcum[i]) / dur), t2 = t * t, t3 = t2 * t;
+    const m0 = S.rtan[i] * dur, m1 = S.rtan[(i + 1) % n] * dur;
+    return (g * n + i + (3 * t2 - 2 * t3) + (t3 - 2 * t2 + t) * m0 + (t3 - t2) * m1) / 2;
   }
   const rhythmOf = P => (P.rhythm && P.rhythm.length > 1 && P.rhythm.some(v => Math.abs(v - 1) > 1e-3) ? P.rhythm : null);
   function applyRhythm(P) {
