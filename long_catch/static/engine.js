@@ -346,9 +346,19 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
     const d = rhythmOf(P), a = P.rhythmLate || 0, w = d ? rhythmWarp(total, d) : total;
     return a > 0 ? lateWarp(w, a, P.surgeAt ?? 0.8) : w;
   }
+  // How fast the surge is running the clock right now (1 = even). The water reaction sees most of it taken
+  // out of the hand's speed, so the body is priced by the model (see surge_effect) rather than by how the
+  // surge happens to line up with the pull: without this a mid-stroke surge starved the push and cost 10%.
+  const surgeRate = (w, a, at) => {
+    const u = 2 * w, t = u - Math.floor(u);
+    return 1 + a * Math.sin(2 * Math.PI * (t - (at - 0.25)));
+  };
+  const SURGE_DAMP = 0.75;  // share of the surge's hand speed the water reaction ignores
   function applyRhythm(P) {
-    S.rtotal = warpClock(S.cycles + S.phase, P);
+    const d = rhythmOf(P), a = P.rhythmLate || 0, w = d ? rhythmWarp(S.cycles + S.phase, d) : S.cycles + S.phase;
+    S.rtotal = a > 0 ? lateWarp(w, a, P.surgeAt ?? 0.8) : w;
     S.rphase = wrap(S.rtotal);
+    S.surgeRate = a > 0 ? surgeRate(w, a, P.surgeAt ?? 0.8) : 1;
   }
   const clockNow = () => S.rphase ?? S.phase;
   // An arm's catch, pull and push all happen in the stroke it enters on, so that stroke's rhythm sets its
@@ -1561,7 +1571,7 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
       joint.localToWorld(p.pos.set(...p.at));
       if (dt > 0 && p.known) {
         p.velocity.subVectors(p.pos, p.prev).divideScalar(dt).clampLength(0, 3);
-        if (p.hand) p.velocity.multiplyScalar(m.pace[p.joint.slice(-1)]);
+        if (p.hand) p.velocity.multiplyScalar(m.pace[p.joint.slice(-1)] * (S.surgeRate || 1) ** -SURGE_DAMP);
         const downbeat = Math.max(0, -p.velocity.z);
         // The pool is still: include body travel, sideways drift and vertical motion.
         p.velocity.x += s.speed;
