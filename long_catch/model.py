@@ -662,6 +662,8 @@ RhythmName = Literal['even', 'gallop', 'waltz']
 SWING_MAX = 0.45
 
 
+# Where in the stroke the waltz surge peaks: the Surge timing slider runs from 20% to 90% of the stroke.
+SURGE_EARLIEST, SURGE_SPAN = 0.2, 0.7
 # What an uneven rhythm costs beyond the local effects below: the share of each stroke's distance lost per
 # unit of squared spread in stroke times (their variance, mean 1). A surging, uneven pace wastes energy
 # against drag that grows with speed squared. Illustrative, not measured.
@@ -779,6 +781,7 @@ SETTING_RANGES: dict[str, tuple[int, int]] = {
     'drive': (0, 100),
     'core': (0, 100),
     'swing': (0, 100),
+    'surge': (0, 100),
     'kick': (0, 100),
     'beats': (2, 6),
     'glide': (0, 100),
@@ -806,6 +809,7 @@ class StrokeSettings:
     entry: int = 5
     drive: int = 85
     swing: int = 50  # Rhythm swing: how uneven the chosen rhythm is (0 = even strokes)
+    surge: int = 85  # Waltz surge timing: 0 = the hand rips through early in the stroke, 100 = right at the end
     core: int = 100  # how firmly the trunk transmits the pull: 0 = loose, twists and sags, 100 = braced
     kick: int = 45
     beats: int = 2  # kicks per arm cycle; the two-beat kick times the hip rotation
@@ -1060,6 +1064,7 @@ class ViewState:
             'rhythm': list(self.rhythm_times()),
             'rhythmStrokes': self.stroke_params(),
             'rhythmLate': self.rhythm_late(),
+            'surgeAt': SURGE_EARLIEST + SURGE_SPAN * s.surge / 100,
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,

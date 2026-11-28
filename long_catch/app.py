@@ -177,6 +177,15 @@ SLIDERS: tuple[SliderSpec, ...] = (
         'pronounced',
     ),
     SliderSpec(
+        'surge',
+        'Surge timing',
+        '%',
+        'When in each stroke the waltz speeds up: low rips through the water early in the stroke, high holds back '
+        'and surges right at the finish. Animation only; Waltz in the Full and Fist drills.',
+        'early',
+        'late',
+    ),
+    SliderSpec(
         'kick',
         'Kick amplitude',
         '%',

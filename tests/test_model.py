@@ -795,6 +795,9 @@ def test_an_uneven_rhythm_slows_the_pace_more_the_more_uneven_it_is():
     )
     assert ViewState(rhythm='waltz', drill='single').render_params()['rhythmLate'] == 0.0
     assert ViewState().render_params()['rhythmLate'] == 0.0
+    early = ViewState(settings=StrokeSettings(surge=0), rhythm='waltz').render_params()['surgeAt']
+    late = ViewState(settings=StrokeSettings(surge=100), rhythm='waltz').render_params()['surgeAt']
+    assert 0.0 < early < ViewState().render_params()['surgeAt'] < late < 1.0  # the Surge timing slider moves the peak
     # Drills that do not alternate arms stay on even strokes.
     assert ViewState(rhythm='waltz', drill='single').metrics() == even
 

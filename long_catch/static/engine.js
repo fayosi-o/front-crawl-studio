@@ -337,14 +337,14 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   }
   const rhythmOf = P => (P.rhythm && P.rhythm.length > 1 && P.rhythm.some(v => Math.abs(v - 1) > 1e-3) ? P.rhythm : null);
   // Late surge: each stroke (half a cycle) keeps its length but starts slowly and speeds up toward its finish.
-  // The speed is 1 + a*sin(2pi(t - 0.55)) over the stroke fraction t, which peaks at 80% and averages 1.
-  function lateWarp(total, a) {
-    const u = 2 * total, k = Math.floor(u), t = u - k, h = 2 * Math.PI;
-    return (k + t + a * (Math.cos(h * 0.55) - Math.cos(h * (t - 0.55))) / h) / 2;
+  // The speed is 1 + a*sin(2pi(t - at + 0.25)) over the stroke fraction t, which peaks at `at` (P.surgeAt, 80% by default) and averages 1.
+  function lateWarp(total, a, at) {
+    const u = 2 * total, k = Math.floor(u), t = u - k, h = 2 * Math.PI, c = at - 0.25;
+    return (k + t + a * (Math.cos(h * c) - Math.cos(h * (t - c))) / h) / 2;
   }
   function warpClock(total, P) {
     const d = rhythmOf(P), a = P.rhythmLate || 0, w = d ? rhythmWarp(total, d) : total;
-    return a > 0 ? lateWarp(w, a) : w;
+    return a > 0 ? lateWarp(w, a, P.surgeAt ?? 0.8) : w;
   }
   function applyRhythm(P) {
     S.rtotal = warpClock(S.cycles + S.phase, P);
