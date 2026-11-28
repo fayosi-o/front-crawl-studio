@@ -667,7 +667,7 @@ SURGE_EARLIEST, SURGE_SPAN = 0.2, 0.7
 # A surge before SURGE_NEUTRAL rips the hand through before the water has set, so it slips (up to SURGE_SLIP more at the
 # earliest, full surge). A surge after it adds a little push at the finish (SURGE_PUSH more distance) but the muscle
 # cost rises faster than the gain (SURGE_EFFORT more effort): late power buys no efficiency. Illustrative, not measured.
-SURGE_NEUTRAL, SURGE_SLIP, SURGE_PUSH, SURGE_EFFORT = 0.6, 0.20, 0.03, 0.10
+SURGE_NEUTRAL, SURGE_SLIP, SURGE_PUSH, SURGE_EFFORT = 0.65, 0.28, 0.03, 0.10
 # What an uneven rhythm costs beyond the local effects below: the share of each stroke's distance lost per
 # unit of squared spread in stroke times (their variance, mean 1). A surging, uneven pace wastes energy
 # against drag that grows with speed squared. Illustrative, not measured.

@@ -814,7 +814,7 @@ def test_an_early_waltz_surge_slips_and_a_late_one_buys_a_little_push_for_more_e
         return ViewState(settings=StrokeSettings(surge=surge, swing=swing), rhythm='waltz')
 
     even = ViewState().metrics()
-    early, middle, late = (waltz(s) for s in (0, 60, 100))
+    early, middle, late = (waltz(s) for s in (0, 65, 100))
     assert early.effective_hold()[1] > middle.effective_hold()[1] == ViewState().effective_hold()[1]
     assert early.metrics().seconds_per_25 > even.seconds_per_25  # ripped through before the water set
     assert early.render_params()['slip'] > late.render_params()['slip']  # the engine shows the extra slip
