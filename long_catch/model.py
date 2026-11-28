@@ -698,7 +698,7 @@ RHYTHMS: dict[RhythmName, Rhythm] = {
         '1 2 3',
         'Every stroke takes the same time, but each one builds and speeds up toward its finish.',
         (0.0,),
-        late=0.6,
+        late=0.45,
     ),
 }
 
@@ -1092,6 +1092,7 @@ class ViewState:
             'rhythmStrokes': self.stroke_params(),
             'rhythmLate': self.rhythm_late(),
             'surgeAt': self.surge()[1],
+            'surgeSlip': surge_effect(*self.surge())[0],
             'frontGlide': FRONT_GLIDE_SHIFT * (s.glide - 50) / 50,
             'catchDelay': stroke_time(CATCH_START, s.glide) - CATCH_START,
             'width': s.width / 100,

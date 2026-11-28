@@ -1654,7 +1654,8 @@ window.createLongCatchEngine = function ({root = '.lc-studio', externalClock = f
   const lopsided = P => ({...P, catch: P.catch * CONFIG.lopsidedCatch, slip: clamp(P.slip + 0.2, 0, 1)});
   const slipShare = P => smooth(clamp((0.75 * P.slip + 0.5 * (1 - P.catch) - 0.25) / 0.3, 0, 1));
   // A loose core also gives the hand less to push against, so it holds the water less firmly.
-  const gripOf = (P, slipness) => (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) * (0.55 + 0.45 * coreLink(P, S.faults));
+  const gripOf = (P, slipness) => (1 - 0.9 * slipness) * (0.35 + 0.65 * P.catch) * (0.55 + 0.45 * coreLink(P, S.faults))
+    * (1 - 1.5 * (P.surgeSlip || 0));  // an early surge outruns the water, so the hand holds less
 
   // Gaze line (visual only): with the head outside its neutral band a coral line runs from the goggles
   // along the line of sight, forward toward the wall when lifted, back toward the hips when tucked.
